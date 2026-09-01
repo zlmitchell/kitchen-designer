@@ -1,3 +1,4 @@
+import {createReadStream, existsSync, statSync} from 'node:fs';
 import {defineConfig} from 'vite';
 import vue from '@vitejs/plugin-vue';
 import tailwind from '@tailwindcss/vite';
@@ -103,6 +104,48 @@ function dropBundledCodecs()
 				);
 			}
 			return {code: rewritten, map: null};
+		},
+	};
+}
+
+/**
+ * Serve the traced plan at /plan during development.
+ *
+ * Deliberately NOT a bind mount into `public/`, which would be the obvious way
+ * to do this. `tests/asset-integrity.test.js` walks that directory and requires
+ * every file in it to be declared in `asset-manifest.json` with a recorded size
+ * and hash - so mounting personal, gitignored, regenerated-on-demand files
+ * there fails three upstream tests, and the only ways to quiet them are to
+ * declare the plan as a shipped asset or to weaken the check. Both are worse
+ * than a middleware.
+ *
+ * nginx serves the same path from its own mount in the production image, so
+ * `plan/design.json` resolves in both.
+ */
+function servePlan()
+{
+	const root = process.env.PLAN_DIR || '/plan';
+	const types = {'.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg'};
+	return {
+		name: 'kitchen-serve-plan',
+		configureServer(server)
+		{
+			server.middlewares.use('/plan', (req, res, next) =>
+			{
+				// `req.url` is already stripped of the /plan prefix by connect.
+				const rel = decodeURIComponent((req.url || '').split('?')[0]).replace(/^\/+/, '');
+				const file = resolve(root, rel);
+				// resolve() collapses any ../ before this runs, so a traversal
+				// leaves `root` and is refused rather than served.
+				if (!file.startsWith(resolve(root)) || !existsSync(file) || !statSync(file).isFile())
+				{
+					next();
+					return;
+				}
+				const dot = file.lastIndexOf('.');
+				res.setHeader('Content-Type', types[file.slice(dot)] || 'application/octet-stream');
+				createReadStream(file).pipe(res);
+			});
 		},
 	};
 }
@@ -253,7 +296,7 @@ export default defineConfig(({mode}) => {
 		// of ours. The whole UI stack (Tailwind, Reka UI, lucide, VueUse) is a
 		// devDependency for the same reason: `files` in package.json publishes
 		// src/scripts alone, so nothing a consumer installs could import them.
-		plugins: [vue(), tailwind(), dropBundledCodecs()],
+		plugins: [vue(), tailwind(), dropBundledCodecs(), servePlan()],
 		server: {
 			port: 10001,
 			open: false,

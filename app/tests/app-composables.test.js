@@ -573,6 +573,85 @@ describe('useDesignIO', () =>
 		expect(floorplan.getCorners().map((corner) => corner.elevation).sort()).toEqual([250, 250, 400, 400]);
 	});
 
+	/**
+	 * bootDesign's three outcomes.
+	 *
+	 * The fallback matters more than the happy path: the traced plan is
+	 * gitignored personal data, so ABSENT is the normal state of this repo for
+	 * anybody but its owner, and a boot that failed instead of falling back
+	 * would leave them staring at an empty canvas.
+	 */
+	describe('bootDesign', () =>
+	{
+		/** A valid design that is distinguishable from the default one. */
+		const TRACED = JSON.stringify({
+			floorplan: {
+				units: 'cm',
+				corners: {
+					a: {x: 0, y: 0, elevation: 243.84},
+					b: {x: 0, y: 300, elevation: 243.84},
+					c: {x: 400, y: 300, elevation: 243.84},
+					d: {x: 400, y: 0, elevation: 243.84},
+				},
+				walls: [
+					{corner1: 'a', corner2: 'b'}, {corner1: 'b', corner2: 'c'},
+					{corner1: 'c', corner2: 'd'}, {corner1: 'd', corner2: 'a'},
+				],
+				rooms: {},
+			},
+			items: [],
+		});
+
+		function stubFetch(handler)
+		{
+			globalThis.fetch = handler;
+		}
+
+		afterEach(() => {delete globalThis.fetch;});
+
+		it('loads the traced plan when one is served', async () =>
+		{
+			stubFetch(async () => ({ok: true, text: async () => TRACED}));
+
+			await expect(io.bootDesign()).resolves.toBe(true);
+
+			// 243.84cm is 96in - the ceiling the extractor measured - and its
+			// survival is the units:"cm" declaration being honoured. Read as
+			// metres it would arrive as 24384.
+			expect(blueprint.model.floorplan.getCorners()).toHaveLength(4);
+			expect(blueprint.model.floorplan.getCorners()[0].elevation).toBeCloseTo(243.84, 2);
+		});
+
+		it('falls back to the default design when no plan is served', async () =>
+		{
+			stubFetch(async () => ({ok: false, status: 404, text: async () => ''}));
+
+			await expect(io.bootDesign()).resolves.toBe(false);
+
+			expect(blueprint.model.floorplan.getRooms()[0].name).toBe('A New Room');
+		});
+
+		it('falls back when the fetch itself fails', async () =>
+		{
+			stubFetch(async () => {throw new TypeError('Failed to fetch');});
+
+			await expect(io.bootDesign()).resolves.toBe(false);
+
+			expect(blueprint.model.floorplan.getRooms()[0].name).toBe('A New Room');
+		});
+
+		it('reports a malformed plan rather than booting into nothing', async () =>
+		{
+			stubFetch(async () => ({ok: true, text: async () => '{"floorplan":{}}'}));
+
+			await expect(io.bootDesign()).resolves.toBe(false);
+
+			// Unlike a missing plan, this one is our bug and says so out loud.
+			expect(io.lastError.value).toMatch(/traced plan/);
+			expect(blueprint.model.floorplan.getRooms()[0].name).toBe('A New Room');
+		});
+	});
+
 	it('downloads a design and releases the object URL', () =>
 	{
 		io.newDesign();

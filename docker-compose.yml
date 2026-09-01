@@ -10,7 +10,11 @@ services:
       - ./app:/app
       # Keep the image's node_modules; the bind mount above would hide them.
       - /app/node_modules
-      - ./data:/data
+      # The traced plan, served at /plan by the servePlan() middleware in
+      # vite.config.mjs. Deliberately not mounted into public/ - see the comment
+      # there. Never baked into an image: it is gitignored personal data that
+      # happens to need an HTTP origin.
+      - ./data:/plan:ro
     environment:
       - CHOKIDAR_USEPOLLING=true   # bind mounts from Windows do not deliver inotify
 
@@ -22,4 +26,4 @@ services:
     ports:
       - "8088:80"
     volumes:
-      - ./data:/data
+      - ./data:/usr/share/nginx/html/plan:ro

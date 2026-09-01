@@ -130,13 +130,17 @@ onMounted(() =>
 	// run is the one that reaches the floorplanner.
 	applyTheme(store);
 
-	io.newDesign();
-	// The default design counts as the starting point, not as an edit - so the
-	// stack is seeded from it rather than recording it.
-	history.reset();
-	frameDesign();
-
-	offerDraft();
+	// Async because the traced plan is fetched; everything that reacts to a
+	// loaded design has to wait for it, including the draft offer, which exists
+	// to replace whatever boot just put on screen.
+	io.bootDesign().then(() =>
+	{
+		// Whichever design booted counts as the starting point, not as an edit -
+		// so the stack is seeded from it rather than recording it.
+		history.reset();
+		frameDesign();
+		offerDraft();
+	});
 	loadAssetManifest();
 	applyLayoutToCamera(workspace.layout.value);
 });

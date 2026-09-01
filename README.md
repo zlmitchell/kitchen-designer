@@ -21,6 +21,39 @@ docker compose up dev     # http://localhost:5173  -- vite + HMR, source bind-mo
 docker compose up app     # http://localhost:8088  -- the real production build
 ```
 
+## Getting a plan in
+
+`tools/extract.py` traces a scaled architectural PDF into a design the app can
+open. It needs `pymupdf` (`pip install -r tools/requirements.txt`).
+
+```sh
+python tools/extract.py "plans/your-plan.pdf" -o data/design.json
+```
+
+It writes two things into `data/`, which compose serves at `/plan`:
+
+- `design.json` -- walls traced from the drawing, in centimetres
+- `underlay.png` -- the same region of the PDF, wired up as architect3d's
+  carbon sheet and aligned to those walls
+
+The app opens that plan on boot if it is there, and the stock demo room if it
+is not. **Expect the trace to be imperfect.** Cabinet runs, counters and door
+swings produce the same parallel-line pairs walls do, and no threshold
+separates them cleanly, so some furniture arrives as walls and some walls
+arrive short. That is what the underlay is for: the real drawing shows through
+underneath, and anything wrong can be dragged into place in the 2D editor.
+
+Useful flags: `--clip X0 Y0 X1 Y1` picks the region of the sheet holding the
+plan (PDF points), `--page` picks the sheet, `--ceiling` sets wall height in
+inches, `--scale` if the drawing is not 1/4" = 1'-0".
+
+`tools/measure.py` is the companion for checking a dimension against the
+linework rather than against a callout:
+
+```sh
+python tools/measure.py "plans/your-plan.pdf" --near "Elevation 3"
+```
+
 ## Layout
 
 ```

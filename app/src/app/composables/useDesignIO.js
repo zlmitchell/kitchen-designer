@@ -4,6 +4,9 @@ import {EVENT_GLTF_READY} from '../../scripts/blueprint.js';
 import {DEFAULT_DESIGN} from '../designs/default-design.js';
 import {useToasts} from './useToasts.js';
 
+/** Where compose mounts data/. See bootDesign(). */
+const PLAN_URL = 'plan/design.json';
+
 /**
  * New / open / save, for all four formats the demo offered.
  *
@@ -115,6 +118,47 @@ export function useDesignIO(store)
 	{
 		lastError.value = null;
 		store.model.value.loadSerialized(DEFAULT_DESIGN);
+	}
+
+	/**
+	 * The design to open on boot: this house if it has been traced, otherwise
+	 * the stock room.
+	 *
+	 * `tools/extract.py` writes a traced plan into data/, which compose mounts
+	 * at /plan. It is absent on a clean checkout and deliberately never
+	 * committed - the drawing identifies the house - so a 404 here is the
+	 * normal case for anybody but us. It falls back rather than failing, and
+	 * says so to the console rather than to a toast: the fallback is a working
+	 * design, not a degraded one, and nobody needs to dismiss a notice about
+	 * a file they were never expected to have.
+	 *
+	 * @returns {Promise<boolean>} whether the traced plan was the one loaded.
+	 */
+	async function bootDesign()
+	{
+		try
+		{
+			var response = await fetch(PLAN_URL, {cache: 'no-store'});
+			// A bad plan file is worth a toast - loadDesign raises one - because
+			// unlike a missing one it means the extractor produced something the
+			// loader rejects, which is a bug in us.
+			if (response.ok && loadDesign(await response.text(), 'the traced plan'))
+			{
+				return true;
+			}
+		}
+		catch (error)
+		{
+			console.info(`architect3d: no traced plan at ${PLAN_URL}, using the default design.`);
+		}
+		// `newDesign` clears `lastError`, and both outcomes reach it - so without
+		// this, "the plan was absent" and "the plan was broken" are the same
+		// state to anybody reading the field afterwards. Sparing them the toast
+		// queue is the whole reason `lastError` exists.
+		var failure = lastError.value;
+		newDesign();
+		lastError.value = failure;
+		return false;
 	}
 
 	/**
@@ -280,5 +324,5 @@ export function useDesignIO(store)
 		});
 	}
 
-	return {busy, lastError, newDesign, loadDesign, openDesign, saveDesign, saveMesh, saveGLTF};
+	return {busy, lastError, newDesign, bootDesign, loadDesign, openDesign, saveDesign, saveMesh, saveGLTF};
 }
