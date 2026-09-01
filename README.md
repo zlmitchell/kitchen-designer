@@ -18,7 +18,7 @@ container needs no GPU.
 
 ```sh
 docker compose up dev     # http://localhost:5173  -- vite + HMR, source bind-mounted
-docker compose up app     # http://localhost:8080  -- the real production build
+docker compose up app     # http://localhost:8088  -- the real production build
 ```
 
 ## Layout

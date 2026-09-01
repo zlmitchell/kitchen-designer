@@ -20,6 +20,6 @@ services:
       context: .
       target: prod
     ports:
-      - "8080:80"
+      - "8088:80"
     volumes:
       - ./data:/data
