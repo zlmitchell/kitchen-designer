@@ -17,9 +17,16 @@ Nothing to install but Docker. The 3D rendering happens in your browser, so the
 container needs no GPU.
 
 ```sh
-docker compose up dev     # http://localhost:5173  -- vite + HMR, source bind-mounted
-docker compose up app     # http://localhost:8088  -- the real production build
+docker compose up dev              # http://localhost:5173  -- vite + HMR, source bind-mounted
+docker compose up app              # http://localhost:8088  -- the real production build
+docker compose run --rm test       # the full suite (1322 tests)
+docker compose run --rm test npx eslint . --max-warnings 0
 ```
+
+Tests deliberately run against the image's copy of the source rather than the
+bind mount: reading many small files across a Windows bind mount is slow enough
+to blow vitest's 5s default timeout in `tests/asset-integrity.test.js`, which
+looks like a failing test and is a slow filesystem.
 
 ## Getting a plan in
 
@@ -46,6 +53,14 @@ underneath, and anything wrong can be dragged into place in the 2D editor.
 Useful flags: `--clip X0 Y0 X1 Y1` picks the region of the sheet holding the
 plan (PDF points), `--page` picks the sheet, `--ceiling` sets wall height in
 inches, `--scale` if the drawing is not 1/4" = 1'-0".
+
+Check what it traced before trusting it -- this draws the walls back over the
+drawing they came from, so a wall floating in the middle of a room (a bathtub,
+a cabinet run) is obvious:
+
+```sh
+python tools/trace_check.py          # -> data/trace_check.png
+```
 
 `tools/measure.py` is the companion for checking a dimension against the
 linework rather than against a callout:

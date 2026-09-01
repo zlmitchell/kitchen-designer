@@ -27,3 +27,20 @@ services:
       - "8088:80"
     volumes:
       - ./data:/usr/share/nginx/html/plan:ro
+
+  # `docker compose run --rm test`
+  #
+  # Deliberately WITHOUT the ./app bind mount the dev service uses. Reading
+  # many small files across a Windows bind mount is slow enough that
+  # tests/asset-integrity.test.js blows vitest's 5s default timeout while
+  # walking public/models -- which reads as a failing test and is a slow
+  # filesystem. Against the image's own copy the whole suite is ~40% faster and
+  # green. data/ is still mounted, so the traced-plan suite runs rather than
+  # skipping.
+  test:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - ./data:/plan:ro
+    command: npx vitest run
