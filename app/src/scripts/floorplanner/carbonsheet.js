@@ -1,0 +1,340 @@
+// @ts-check
+import {EventDispatcher} from 'three';
+import {EVENT_UPDATED} from '../core/events.js';
+import {cmPerPixel, pixelsPerCm} from '../core/dimensioning.js';
+import {resolveCanvas} from '../core/dom.js';
+
+
+/**
+ * JSDoc-only type imports (RM-005 C2).
+ *
+ * These names were already used in the annotations below and resolved to
+ * nothing - 43 TS2304s across eleven files, every one of them a type the
+ * project defines or three exports, named but never brought into scope. A
+ * `@typedef` import costs no runtime code and no bundle bytes: it exists
+ * entirely for the checker, which is the point of writing the JSDoc at all.
+
+ *
+ * @typedef {import('../model/floorplan.js').Floorplan} Floorplan
+ * @typedef {import('./floorplanner.js').Floorplanner2D} Floorplanner2D
+ */
+/**
+ * The View to be used by a Floorplanner to render in/interact with.
+ */
+export class CarbonSheet extends EventDispatcher
+{
+	/**
+	 * @param {Floorplan} floorplan
+	 * @param {Floorplanner2D} viewmodel
+	 * @param {(HTMLCanvasElement|string)} canvas The canvas to draw into, or its
+	 * element id. The id form is the deprecated back-compat path.
+	 */
+	constructor(floorplan, viewmodel, canvas)
+	{
+		super();
+		this.canvasElement = resolveCanvas(canvas, 'carbon sheet canvas');
+		this.canvas = (typeof canvas === 'string') ? canvas : this.canvasElement.id;
+		// Non-null by construction (RM-005 C2). `getContext('2d')` returns null
+		// only when the canvas already holds a context of another kind - a webgl
+		// one, say - which for this canvas is a programming error and not a state
+		// to draw around. Throwing here means the ~90 draw calls downstream do not
+		// each have to ask, and the message names the canvas rather than surfacing
+		// as `Cannot read properties of null` inside a render loop.
+		var context = this.canvasElement.getContext('2d');
+		if (!context)
+		{
+			throw new Error('architect3d: the carbon sheet canvas already has a context that is not 2d.');
+		}
+		this.context = context;
+		this.floorplan = floorplan;
+		this.viewmodel = viewmodel;
+		
+		this._url = '';
+		this._image = new Image();
+		
+		this._loaded = false;
+		this._transparency = 1.0;		
+		this._x = this._y = 0.0;
+		this._anchorX = 0;
+		this._anchorY = 0;	
+		//The values in pixels for width and height that will reflect the image's original size
+		this._rawWidthPixels = this._rawHeightPixels = 1.0;
+		//The values in cms for width and height that will reflect the images's original size
+		this._rawWidth = this._rawHeight = 1.0;
+		
+		//The values in pixels for widht and height that will reflect the scaling of user to floorplan system 
+		this._widthPixels = this._heightPixels = 1.0;
+//		The values in cms for widht and height that will reflect the scaling of user to floorplan system 
+		this._width = this._height = 1.0;
+		
+		this._drawWidthPixels = this._drawHeightPixels = 1.0;
+		
+		this._scaleX = this._scaleY = 1.0;
+		this._maintainProportion = true;
+		this._widthByHeightRatio = 1.0;
+	}
+	
+	_calibrate()
+	{
+		if(!this._loaded)
+		{
+			return;
+		}
+		this._scaleX = this._widthPixels / this._rawWidthPixels;
+		this._scaleY = this._heightPixels / this._rawHeightPixels;
+		this._drawWidthPixels = this._rawWidthPixels * this._scaleX;
+		this._drawHeightPixels = this._rawHeightPixels * this._scaleY;
+	}
+	
+	_updated()
+	{
+		this.dispatchEvent({type: EVENT_UPDATED});
+	}
+
+	/**
+	 * Drop the tracing image and its handlers. The Image outlives the sheet
+	 * otherwise: its onload closure captures `scope`, so a decode still in flight
+	 * would call back into a disposed view.
+	 */
+	/**
+	 * This design's settings, reached through the plan being drawn (RM-002 R-02, P7).
+	 *
+	 * The 2D view is per-Floorplan by construction - it is handed one and draws
+	 * it - so the plan is the natural place to ask, and no new plumbing was
+	 * needed to get here. Reading through a getter rather than caching the
+	 * reference keeps a view correct if the floorplan it draws is ever swapped.
+	 *
+	 * @returns {import('../core/configuration.js').Configuration}
+	 */
+	get configuration()
+	{
+		return this.floorplan.configuration;
+	}
+
+	/**
+	 * Unit and scale conversion for this design (P7).
+	 *
+	 * @returns {import('../core/dimensioning.js').Dimensioning}
+	 */
+	get dimensioning()
+	{
+		return this.floorplan.dimensioning;
+	}
+
+	dispose()
+	{
+		this._image.onload = null;
+		this._image.onerror = null;
+		this._image.src = '';
+		this._url = '';
+		this.clear();
+	}
+	
+	clear()
+	{
+		this._loaded = false;
+		this._transparency = 1.0;		
+		this._x = this._y = 0.0;
+		this._anchorX = 0.0;
+		this._anchorY = 0.0;			
+		this._rawWidthPixels = this._rawHeightPixels = 1.0;
+		this._rawWidth = this._rawHeight = 1.0;
+		this._widthPixels = this._heightPixels = 1.0;
+		this._width = this._height = 1.0;
+		this._scaleX = this._scaleY = 1.0;
+		this._drawWidthPixels = this._drawHeightPixels = 1.0;
+	}
+	
+	set url(val)
+	{
+		if(!val || val == null)
+		{
+			return;
+		}
+		var scope = this;
+		this._url = val;
+		this._loaded = false;
+		// `this` inside an onload handler is typed as GlobalEventHandlers, which
+		// has no width or height. It is the image (RM-005 C2), and reading it off
+		// `scope._image` says so without relying on the binding at all.
+		this._image.onload = function()
+		{
+			scope._rawWidthPixels = scope._image.width;
+			scope._rawHeightPixels = scope._image.height;
+			scope._rawWidth = scope._rawWidthPixels * cmPerPixel;
+			scope._rawHeight = scope._rawHeightPixels * cmPerPixel;
+			
+			scope._widthByHeightRatio = scope._image.width / scope._image.height;
+			
+			if(scope._widthPixels < 2.0)
+			{
+				scope._widthPixels = scope._rawWidthPixels;
+				scope.width = scope.dimensioning.cmToMeasureRaw(scope._rawWidth);
+			}	
+			if(scope._heightPixels < 2.0)
+			{
+				scope._heightPixels = scope._rawHeightPixels;				
+				scope.height = scope.dimensioning.cmToMeasureRaw(scope._rawHeight);
+			}
+			scope._loaded = true;
+			scope._calibrate();
+			scope._updated();
+		};
+		this._image.onerror = function()
+		{
+			scope._loaded = false;
+			scope._url = '';
+		};
+		this._image.src = this._url;
+	}
+	
+	get url()
+	{
+		return this._url;
+	}
+	
+	set maintainProportion(flag)
+	{
+		this._maintainProportion = flag;
+		this._updated();
+	}
+	
+	get maintainProportion()
+	{
+		return this._maintainProportion;
+	}
+	
+	get loaded()
+	{
+		return this._loaded;
+	}
+	
+	set transparency(val)
+	{
+		this._transparency = val;
+		this._updated();
+	}
+	
+	get transparency()
+	{
+		return this._transparency;
+	}
+	
+	set x(val)
+	{
+		this._x = val;
+		this._updated();
+	}
+	
+	get x()
+	{
+		return this._x;
+	}
+	
+	set y(val)
+	{
+		this._y = val;
+		this._updated();
+	}
+	
+	get y()
+	{
+		return this._y;		
+	}
+	
+	set anchorX(val)
+	{
+		this._anchorX = val;
+		this._updated();
+	}
+	
+	get anchorX()
+	{
+		return this._anchorX;
+	}
+	
+	set anchorY(val)
+	{
+		this._anchorY = val;
+		this._updated();
+	}
+	
+	get anchorY()
+	{
+		return this._anchorY;
+	}
+	
+	set width(val)
+	{
+		this._width = this.dimensioning.cmFromMeasureRaw(val);
+		this._widthPixels = this._width * pixelsPerCm;
+		
+		if(this._maintainProportion)
+		{
+			this._height = this._width / this._widthByHeightRatio;
+			this._heightPixels = (this._height * pixelsPerCm);
+		}
+		
+		this._calibrate();
+		this._updated();
+	}
+	
+	get width()
+	{
+		return this.dimensioning.cmToMeasureRaw(this._width);
+	}
+	
+	set height(val)
+	{
+		this._height = this.dimensioning.cmFromMeasureRaw(val);
+		this._heightPixels = this._height * pixelsPerCm;
+		
+		if(this._maintainProportion)
+		{
+			this._width = this._height * this._widthByHeightRatio;
+			this._widthPixels = (this._width * pixelsPerCm);
+		}
+		
+		this._calibrate();
+		this._updated();
+	}
+	
+	get height()
+	{
+		return this.dimensioning.cmToMeasureRaw(this._height);
+	}
+	
+	drawOriginCrossHair()
+	{
+		var ox = 0;
+		var oy = 0;
+		//draw origin crosshair
+		this.context.fillStyle = '#FF0000';
+		this.context.fillRect(ox-1.5, oy-15, 3, 30);
+		this.context.fillRect(ox-15, oy-1.5, 30, 3);
+	}	
+
+	/** */
+	draw() 
+	{
+		if(this._loaded)
+		{
+			var conX = this.viewmodel.convertX(this._x);
+			var conY = this.viewmodel.convertY(this._y);
+			this.context.translate(conX, conY);
+			
+			this.context.globalAlpha = this._transparency;			
+			this.context.drawImage(this._image, -this._anchorX*this._scaleX* this.configuration.getNumericValue('scale'), -this._anchorY*this._scaleY* this.configuration.getNumericValue('scale'), this._drawWidthPixels* this.configuration.getNumericValue('scale'), this._drawHeightPixels* this.configuration.getNumericValue('scale'));
+			this.context.globalAlpha = 1.0;
+			
+			this.context.beginPath();			
+			this.context.fillStyle = 'blue';
+			this.context.arc(0, 0, 5, 0, 6.28);
+			this.context.fill();
+			this.context.closePath();
+			this.drawOriginCrossHair();
+			this.context.translate(-conX, -conY);
+		}
+			
+	}
+}

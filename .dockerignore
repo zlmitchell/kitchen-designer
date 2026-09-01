@@ -1,0 +1,9 @@
+.git
+data
+plans
+tools
+app/node_modules
+app/dist
+app/dist-demo
+app/docs/.vitepress/cache
+**/*.pdf

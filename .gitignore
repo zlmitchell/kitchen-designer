@@ -1,0 +1,11 @@
+# Personal: the architect's PDF, extracted room geometry, and anything derived
+# from them. This is our house -- names, address, floor plan. Never commit it.
+plans/
+data/
+
+node_modules/
+dist/
+dist-demo/
+*.log
+.DS_Store
+__pycache__/

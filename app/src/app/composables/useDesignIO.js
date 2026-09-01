@@ -1,0 +1,284 @@
+// @ts-check
+import {ref} from 'vue';
+import {EVENT_GLTF_READY} from '../../scripts/blueprint.js';
+import {DEFAULT_DESIGN} from '../designs/default-design.js';
+import {useToasts} from './useToasts.js';
+
+/**
+ * New / open / save, for all four formats the demo offered.
+ *
+ * Sprint S6, replacing `mainControls()` at build/js/app.js:96-174.
+ *
+ * The demo read its file input by id from inside the change handler, tried the
+ * 2D input first and fell back to the 3D one - both point at the same flow -
+ * and built an <a download> by hand four separate times. Here there is one
+ * download helper and one read helper, and the file input hands its File
+ * straight in.
+ */
+
+/**
+ * How long to wait for EVENT_GLTF_READY before giving up.
+ *
+ * `Model.exportForBlender` has no failure channel: on a rejected
+ * `parseAsync` it logs to the console and dispatches nothing, so a promise
+ * waiting on the event would never settle and the export button would stay
+ * disabled for the life of the page. Giving the library a proper error event
+ * is a library change and this is an application sprint, so the deadline lives
+ * here for now - generous enough that a large scene finishes, short enough that
+ * a failure is not permanent.
+ */
+const GLTF_EXPORT_TIMEOUT_MS = 60000;
+
+/**
+ * Hand `data` to the browser as a download named `filename`.
+ *
+ * The object URL is revoked once the click has been dispatched. The demo never
+ * revoked any of the four it created, so a session that saved repeatedly held
+ * every previous blob for the life of the page.
+ */
+function download(data, filename, type)
+{
+	var blob = new Blob([data], {type: type});
+	var url = URL.createObjectURL(blob);
+	var anchor = document.createElement('a');
+	anchor.href = url;
+	anchor.download = filename;
+	document.body.appendChild(anchor);
+	anchor.click();
+	document.body.removeChild(anchor);
+	URL.revokeObjectURL(url);
+}
+
+/**
+ * A caught value is `unknown`, and `throw 'a string'` is legal JavaScript.
+ * Both call sites below want a sentence to show the user.
+ *
+ * @param {unknown} error
+ * @returns {string}
+ */
+function messageOf(error)
+{
+	return (error instanceof Error) ? error.message : String(error);
+}
+
+/**
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+function readAsText(file)
+{
+	return new Promise(function (resolve, reject)
+	{
+		var reader = new FileReader();
+		// readAsText guarantees a string result on success, but the DOM types
+		// describe `result` as string | ArrayBuffer | null because the same
+		// reader could have been asked for a buffer. Narrowed rather than cast,
+		// so a surprise here rejects instead of resolving with the wrong thing.
+		reader.onload = function ()
+		{
+			if (typeof reader.result === 'string')
+			{
+				resolve(reader.result);
+				return;
+			}
+			reject(new Error(`Could not read ${file.name} as text.`));
+		};
+		reader.onerror = function () {reject(reader.error || new Error(`Could not read ${file.name}.`));};
+		reader.readAsText(file);
+	});
+}
+
+/**
+ * @param {import('./useBlueprint.js').BlueprintStore} store
+ */
+export function useDesignIO(store)
+{
+	var busy = ref(false);
+	// Kept alongside the toasts rather than replaced by them. A toast is
+	// transient by design, and a caller - a test, an embedder - that wants to
+	// know whether the last operation failed should not have to scrape a queue
+	// of UI notices for it.
+	var lastError = ref(null);
+	var toasts = useToasts();
+
+	function fail(message, error)
+	{
+		lastError.value = message;
+		toasts.error(message, {detail: error ? String(error.message || error) : null});
+		if (error)
+		{
+			console.error(error);
+		}
+	}
+
+	function newDesign()
+	{
+		lastError.value = null;
+		store.model.value.loadSerialized(DEFAULT_DESIGN);
+	}
+
+	/**
+	 * The first problem in a load result, as a sentence to show somebody.
+	 *
+	 * `Model.loadDocument` reports every problem it found, each with a path to the
+	 * field. All of them in a toast is unreadable, and the first one is almost
+	 * always the cause of the rest - a missing `corners` object makes every wall
+	 * that references it wrong too. The full list is on the result for a caller
+	 * that wants to render it properly.
+	 *
+	 * @param {import('../../scripts/model/document.js').ParseResult} result
+	 * @returns {string}
+	 */
+	function firstProblem(result)
+	{
+		var problem = result.errors[0];
+		if (!problem)
+		{
+			return 'the file could not be read.';
+		}
+		var more = result.errors.length > 1 ? ` (and ${result.errors.length - 1} more)` : '';
+		return (problem.path ? `${problem.path} ${problem.message}` : problem.message) + more;
+	}
+
+	/**
+	 * Replace the design with an already-read document.
+	 *
+	 * Split out of openDesign so the autosave recovery path can reuse the parse
+	 * and the error reporting without inventing a File to hand it.
+	 *
+	 * Goes through `loadDocument` rather than `loadSerialized` since RM-003 A1:
+	 * same operation, but the failure arrives as a list of problems with the path
+	 * to each field instead of one exception. The design is untouched either way -
+	 * that is A1's guarantee and it is what made this message worth improving.
+	 * Before, "Could not open that design" was displayed *after* the design had
+	 * been destroyed, so the accuracy of the message was the least of it.
+	 *
+	 * @param {string} text A `.blueprint3d` document.
+	 * @param {string} [label] How to name it if it fails to parse.
+	 * @returns {boolean} whether it loaded.
+	 */
+	function loadDesign(text, label)
+	{
+		lastError.value = null;
+		try
+		{
+			var result = store.model.value.loadDocument(text);
+			if (!result.ok)
+			{
+				fail(`Could not open ${label || 'that design'}: ${firstProblem(result)}`, null);
+				return false;
+			}
+			return true;
+		}
+		catch (error)
+		{
+			// A bug rather than a bad file: validation has already passed by the
+			// time anything is mutated, so reaching here means the library threw
+			// somewhere it should not have.
+			fail(`Could not open ${label || 'that design'}: ${messageOf(error)}`, error);
+			return false;
+		}
+	}
+
+	/**
+	 * @param {File} file A `.blueprint3d` document.
+	 */
+	async function openDesign(file)
+	{
+		lastError.value = null;
+		if (!file)
+		{
+			return;
+		}
+		try
+		{
+			var text = await readAsText(file);
+			var result = store.model.value.loadDocument(text);
+			if (!result.ok)
+			{
+				fail(`Could not open ${file.name}: ${firstProblem(result)}`, null);
+				return;
+			}
+			if (result.warnings.length)
+			{
+				// A file this build can open but cannot fully vouch for - an unknown
+				// units stamp is the only case today. Worth saying out loud, because
+				// the consequence is a plan at the wrong scale, which looks like a
+				// bug in the application rather than a property of the file.
+				toasts.error(`Opened ${file.name}, with warnings`, {detail: result.warnings[0].message});
+				return;
+			}
+			toasts.success(`Opened ${file.name}`);
+		}
+		catch (error)
+		{
+			fail(`Could not open ${file.name}: ${messageOf(error)}`, error);
+		}
+	}
+
+	function saveDesign()
+	{
+		download(store.model.value.exportSerialized(), 'design.blueprint3d', 'text/plain');
+		toasts.success('Saved design.blueprint3d');
+	}
+
+	function saveMesh()
+	{
+		download(store.model.value.exportMeshAsObj(), 'design.obj', 'text/plain');
+		toasts.success('Exported design.obj');
+	}
+
+	/**
+	 * Export the scene as glTF.
+	 *
+	 * The library's export is a double hop: `Main.exportForBlender()` hides the
+	 * skybox and ground, asks the Model to export, and the Model dispatches
+	 * EVENT_GLTF_READY at the Model - which Main forwards, re-showing the
+	 * skybox on the way through. The demo listened for the forwarded event at
+	 * module scope and saved from there, which meant the listener outlived every
+	 * export and there was no way to know an export had finished.
+	 *
+	 * One promise, one listener, removed either way.
+	 *
+	 * @returns {Promise<string>} the glTF JSON, already downloaded.
+	 */
+	function saveGLTF()
+	{
+		var three = store.three.value;
+		busy.value = true;
+		lastError.value = null;
+
+		return new Promise(function (resolve, reject)
+		{
+			var timer = setTimeout(function ()
+			{
+				finish();
+				reject(new Error('The glTF export did not finish in time. See the console for the cause.'));
+			}, GLTF_EXPORT_TIMEOUT_MS);
+
+			function finish()
+			{
+				clearTimeout(timer);
+				three.removeEventListener(EVENT_GLTF_READY, onReady);
+				busy.value = false;
+			}
+
+			function onReady(event)
+			{
+				finish();
+				download(event.gltf, 'design.gltf', 'model/gltf+json');
+				toasts.success('Exported design.gltf');
+				resolve(event.gltf);
+			}
+
+			three.addEventListener(EVENT_GLTF_READY, onReady);
+			three.exportForBlender();
+		}).catch(function (error)
+		{
+			fail(error.message, error);
+			throw error;
+		});
+	}
+
+	return {busy, lastError, newDesign, loadDesign, openDesign, saveDesign, saveMesh, saveGLTF};
+}

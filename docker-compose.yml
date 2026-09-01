@@ -1,0 +1,25 @@
+services:
+  # Iterate here: `docker compose up dev` -> http://localhost:5173 with HMR.
+  dev:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./app:/app
+      # Keep the image's node_modules; the bind mount above would hide them.
+      - /app/node_modules
+      - ./data:/data
+    environment:
+      - CHOKIDAR_USEPOLLING=true   # bind mounts from Windows do not deliver inotify
+
+  # Check the real build: `docker compose up app` -> http://localhost:8080
+  app:
+    build:
+      context: .
+      target: prod
+    ports:
+      - "8080:80"
+    volumes:
+      - ./data:/data
