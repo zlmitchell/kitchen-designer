@@ -1,0 +1,21 @@
+# LF in the working tree, on every platform.
+#
+# Not cosmetic. Git's Windows checkout was rewriting every text file to CRLF,
+# which broke two things at once in the vendored fork: eslint's linebreak-style
+# rule failed 27,331 times, and tests/asset-integrity.test.js failed because
+# every text asset was a byte per line larger than the size recorded in
+# asset-manifest.json. Binary assets -- .glb, .wasm, .ktx2, .png -- were fine,
+# which is what identified the cause.
+* text=auto eol=lf
+
+# Belt and braces for the asset tree the manifest hashes: never let content
+# detection get a vote on these.
+*.png binary
+*.jpg binary
+*.glb binary
+*.gltf text eol=lf
+*.wasm binary
+*.ktx2 binary
+*.drc binary
+*.blend binary
+*.pdf binary
