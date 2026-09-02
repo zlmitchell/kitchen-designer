@@ -73,10 +73,40 @@ def quantise(value):
     return round(value / GRID_IN) * GRID_IN
 
 
-def segments(page, clip, k):
-    """Axis-aligned line segments inside `clip`, in real inches."""
+# The drawing says which lines are architecture. It was there all along.
+#
+# This sheet carries no CAD layers -- `get_ocgs()` returns nothing -- but the
+# export kept the pen each entity was drawn with, and the drafter used them the
+# way the AIA layer conventions intend. On page 2, inside the plan:
+#
+#   #000000 w1.0    75 segs, 38H/37V, no diagonals   the NEW walls
+#   #000000 w0.5   761 segs                          existing walls, jambs, leaves
+#   #804040       2675 segs, 547 diagonal            plumbing: tub, toilet, sink
+#   #4b4b4b        444 segs                          cabinet fills and hatching
+#   #6d86a9       1548 segs, 1094 diagonal           the E1-E5 elevation markers
+#   #004080/#000080                                  dimension strings
+#
+# Five separate attempts were made to tell a wall from a countertop by
+# geometry - pair thickness, ink coverage, traced length, endpoint anchoring,
+# symbol evidence - and every one of them failed, because geometrically they
+# are the same thing. The colour is not a heuristic: it is the drafter saying
+# which is which, and reading it drops 22,000 segments to 836 and takes the
+# bathtub, the toilet, the sink and every cabinet out of the wall problem
+# before it starts.
+ARCHITECTURE = (0.0, 0.0, 0.0)
+
+
+def segments(page, clip, k, colour=ARCHITECTURE):
+    """Axis-aligned line segments inside `clip`, in real inches.
+
+    `colour` filters to one pen; None takes everything, which is what the
+    opening detectors want since a door leaf and a window sash are drawn in the
+    same black as the wall they sit in.
+    """
     horiz, vert = [], []
     for path in page.get_drawings():
+        if colour is not None and path.get("color") != colour:
+            continue
         for item in path["items"]:
             if item[0] != "l":
                 continue
@@ -242,10 +272,12 @@ DOOR = {"model": "models/js-glb/closed-door28x80_baked.glb", "type": 7,
         "height_cm": 203.2, "centre_cm": 101.6}     # 80" tall, on the floor
 
 
-def diagonals(page, clip, k):
+def diagonals(page, clip, k, colour=ARCHITECTURE):
     """Segments that are neither horizontal nor vertical: arcs, mostly."""
     out = []
     for path in page.get_drawings():
+        if colour is not None and path.get("color") != colour:
+            continue
         for item in path["items"]:
             if item[0] != "l":
                 continue
@@ -320,7 +352,11 @@ def jambs_on(wall, perpendicular):
         if not (WALL_MIN_IN <= length <= WALL_MAX_IN + 3):
             continue
         # Must straddle the centreline, not merely touch the wall.
-        if pa <= coord - 1.0 and pb >= coord + 1.0 and lo - 2 <= pc <= hi + 2:
+        # Contains the centreline within a tolerance rather than strictly
+        # straddling it: clustering the canonical axes moves a wall line by up
+        # to the cluster tolerance, so a jamb drawn dead centre on the real wall
+        # can sit wholly to one side of the line that represents it.
+        if pa - 3.0 <= coord <= pb + 3.0 and lo - 2 <= pc <= hi + 2:
             marks.append(pc)
     # The pair an inch apart is one jamb.
     out = []
@@ -563,7 +599,12 @@ def main():
     page = pymupdf.open(args.pdf)[args.page - 1]
     clip = pymupdf.Rect(*args.clip)
 
+    # Walls read only the architectural pen; openings read every pen, because a
+    # door's swing arc and a window's glazing are not drawn in the same colour
+    # as the wall they interrupt. Filtering both to black found one window and
+    # no doors at all.
     horiz, vert = segments(page, clip, args.scale)
+    all_h, all_v = segments(page, clip, args.scale, colour=None)
     merged_h, merged_v = merge_collinear(horiz), merge_collinear(vert)
     hc, vc = lattice(centrelines(merged_h), centrelines(merged_v))
     corners, walls = build_graph(hc, vc)
