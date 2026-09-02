@@ -120,24 +120,41 @@ describe('the traced plan', () =>
 			expect(item.scale_x).toBeLessThan(3.0);
 		}
 
-		// Every opening has to sit on a wall. A window floating in the middle of
-		// a room means the glazing test matched a cabinet run, which is the
-		// failure mode this detection has.
+		// On a wall LINE, not on a wall segment. An opening is a gap, so the
+		// centreline through a doorway is traced as two pieces with the door
+		// between them - and an opening placed correctly in that gap belongs to
+		// neither piece. Testing against segments failed a window that was
+		// exactly where it should be.
+		//
+		// What this still catches is the failure that matters: a window floating
+		// in the middle of a room, which is what happens when the glazing test
+		// matches a cabinet run.
 		const CM = 2.54;
+		const lines = {horizontal: new Map(), vertical: new Map()};
+		for (const wall of walls)
+		{
+			const a = corners[wall.corner1];
+			const b = corners[wall.corner2];
+			const horizontal = Math.abs(a.y - b.y) < 0.01;
+			const key = Math.round((horizontal ? a.y : a.x) * 100) / 100;
+			const lo = horizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+			const hi = horizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+			const into = horizontal ? lines.horizontal : lines.vertical;
+			const span = into.get(key);
+			into.set(key, span ? [Math.min(span[0], lo), Math.max(span[1], hi)] : [lo, hi]);
+		}
+
 		for (const item of items)
 		{
-			const onAWall = walls.some((wall) =>
-			{
-				const a = corners[wall.corner1];
-				const b = corners[wall.corner2];
-				const horizontal = Math.abs(a.y - b.y) < 0.01;
-				const across = horizontal ? Math.abs(item.zpos - a.y) : Math.abs(item.xpos - a.x);
-				const along = horizontal ? item.xpos : item.zpos;
-				const lo = horizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
-				const hi = horizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
-				return across <= 8 * CM && along >= lo - 12 * CM && along <= hi + 12 * CM;
-			});
-			expect(onAWall, `${item.item_name} at (${item.xpos}, ${item.zpos}) is on no wall`).toBe(true);
+			const onAWall = [
+				[lines.horizontal, item.zpos, item.xpos],
+				[lines.vertical, item.xpos, item.zpos],
+			].some(([into, across, along]) =>
+				[...into.entries()].some(([coord, [lo, hi]]) =>
+					Math.abs(across - coord) <= 8 * CM
+					&& along >= lo - 12 * CM && along <= hi + 12 * CM));
+
+			expect(onAWall, `${item.item_name} at (${item.xpos}, ${item.zpos}) is on no wall line`).toBe(true);
 		}
 	});
 });

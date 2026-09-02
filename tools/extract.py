@@ -94,6 +94,24 @@ def quantise(value):
 # bathtub, the toilet, the sink and every cabinet out of the wall problem
 # before it starts.
 ARCHITECTURE = (0.0, 0.0, 0.0)
+# The symbol pen: every door and window on this sheet - jambs, swing arcs, the
+# bypass panels on the closets - is drawn in a neutral grey. Nothing else is,
+# which is why swings taken from it come out as seven door-sized clusters with
+# no hatching to reject, where taking them from every pen returned the shaded
+# cabinet runs as one enormous door.
+SYMBOLS = "grey"
+
+
+def _wanted(path, colour):
+    if colour is None:
+        return True
+    stroke = path.get("color")
+    if colour == SYMBOLS:
+        return (stroke is not None
+                and abs(stroke[0] - stroke[1]) < 1e-6
+                and abs(stroke[1] - stroke[2]) < 1e-6
+                and 0.15 < stroke[0] < 0.85)
+    return stroke == colour
 
 
 def segments(page, clip, k, colour=ARCHITECTURE):
@@ -105,7 +123,7 @@ def segments(page, clip, k, colour=ARCHITECTURE):
     """
     horiz, vert = [], []
     for path in page.get_drawings():
-        if colour is not None and path.get("color") != colour:
+        if not _wanted(path, colour):
             continue
         for item in path["items"]:
             if item[0] != "l":
@@ -276,7 +294,7 @@ def diagonals(page, clip, k, colour=ARCHITECTURE):
     """Segments that are neither horizontal nor vertical: arcs, mostly."""
     out = []
     for path in page.get_drawings():
-        if colour is not None and path.get("color") != colour:
+        if not _wanted(path, colour):
             continue
         for item in path["items"]:
             if item[0] != "l":
@@ -396,8 +414,18 @@ def find_openings(walls, perpendicular, glass, swings, horizontal):
     either side, which is what turns "there is glass around here" into a rough
     opening with a real width.
     """
-    out = []
+    # Grouped by coordinate, not taken segment by segment. A door is a gap in
+    # the wall, so the centreline through a doorway is traced as two pieces with
+    # the door between them -- and testing the door against either piece put it
+    # outside both. Every swing on this sheet sat within 3in of a wall LINE and
+    # was rejected by its SEGMENT, which is how seven doors became none.
+    lines = {}
     for coord, lo, hi in walls:
+        span = lines.get(coord)
+        lines[coord] = (min(span[0], lo), max(span[1], hi)) if span else (lo, hi)
+
+    out = []
+    for coord, (lo, hi) in sorted(lines.items()):
         marks = jambs_on((coord, lo, hi), perpendicular)
 
         for gc, ga, gb in glass:
@@ -604,19 +632,19 @@ def main():
     # as the wall they interrupt. Filtering both to black found one window and
     # no doors at all.
     horiz, vert = segments(page, clip, args.scale)
-    all_h, all_v = segments(page, clip, args.scale, colour=None)
+    sym_h, sym_v = segments(page, clip, args.scale, colour=SYMBOLS)
     merged_h, merged_v = merge_collinear(horiz), merge_collinear(vert)
     hc, vc = lattice(centrelines(merged_h), centrelines(merged_v))
     corners, walls = build_graph(hc, vc)
     corners, walls, islands = drop_islands(corners, walls, args.max_island)
 
-    swings = swing_boxes(diagonals(page, clip, args.scale))
+    swings = swing_boxes(diagonals(page, clip, args.scale, colour=SYMBOLS))
     # RAW segments, not the merged runs: merging welds a jamb stub into the
     # wall face line it touches, which is exactly the signature being looked
     # for. Same for glazing, whose pairs glass_pairs() merges itself.
     openings = dedupe_openings(
-        find_openings(hc, vert, glass_pairs(horiz), swings, True)
-        + find_openings(vc, horiz, glass_pairs(vert), swings, False))
+        find_openings(hc, sym_v, glass_pairs(sym_h), swings, True)
+        + find_openings(vc, sym_h, glass_pairs(sym_v), swings, False))
     if not corners:
         raise SystemExit("traced nothing -- check --clip against the sheet")
 
