@@ -19,9 +19,13 @@ container needs no GPU.
 ```sh
 docker compose up dev              # http://localhost:5173  -- vite + HMR, source bind-mounted
 docker compose up app              # http://localhost:8088  -- the real production build
-docker compose run --rm test       # the full suite (1322 tests)
-docker compose run --rm test npx eslint . --max-warnings 0
+docker compose run --build --rm test   # the full suite (1323 tests)
+docker compose run --build --rm test npx eslint . --max-warnings 0
 ```
+
+`--build` matters: the test service runs the image's copy of the source, so
+without it a source edit is invisible to the suite. That is the price of the
+next paragraph.
 
 Tests deliberately run against the image's copy of the source rather than the
 bind mount: reading many small files across a Windows bind mount is slow enough
@@ -53,6 +57,18 @@ underneath, and anything wrong can be dragged into place in the 2D editor.
 Useful flags: `--clip X0 Y0 X1 Y1` picks the region of the sheet holding the
 plan (PDF points), `--page` picks the sheet, `--ceiling` sets wall height in
 inches, `--scale` if the drawing is not 1/4" = 1'-0".
+
+It also places windows and doors. Neither is a gap in the wall -- the wall's
+face lines run through both -- so they are found by what is drawn inside the
+opening: glazing (line pairs about an inch apart, lying on the wall's own
+centreline) for a window, and a swing arc resting on the wall for a door. Each
+is then widened out to the jambs either side, which is what gives it a real
+width. Jambs on both sides are required: without that, every cabinet run and
+counter edge in the kitchen reads as a window.
+
+Expect it to miss some doors. The swing arcs are polylines rather than curves
+and vary in how they are drawn, so detection is deliberately conservative --
+a missing door is a two-click fix, a phantom one in a cabinet run is confusing.
 
 Check what it traced before trusting it -- this draws the walls back over the
 drawing they came from, so a wall floating in the middle of a room (a bathtub,

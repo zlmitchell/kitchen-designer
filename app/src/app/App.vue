@@ -34,7 +34,7 @@ import {useAssets, applyAssetBaseFromQuery} from './composables/useAssets.js';
 import {useToasts} from './composables/useToasts.js';
 import {useShortcuts} from './composables/useShortcuts.js';
 
-import {floorplannerModes, Configuration, configSystemUI, Dimensioning} from '../scripts/blueprint.js';
+import {floorplannerModes, Configuration, configSystemUI, configDimUnit, dimFeetAndInch, Dimensioning} from '../scripts/blueprint.js';
 import {renderProfile} from '../scripts/blueprint.js';
 
 /**
@@ -122,8 +122,12 @@ onMounted(() =>
 	// a fallback for a double-click, not the primary path it used to be.
 	Configuration.setValue(configSystemUI, false);
 
-	// BlueprintJS's constructor sets dimMeter as its first statement, so the
-	// panel has to re-read the unit rather than trust what it last showed.
+	// BlueprintJS's constructor sets dimMeter as its first statement (see
+	// blueprint.js). This is a house in Florida measured by an American builder
+	// off a drawing dimensioned in feet and inches, so metres is the wrong unit
+	// for every number anybody here will type or read.
+	Configuration.setValue(configDimUnit, dimFeetAndInch);
+	// The panel has to re-read the unit rather than trust what it last showed.
 	syncDisplayUnit();
 	// Same reason, and additionally: the canvas palette has to be pushed into a
 	// library that now exists. applyTheme ran once before mount for the CSS; this

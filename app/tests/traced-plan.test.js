@@ -101,4 +101,43 @@ describe('the traced plan', () =>
 		expect(underlay.widthCm).toBeGreaterThanOrEqual(Math.max(...xs));
 		expect(underlay.heightCm).toBeGreaterThanOrEqual(Math.max(...ys));
 	});
+
+	it.runIf(traced)('places its openings on real walls, at believable sizes', () =>
+	{
+		const {items, floorplan} = JSON.parse(readFileSync(PLAN, 'utf8'));
+		const {corners, walls} = floorplan;
+
+		expect(items.length).toBeGreaterThan(0);
+
+		for (const item of items)
+		{
+			expect(item.model_url).toMatch(/\.glb$/);
+			// Scaled from the drawing's rough opening to the model's own size. The
+			// window model is 4ft wide, so a run of patio glazing legitimately
+			// lands near 2x; an order of magnitude either way would mean one of
+			// the two was measured wrong.
+			expect(item.scale_x).toBeGreaterThan(0.15);
+			expect(item.scale_x).toBeLessThan(3.0);
+		}
+
+		// Every opening has to sit on a wall. A window floating in the middle of
+		// a room means the glazing test matched a cabinet run, which is the
+		// failure mode this detection has.
+		const CM = 2.54;
+		for (const item of items)
+		{
+			const onAWall = walls.some((wall) =>
+			{
+				const a = corners[wall.corner1];
+				const b = corners[wall.corner2];
+				const horizontal = Math.abs(a.y - b.y) < 0.01;
+				const across = horizontal ? Math.abs(item.zpos - a.y) : Math.abs(item.xpos - a.x);
+				const along = horizontal ? item.xpos : item.zpos;
+				const lo = horizontal ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
+				const hi = horizontal ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
+				return across <= 8 * CM && along >= lo - 12 * CM && along <= hi + 12 * CM;
+			});
+			expect(onAWall, `${item.item_name} at (${item.xpos}, ${item.zpos}) is on no wall`).toBe(true);
+		}
+	});
 });

@@ -40,6 +40,7 @@ Corners are looked up by exact coordinate, and welding is gone entirely.
 
 import argparse
 import json
+import math
 import os
 import uuid
 from collections import defaultdict
@@ -201,6 +202,226 @@ def build_graph(horiz, vert):
     return corners, walls
 
 
+
+# --- openings -------------------------------------------------------------
+#
+# Windows and doors are drawn quite differently, and neither is a gap in the
+# wall: the wall's face lines run straight through both.
+#
+# A window is glazing drawn INSIDE the wall band - pairs of lines about an inch
+# apart running along the wall, bracketed by jamb marks, with a small box at
+# the mullion. So the signature is a line pair far too close together to be a
+# wall, sitting on the wall's own centreline.
+#
+# A door is a swing: a quarter circle from the hinge, drawn as a short polyline
+# rather than a bezier (the only real curves on this sheet are the toilet, the
+# tub and the sink). Its bounding box is a square whose side is the door's
+# width, and one edge of that square lies along the wall - which is the
+# opening.
+GLASS_MIN_IN, GLASS_MAX_IN = 0.4, 2.2
+GLASS_MIN_LEN_IN = 6.0
+GLASS_JOIN_IN = 3.0      # bridge the mullion box between two sashes
+SWING_MIN_IN, SWING_MAX_IN = 18.0, 44.0
+SWING_MAX_SEGMENTS = 14  # a swing is a few long chords; hatching is hundreds
+ON_WALL_TOL_IN = 6.0
+
+# Both models measure in centimetres, read from their GLB POSITION accessors.
+WINDOW = {"model": "models/js-glb/whitewindow.glb", "type": 3,
+          "name": "Window", "w": 123.0769, "h": 170.473,
+          "height_cm": 152.4, "centre_cm": 157.0}   # 60" tall, 32" sill
+DOOR = {"model": "models/js-glb/closed-door28x80_baked.glb", "type": 7,
+        "name": "Closed Door", "w": 97.1, "h": 221.58,
+        "height_cm": 203.2, "centre_cm": 101.6}     # 80" tall, on the floor
+
+
+def diagonals(page, clip, k):
+    """Segments that are neither horizontal nor vertical: arcs, mostly."""
+    out = []
+    for path in page.get_drawings():
+        for item in path["items"]:
+            if item[0] != "l":
+                continue
+            a, b = item[1], item[2]
+            if not (clip.contains(a) and clip.contains(b)):
+                continue
+            if abs(a.x - b.x) > 0.3 and abs(a.y - b.y) > 0.3:
+                out.append((min(a.x, b.x) * k, min(a.y, b.y) * k,
+                            max(a.x, b.x) * k, max(a.y, b.y) * k))
+    return out
+
+
+def swing_boxes(diags):
+    """Cluster arc chords into door swings, and reject the hatching."""
+    groups = []
+    for box in diags:
+        for g in groups:
+            if not (box[0] > g[2] + 3 or box[2] < g[0] - 3
+                    or box[1] > g[3] + 3 or box[3] < g[1] - 3):
+                g[0], g[1] = min(g[0], box[0]), min(g[1], box[1])
+                g[2], g[3] = max(g[2], box[2]), max(g[3], box[3])
+                g[4] += 1
+                break
+        else:
+            groups.append([box[0], box[1], box[2], box[3], 1])
+
+    swings = []
+    for x0, y0, x1, y1, n in groups:
+        w, h = x1 - x0, y1 - y0
+        # Square-ish, door-sized, and cheap to draw. The shaded cabinet runs in
+        # the kitchen are hundreds of chords in a box this size and would
+        # otherwise read as an enormous door.
+        if (n <= SWING_MAX_SEGMENTS
+                and SWING_MIN_IN <= w <= SWING_MAX_IN
+                and SWING_MIN_IN <= h <= SWING_MAX_IN
+                and 0.6 <= w / h <= 1.6):
+            swings.append((x0, y0, x1, y1))
+    return swings
+
+
+def glass_pairs(runs):
+    """Line pairs an inch or so apart -- glazing, not structure."""
+    found = []
+    runs = sorted(runs)
+    for i, (c1, lo1, hi1) in enumerate(runs):
+        for c2, lo2, hi2 in runs[i + 1:]:
+            gap = c2 - c1
+            if gap > GLASS_MAX_IN:
+                break
+            if gap < GLASS_MIN_IN:
+                continue
+            lo, hi = max(lo1, lo2), min(hi1, hi2)
+            if hi - lo >= GLASS_MIN_LEN_IN:
+                found.append([(c1 + c2) / 2.0, lo, hi])
+    return merge_collinear(found, tol=GLASS_MAX_IN, join=GLASS_JOIN_IN)
+
+
+def jambs_on(wall, perpendicular):
+    """Where a wall is interrupted, in wall-length coordinates.
+
+    A jamb is drawn as a short line across the wall's thickness at each side of
+    an opening -- two of them an inch apart, in this drawing. Nothing else in a
+    floor plan is a stub exactly one wall thick sitting astride a wall's
+    centreline, which is what makes this the sharp edge of the detection: the
+    glazing says WHAT the opening is, but the jambs say exactly where it starts
+    and stops.
+    """
+    coord, lo, hi = wall
+    marks = []
+    for pc, pa, pb in perpendicular:
+        length = pb - pa
+        if not (WALL_MIN_IN <= length <= WALL_MAX_IN + 3):
+            continue
+        # Must straddle the centreline, not merely touch the wall.
+        if pa <= coord - 1.0 and pb >= coord + 1.0 and lo - 2 <= pc <= hi + 2:
+            marks.append(pc)
+    # The pair an inch apart is one jamb.
+    out = []
+    for x in sorted(marks):
+        if out and x - out[-1][-1] <= 2.5:
+            out[-1].append(x)
+        else:
+            out.append([x])
+    return [sum(g) / len(g) for g in out]
+
+
+def bracket(marks, a, b, slack=8.0):
+    """Widen a span out to the jambs on either side of it."""
+    before = [m for m in marks if m <= a + slack]
+    after = [m for m in marks if m >= b - slack]
+    if not before or not after:
+        return None
+    lo, hi = max(before), min(after)
+    return (lo, hi) if hi - lo >= 12.0 else None
+
+
+def find_openings(walls, perpendicular, glass, swings, horizontal):
+    """Windows and doors: found by their contents, sized by their jambs.
+
+    `walls` are lattice centrelines (coord, lo, hi); `coord` is y for horizontal
+    walls and x for vertical ones, so one body serves both.
+
+    The evidence comes first and the jambs only size it. Working the other way
+    round - taking each pair of adjacent jambs as an opening - looks natural and
+    quietly halves every double window, because the mullion between two sashes
+    is drawn as a jamb too. A 36in window came out as two 18in ones, neither
+    wide enough to hold the glazing that proved it was a window at all, so both
+    were discarded.
+
+    So: glazing on the wall's centreline is a window and a swing box resting on
+    the wall is a door, and each is then widened out to the nearest jamb on
+    either side, which is what turns "there is glass around here" into a rough
+    opening with a real width.
+    """
+    out = []
+    for coord, lo, hi in walls:
+        marks = jambs_on((coord, lo, hi), perpendicular)
+
+        for gc, ga, gb in glass:
+            if abs(gc - coord) > 2.5 or ga < lo - 12 or gb > hi + 12:
+                continue
+            # No fallback to the glazing's own extent. Jambs on both sides are
+            # the evidence that this is an opening in a wall and not two lines
+            # an inch apart that happen to lie along one - a cabinet run, a
+            # counter edge, a dimension string. Without this the drawing yields
+            # twenty-one windows, most of them inside the house.
+            span = bracket(marks, ga, gb)
+            if span and 18.0 <= span[1] - span[0] <= 144.0:
+                out.append(("window", (span[0] + span[1]) / 2.0, coord,
+                            span[1] - span[0], horizontal))
+
+        for x0, y0, x1, y1 in swings:
+            near = (y0, y1) if horizontal else (x0, x1)
+            along = (x0, x1) if horizontal else (y0, y1)
+            if min(abs(near[0] - coord), abs(near[1] - coord)) > ON_WALL_TOL_IN:
+                continue
+            if along[0] < lo - 12 or along[1] > hi + 12:
+                continue
+            span = bracket(marks, along[0], along[1]) or along
+            if 20.0 <= span[1] - span[0] <= 60.0:
+                out.append(("door", (span[0] + span[1]) / 2.0, coord,
+                            span[1] - span[0], horizontal))
+    return out
+
+
+def dedupe_openings(openings):
+    """One opening per place, whichever orientation found it first."""
+    kept = []
+    for kind, along, coord, width, horizontal in openings:
+        x, y = (along, coord) if horizontal else (coord, along)
+        if any(abs(x - kx) < 12 and abs(y - ky) < 12 for _, kx, ky, _, _ in kept):
+            continue
+        kept.append((kind, x, y, width, horizontal))
+    return kept
+
+
+def items_for(openings, ox, oy):
+    """architect3d items. Wall items snap to the nearest wall edge on load, so
+    an approximate position along the right wall is enough to orient them."""
+    items = []
+    for index, (kind, x, y, width, horizontal) in enumerate(openings):
+        spec = WINDOW if kind == "window" else DOOR
+        items.append({
+            "id": f"{kind}-{index}",
+            "item_name": spec["name"],
+            "item_type": spec["type"],
+            "model_url": spec["model"],
+            "format": "gltf",
+            "xpos": round((x - ox) * CM_PER_INCH, 2),
+            "ypos": spec["centre_cm"],
+            "zpos": round((y - oy) * CM_PER_INCH, 2),
+            "rotation": 0 if horizontal else math.pi / 2,
+            # Width from the drawing; height from the standard the drawing does
+            # not give in plan view. Both are editable in the inspector.
+            "scale_x": round(width * CM_PER_INCH / spec["w"], 4),
+            "scale_y": round(spec["height_cm"] / spec["h"], 4),
+            "scale_z": 1,
+            "fixed": False,
+            "resizable": True,
+            "material_colors": [],
+        })
+    return items
+
+
 def drop_islands(corners, walls, max_area_sqft=40.0):
     """Discard wall runs that are detached from the building and small.
 
@@ -281,7 +502,7 @@ def verify(corners, walls):
     }
 
 
-def design(corners, walls, ceiling_in, underlay):
+def design(corners, walls, ceiling_in, underlay, items):
     ox = min(x for x, _ in corners.values())
     oy = min(y for _, y in corners.values())
     elev = round(ceiling_in * CM_PER_INCH, 2)
@@ -310,7 +531,7 @@ def design(corners, walls, ceiling_in, underlay):
                             "width": 0.01, "height": 0.01},
             "underlay": underlay,
         },
-        "items": [],
+        "items": items,
     }
 
 
@@ -335,10 +556,18 @@ def main():
     clip = pymupdf.Rect(*args.clip)
 
     horiz, vert = segments(page, clip, args.scale)
-    hc, vc = lattice(centrelines(merge_collinear(horiz)),
-                     centrelines(merge_collinear(vert)))
+    merged_h, merged_v = merge_collinear(horiz), merge_collinear(vert)
+    hc, vc = lattice(centrelines(merged_h), centrelines(merged_v))
     corners, walls = build_graph(hc, vc)
     corners, walls, islands = drop_islands(corners, walls, args.max_island)
+
+    swings = swing_boxes(diagonals(page, clip, args.scale))
+    # RAW segments, not the merged runs: merging welds a jamb stub into the
+    # wall face line it touches, which is exactly the signature being looked
+    # for. Same for glazing, whose pairs glass_pairs() merges itself.
+    openings = dedupe_openings(
+        find_openings(hc, vert, glass_pairs(horiz), swings, True)
+        + find_openings(vc, horiz, glass_pairs(vert), swings, False))
     if not corners:
         raise SystemExit("traced nothing -- check --clip against the sheet")
 
@@ -377,7 +606,8 @@ def main():
     }
 
     with open(args.out, "w", newline="\n") as fh:
-        json.dump(design(corners, walls, args.ceiling, underlay), fh, indent=1)
+        json.dump(design(corners, walls, args.ceiling, underlay,
+                         items_for(openings, ox, oy)), fh, indent=1)
 
     checks = verify(corners, walls)
     span_x = max(x for x, _ in corners.values()) - ox
@@ -389,6 +619,13 @@ def main():
     print(f"  -> off-axis {checks['off_axis_in']:.6f}\" "
           f"({'square' if checks['off_axis_in'] == 0 else 'NOT SQUARE'}), "
           f"{checks['junctions']} junctions, {checks['dangling']} loose ends")
+    windows = [o for o in openings if o[0] == "window"]
+    doors = [o for o in openings if o[0] == "door"]
+    print(f"  -> {len(windows)} windows, {len(doors)} doors")
+    for kind, x, y, width, _ in sorted(openings, key=lambda o: (o[0], o[1])):
+        feet, inches = divmod(round(width), 12)
+        print(f"       {kind:6s} {feet}'-{inches}\"".ljust(24)
+              + f"at ({(x - ox) / 12:5.1f}ft, {(y - oy) / 12:5.1f}ft)")
     print(f"  -> {args.out}  (+ {args.underlay}, {pix.width}x{pix.height}px)")
 
 

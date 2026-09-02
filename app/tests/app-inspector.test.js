@@ -590,7 +590,10 @@ describe('the inspector inside the app', () =>
 
 		blueprint.model.floorplan.dispatchEvent({type: EVENT_CORNER_2D_CLICKED, item: corner});
 		await nextTick();
-		expect(wrapper.find('.field-label').text()).toBe('X (m)');
+		// The boot unit, which App.vue now sets to feet and inches. Incidental to
+		// what this test is for - that a unit CHANGE reaches an inspector that is
+		// already open - so it tracks the default rather than pinning metres.
+		expect(wrapper.find('.field-label').text()).toBe('X (feetAndInch)');
 
 		await tab(wrapper, 'Settings').trigger('click');
 		const centimetres = wrapper.get('#inspector').findAll('input[type=radio]')

@@ -27,7 +27,8 @@ def main():
     ap.add_argument("--dpi", type=int, default=120)
     args = ap.parse_args()
 
-    plan = json.load(open(args.design))["floorplan"]
+    document = json.load(open(args.design))
+    plan = document["floorplan"]
     sheet, corners = plan["underlay"], plan["corners"]
 
     underlay = os.path.join(os.path.dirname(args.design) or ".",
@@ -41,11 +42,18 @@ def main():
     page = pymupdf.open("pdf", image.convert_to_pdf())[0]
     image.close()
 
-    # The page is the PNG at 1:1, so a page point is an image pixel - which is
-    # the unit the anchor is already in. Only the corners need converting.
+    # The page is NOT the PNG at 1:1. convert_to_pdf() lays the image out in
+    # points at 72dpi, so a 1959px-wide underlay rendered at 150dpi becomes a
+    # 940pt page - while anchorXPx is in image pixels. Mixing the two shifts
+    # every wall down and right by about the anchor, which looks exactly like a
+    # bad trace and is not one. The app has no such problem: carbonsheet.js
+    # scales the anchor by screenPixels/imagePixels itself.
+    pixels = pymupdf.Pixmap(underlay)
+    to_page = page.rect.width / pixels.width
     px_per_cm_x = page.rect.width / sheet["widthCm"]
     px_per_cm_y = page.rect.height / sheet["heightCm"]
-    ax, ay = sheet["anchorXPx"], sheet["anchorYPx"]
+    ax = sheet["anchorXPx"] * to_page
+    ay = sheet["anchorYPx"] * to_page
 
     def at(corner):
         return pymupdf.Point(corner["x"] * px_per_cm_x + ax,
@@ -58,10 +66,22 @@ def main():
     for corner in corners.values():
         shape.draw_circle(at(corner), 2.5)
     shape.finish(color=(0, 0, 1), fill=(0, 0, 1))
+
+    # Openings, so a window on a cabinet run or a door in the wrong wall is as
+    # obvious as a mistraced wall is.
+    for item in document.get("items", []):
+        window = "window" in item["model_url"]
+        centre = pymupdf.Point(item["xpos"] * px_per_cm_x + ax,
+                               item["zpos"] * px_per_cm_y + ay)
+        shape.draw_circle(centre, 7)
+        shape.finish(color=(0, 0.55, 0) if window else (1, 0.5, 0),
+                     fill=(0, 0.8, 0) if window else (1, 0.65, 0), width=1.5)
     shape.commit()
 
     page.get_pixmap(dpi=args.dpi).save(args.out)
-    print(f"{len(plan['walls'])} walls, {len(corners)} corners -> {args.out}")
+    openings = document.get("items", [])
+    print(f"{len(plan['walls'])} walls, {len(corners)} corners, "
+          f"{len(openings)} openings -> {args.out}")
 
 
 if __name__ == "__main__":
