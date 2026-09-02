@@ -28,7 +28,7 @@ def main():
     args = ap.parse_args()
 
     plan = json.load(open(args.design))["floorplan"]
-    sheet, corners = plan["carbonSheet"], plan["corners"]
+    sheet, corners = plan["underlay"], plan["corners"]
 
     underlay = os.path.join(os.path.dirname(args.design) or ".",
                             os.path.basename(sheet["url"]))
@@ -41,14 +41,15 @@ def main():
     page = pymupdf.open("pdf", image.convert_to_pdf())[0]
     image.close()
 
-    # cm -> page points. The anchor is where the plan origin sits inside the
-    # sheet, which is exactly what the app offsets the sheet by.
-    sx = page.rect.width / sheet["width"]
-    sy = page.rect.height / sheet["height"]
-    ax, ay = sheet["anchorX"], sheet["anchorY"]
+    # The page is the PNG at 1:1, so a page point is an image pixel - which is
+    # the unit the anchor is already in. Only the corners need converting.
+    px_per_cm_x = page.rect.width / sheet["widthCm"]
+    px_per_cm_y = page.rect.height / sheet["heightCm"]
+    ax, ay = sheet["anchorXPx"], sheet["anchorYPx"]
 
     def at(corner):
-        return pymupdf.Point((corner["x"] + ax) * sx, (corner["y"] + ay) * sy)
+        return pymupdf.Point(corner["x"] * px_per_cm_x + ax,
+                             corner["y"] * px_per_cm_y + ay)
 
     shape = page.new_shape()
     for wall in plan["walls"]:

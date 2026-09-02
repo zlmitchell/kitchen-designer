@@ -72,21 +72,33 @@ describe('the traced plan', () =>
 		}
 	});
 
-	it.runIf(traced)('carries a carbon sheet aligned to the same origin', () =>
+	it.runIf(traced)('carries an underlay in units that mean one thing', () =>
 	{
-		const {carbonSheet, corners} = JSON.parse(readFileSync(PLAN, 'utf8')).floorplan;
+		const {underlay, carbonSheet, corners} = JSON.parse(readFileSync(PLAN, 'utf8')).floorplan;
 
-		// Without this the drawing underneath is decorative rather than a
-		// straightedge, and mistraced walls stop being obvious - which is the
-		// whole reason the extractor emits it.
-		expect(carbonSheet.url).toMatch(/underlay\.png$/);
-		expect(carbonSheet.width).toBeGreaterThan(0);
-		expect(carbonSheet.height).toBeGreaterThan(0);
+		// Without an aligned underlay the drawing beneath the plan is decorative
+		// rather than a straightedge, and a mistraced wall stops being obvious -
+		// which is the whole reason the extractor emits one.
+		expect(underlay.url).toMatch(/underlay\.png$/);
+		expect(underlay.widthCm).toBeGreaterThan(0);
+		expect(underlay.heightCm).toBeGreaterThan(0);
+
+		// The suffixes are the point. carbonsheet.js reads width/height in the
+		// display unit and anchorX/Y in raw image pixels, and a plain `width`
+		// silently became metres - a sheet 100x too big, drawn off screen, which
+		// looked exactly like an image that had failed to load.
+		expect(Object.keys(underlay).sort())
+			.toEqual(['anchorXPx', 'anchorYPx', 'heightCm', 'transparency', 'url', 'widthCm']);
+
+		// And the block loadFloorplan reads is left inert on purpose, so it
+		// cannot apply those numbers in the wrong unit before we apply them in
+		// the right one.
+		expect(carbonSheet.url).toBe('');
 
 		// The sheet has to cover the walls traced off it.
 		const xs = Object.values(corners).map((c) => c.x);
 		const ys = Object.values(corners).map((c) => c.y);
-		expect(carbonSheet.width).toBeGreaterThanOrEqual(Math.max(...xs));
-		expect(carbonSheet.height).toBeGreaterThanOrEqual(Math.max(...ys));
+		expect(underlay.widthCm).toBeGreaterThanOrEqual(Math.max(...xs));
+		expect(underlay.heightCm).toBeGreaterThanOrEqual(Math.max(...ys));
 	});
 });

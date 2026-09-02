@@ -1,6 +1,6 @@
 // @ts-check
 import {ref} from 'vue';
-import {EVENT_GLTF_READY} from '../../scripts/blueprint.js';
+import {Dimensioning, EVENT_GLTF_READY} from '../../scripts/blueprint.js';
 import {DEFAULT_DESIGN} from '../designs/default-design.js';
 import {useToasts} from './useToasts.js';
 
@@ -121,6 +121,55 @@ export function useDesignIO(store)
 	}
 
 	/**
+	 * Put the traced drawing under the plan as architect3d's carbon sheet.
+	 *
+	 * Not left to `loadFloorplan`, which reads the design's own `carbonSheet`
+	 * block, because two of those fields do not mean what a saved file makes
+	 * them look like (both from carbonsheet.js):
+	 *
+	 *   width/height  are pushed through `Dimensioning.cmFromMeasureRaw`, so
+	 *                 they are in whatever unit is on SCREEN when the design
+	 *                 loads. This app boots in metres, so the extractor's
+	 *                 centimetres were read as metres and the sheet was built a
+	 *                 hundred times too big - drawn so far outside the viewport
+	 *                 that it looked like the image had never loaded. It had:
+	 *                 the request was a 200 and the origin crosshair was on
+	 *                 screen the whole time.
+	 *   anchorX/Y     are multiplied by `_scaleX`, which is
+	 *                 screenPixels/imagePixels - so they are in RAW IMAGE
+	 *                 PIXELS, not a length at all.
+	 *
+	 * So the extractor writes plain centimetres and image pixels under
+	 * `floorplan.underlay`, and the conversion happens here where the display
+	 * unit is known. `url` goes last: it is what starts the image loading, and
+	 * `_calibrate()` wants the size already set when that finishes.
+	 *
+	 * @param {?object} underlay `floorplan.underlay`, absent on designs that
+	 * were not produced by tools/extract.py.
+	 */
+	function applyUnderlay(underlay)
+	{
+		var sheet = store.model.value.floorplan.carbonSheet;
+		// Null in widget and headless use, where there is no 2D view to draw on.
+		if (!sheet || !underlay || !underlay.url)
+		{
+			return;
+		}
+		sheet.clear();
+		// Off, or setting the width would recompute the height from the image's
+		// aspect ratio and discard the one measured off the sheet.
+		sheet.maintainProportion = false;
+		sheet.x = 0;
+		sheet.y = 0;
+		sheet.width = Dimensioning.cmToMeasureRaw(underlay.widthCm);
+		sheet.height = Dimensioning.cmToMeasureRaw(underlay.heightCm);
+		sheet.anchorX = underlay.anchorXPx;
+		sheet.anchorY = underlay.anchorYPx;
+		sheet.transparency = underlay.transparency;
+		sheet.url = underlay.url;
+	}
+
+	/**
 	 * The design to open on boot: this house if it has been traced, otherwise
 	 * the stock room.
 	 *
@@ -139,11 +188,13 @@ export function useDesignIO(store)
 		try
 		{
 			var response = await fetch(PLAN_URL, {cache: 'no-store'});
+			var text = response.ok ? await response.text() : null;
 			// A bad plan file is worth a toast - loadDesign raises one - because
 			// unlike a missing one it means the extractor produced something the
 			// loader rejects, which is a bug in us.
-			if (response.ok && loadDesign(await response.text(), 'the traced plan'))
+			if (text !== null && loadDesign(text, 'the traced plan'))
 			{
+				applyUnderlay(JSON.parse(text).floorplan.underlay);
 				return true;
 			}
 		}
