@@ -142,10 +142,18 @@ def snap(value, canon, tol):
     return nearest if abs(nearest - value) <= tol else quantise(value)
 
 
+def axes(horiz, vert):
+    """The canonical wall lines: one shared x per vertical, y per horizontal.
+
+    Exposed because rooms.py decomposes the plan into the grid these form.
+    """
+    return (cluster([c for c, _, _ in vert], AXIS_TOL_IN),
+            cluster([c for c, _, _ in horiz], AXIS_TOL_IN))
+
+
 def lattice(horiz, vert):
     """Put every centreline onto shared axes. This is what makes walls square."""
-    ys = cluster([c for c, _, _ in horiz], AXIS_TOL_IN)
-    xs = cluster([c for c, _, _ in vert], AXIS_TOL_IN)
+    xs, ys = axes(horiz, vert)
 
     def place(runs, own, cross):
         out = []
