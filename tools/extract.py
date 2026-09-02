@@ -47,6 +47,8 @@ from collections import defaultdict
 
 import pymupdf
 
+import rooms
+
 QUARTER_SCALE = 2 / 3  # pt -> real inches at 1/4" = 1'-0"
 CM_PER_INCH = 2.54
 
@@ -217,7 +219,7 @@ def lattice(horiz, vert):
     return place(horiz, ys, xs), place(vert, xs, ys)
 
 
-def build_graph(horiz, vert):
+def build_graph(horiz, vert, height_of=None):
     """Split centrelines where they cross. Corners are exact lattice points.
 
     architect3d derives rooms by walking closed loops of corners, so walls that
@@ -238,8 +240,12 @@ def build_graph(horiz, vert):
     corners, walls = {}, []
     by_point = {}
 
-    def corner_at(x, y):
-        key = (round(x, 4), round(y, 4))
+    def corner_at(x, y, height):
+        # Keyed by height as well as position, so a half wall can meet a full
+        # one. architect3d takes a wall's height from its two corners
+        # (wall.js:394), so one corner cannot be both 42in and 96in - the pony
+        # wall and the wall it runs into need separate corners at the same spot.
+        key = (round(x, 4), round(y, 4), round(height, 4))
         if key not in by_point:
             by_point[key] = str(uuid.uuid4())
             corners[by_point[key]] = key
@@ -251,8 +257,9 @@ def build_graph(horiz, vert):
             for a, b in zip(stops, stops[1:]):
                 if b - a < MIN_WALL_IN:
                     continue
+                height = height_of(coord, a, b, horizontal) if height_of else None
                 ends = ((a, coord), (b, coord)) if horizontal else ((coord, a), (coord, b))
-                pair = (corner_at(*ends[0]), corner_at(*ends[1]))
+                pair = (corner_at(*ends[0], height), corner_at(*ends[1], height))
                 if pair[0] != pair[1] and pair not in walls and pair[::-1] not in walls:
                     walls.append(pair)
     return corners, walls
@@ -560,7 +567,7 @@ def verify(corners, walls):
     """
     worst = 0.0
     for a, b in walls:
-        (x1, y1), (x2, y2) = corners[a], corners[b]
+        (x1, y1, _), (x2, y2, _) = corners[a], corners[b]
         worst = max(worst, min(abs(x1 - x2), abs(y1 - y2)))
 
     degree = defaultdict(int)
@@ -575,9 +582,8 @@ def verify(corners, walls):
 
 
 def design(corners, walls, ceiling_in, underlay, items):
-    ox = min(x for x, _ in corners.values())
-    oy = min(y for _, y in corners.values())
-    elev = round(ceiling_in * CM_PER_INCH, 2)
+    ox = min(x for x, _, _ in corners.values())
+    oy = min(y for _, y, _ in corners.values())
     return {
         "floorplan": {
             # Declared, so the loader reads these as centimetres rather than
@@ -586,8 +592,8 @@ def design(corners, walls, ceiling_in, underlay, items):
             "corners": {
                 cid: {"x": round((x - ox) * CM_PER_INCH, 4),
                       "y": round((y - oy) * CM_PER_INCH, 4),
-                      "elevation": elev}
-                for cid, (x, y) in corners.items()
+                      "elevation": round((height or ceiling_in) * CM_PER_INCH, 2)}
+                for cid, (x, y, height) in corners.items()
             },
             "walls": [{"corner1": a, "corner2": b,
                        "frontTexture": dict(WALL_TEXTURE),
@@ -607,6 +613,27 @@ def design(corners, walls, ceiling_in, underlay, items):
     }
 
 
+def parse_half_wall(spec, xs, ys):
+    """`h,12.0,25.0,38.0` -> a horizontal pony wall at y=12ft, x 25..38ft.
+
+    Feet from the plan origin, because that is what somebody reading the
+    drawing has. Snapped onto the nearest canonical line so the pony wall lands
+    on a real wall rather than beside one.
+    """
+    axis, coord, start, end = spec.split(",")
+    horizontal = axis.strip().lower().startswith("h")
+    ox, oy = min(xs), min(ys)
+    origin, along = (oy, ox) if horizontal else (ox, oy)
+    lines = ys if horizontal else xs
+    want = origin + float(coord) * 12.0
+    return {
+        "horizontal": horizontal,
+        "coord": min(lines, key=lambda v: abs(v - want)),
+        "lo": along + float(start) * 12.0,
+        "hi": along + float(end) * 12.0,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("pdf")
@@ -622,6 +649,11 @@ def main():
                     help="where the app serves --out's directory from")
     ap.add_argument("--max-island", type=float, default=40.0,
                     help="sq ft; detached runs smaller than this are fixtures")
+    ap.add_argument("--half-wall", metavar="AXIS,COORD,FROM,TO",
+                    help="a pony wall, in feet from the plan origin, e.g. "
+                         "h,12.0,25.0,38.0 for a horizontal one at y=12ft")
+    ap.add_argument("--half-wall-height", type=float, default=42.0,
+                    help="inches; 42 is a normal pony wall")
     args = ap.parse_args()
 
     page = pymupdf.open(args.pdf)[args.page - 1]
@@ -635,16 +667,40 @@ def main():
     sym_h, sym_v = segments(page, clip, args.scale, colour=SYMBOLS)
     merged_h, merged_v = merge_collinear(horiz), merge_collinear(vert)
     hc, vc = lattice(centrelines(merged_h), centrelines(merged_v))
-    corners, walls = build_graph(hc, vc)
-    corners, walls, islands = drop_islands(corners, walls, args.max_island)
+    # Walls come from the ROOM BOXES, not from the traced lines.
+    #
+    # Tracing lines leaves the short returns beside a doorway out: the stub's
+    # own face pairs with a face that merged into the long wall run beside it,
+    # so their overlap is only the stub's length and it falls under the minimum.
+    # Lowering that minimum recovers a quarter of them and adds noise. Deriving
+    # the walls from the room boundaries instead makes the question moot -- a
+    # room box is closed, so the return beside its door is part of it by
+    # construction. Measured on this plan: 26 loose ends becomes 0.
+    xs, ys = axes(centrelines(merged_h), centrelines(merged_v))
+    plan = rooms.detect(xs, ys, hc, vc)
+
+    half = parse_half_wall(args.half_wall, xs, ys) if args.half_wall else None
+
+    def height_of(coord, lo, hi, horizontal):
+        if half and half["horizontal"] == horizontal                 and abs(coord - half["coord"]) <= 6.0                 and lo >= half["lo"] - 6.0 and hi <= half["hi"] + 6.0:
+            return args.half_wall_height
+        return args.ceiling
 
     swings = swing_boxes(diagonals(page, clip, args.scale, colour=SYMBOLS))
     # RAW segments, not the merged runs: merging welds a jamb stub into the
     # wall face line it touches, which is exactly the signature being looked
     # for. Same for glazing, whose pairs glass_pairs() merges itself.
+    # Matched against the ROOM BOX walls, which is what the design will
+    # contain. Matching against the traced centrelines instead put openings a
+    # few inches off the wall that ends up in the file, because the box walls
+    # sit on the canonical lattice and the traced ones do not quite.
     openings = dedupe_openings(
-        find_openings(hc, sym_v, glass_pairs(sym_h), swings, True)
-        + find_openings(vc, sym_h, glass_pairs(sym_v), swings, False))
+        find_openings(plan["walls_h"], sym_v, glass_pairs(sym_h), swings, True)
+        + find_openings(plan["walls_v"], sym_h, glass_pairs(sym_v), swings, False))
+
+    corners, walls = build_graph(plan["walls_h"], plan["walls_v"], height_of)
+    islands = 0
+
     if not corners:
         raise SystemExit("traced nothing -- check --clip against the sheet")
 
@@ -657,8 +713,8 @@ def main():
     pix = page.get_pixmap(dpi=150, clip=clip)
     pix.save(os.path.join(outdir, args.underlay))
 
-    ox = min(x for x, _ in corners.values())
-    oy = min(y for _, y in corners.values())
+    ox = min(x for x, _, _ in corners.values())
+    oy = min(y for _, y, _ in corners.values())
     # Two different units, neither of them obvious, both from carbonsheet.js:
     #
     #   width/height  go through `Dimensioning.cmFromMeasureRaw`, so they are in
@@ -687,8 +743,8 @@ def main():
                          items_for(openings, ox, oy)), fh, indent=1)
 
     checks = verify(corners, walls)
-    span_x = max(x for x, _ in corners.values()) - ox
-    span_y = max(y for _, y in corners.values()) - oy
+    span_x = max(x for x, _, _ in corners.values()) - ox
+    span_y = max(y for _, y, _ in corners.values()) - oy
     print(f"traced {len(hc)} horizontal + {len(vc)} vertical centrelines")
     print(f"  -> {len(corners)} corners, {len(walls)} walls "
           f"({islands} detached fixture run{'' if islands == 1 else 's'} dropped)")

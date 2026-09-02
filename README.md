@@ -54,9 +54,23 @@ separates them cleanly, so some furniture arrives as walls and some walls
 arrive short. That is what the underlay is for: the real drawing shows through
 underneath, and anything wrong can be dragged into place in the 2D editor.
 
+A pony wall is a flag, because it is a design decision and not something the
+drawing records. Feet from the plan's north-west corner:
+
+```sh
+python tools/extract.py "plans/your-plan.pdf" -o data/design.json     --half-wall h,12.0,25.0,38.0 --half-wall-height 42
+```
+
 Useful flags: `--clip X0 Y0 X1 Y1` picks the region of the sheet holding the
 plan (PDF points), `--page` picks the sheet, `--ceiling` sets wall height in
 inches, `--scale` if the drawing is not 1/4" = 1'-0".
+
+Walls are derived from the ROOM boxes, not traced as lines. Tracing lines
+leaves out the short returns beside a doorway, and deriving them from a closed
+room boundary makes that impossible rather than rare -- 26 loose ends became 0
+on this plan. Walls crossing each other is fine and expected: they are split at
+their intersections into shared corners, and a boundary two rooms share is
+emitted once.
 
 It also places windows and doors. Neither is a gap in the wall -- the wall's
 face lines run through both -- so they are found by what is drawn inside the

@@ -59,16 +59,26 @@ describe('the traced plan', () =>
 			(wall) => !floorplan.corners[wall.corner1] || !floorplan.corners[wall.corner2]);
 		expect(dangling).toEqual([]);
 
-		// No corner is welded onto another: the extractor's weld radius is 3in,
-		// so anything closer than that is two corners it should have merged.
+		// No corner is welded onto another -- unless they are at different
+		// heights, which is deliberate. A pony wall meeting a full-height wall
+		// needs its own corner at the same spot, because a corner carries one
+		// elevation and the two walls do not share it.
 		const points = Object.values(floorplan.corners);
 		const tooClose = points.flatMap((a, i) => points.slice(i + 1)
-			.filter((b) => Math.hypot(a.x - b.x, a.y - b.y) < 3 * 2.54));
+			.filter((b) => Math.hypot(a.x - b.x, a.y - b.y) < 3 * 2.54
+				&& Math.abs(a.elevation - b.elevation) < 0.01));
 		expect(tooClose).toEqual([]);
 
+		// Ceiling height, or a pony wall. A corner carries the height of the
+		// walls meeting it (wall.js:394), so a half wall needs its own corners
+		// at the same spot as the full wall it runs into - which is why the
+		// extractor keys corners by height as well as position.
+		const PONY_CM = 42 * 2.54;
 		for (const corner of points)
 		{
-			expect(corner.elevation).toBeCloseTo(CEILING_CM, 2);
+			const ceiling = Math.abs(corner.elevation - CEILING_CM) < 0.01;
+			const pony = Math.abs(corner.elevation - PONY_CM) < 0.01;
+			expect(ceiling || pony, `elevation ${corner.elevation} is neither`).toBe(true);
 		}
 	});
 
