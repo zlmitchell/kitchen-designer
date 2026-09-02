@@ -68,6 +68,8 @@ END_TOL_IN = 8.0
 GRID_IN = 0.125  # 1/8", finer than anything a builder dimensions to
 MIN_WALL_IN = 6.0
 
+MIN_OPENING_IN, MAX_OPENING_IN = 18.0, 144.0
+
 WALL_TEXTURE = {"url": "rooms/textures/wallmap.png", "stretch": True, "scale": 0}
 
 
@@ -219,7 +221,7 @@ def lattice(horiz, vert):
     return place(horiz, ys, xs), place(vert, xs, ys)
 
 
-def build_graph(horiz, vert, height_of=None):
+def build_graph(horiz, vert, height_of=None, cuts=None):
     """Split centrelines where they cross. Corners are exact lattice points.
 
     architect3d derives rooms by walking closed loops of corners, so walls that
@@ -252,10 +254,19 @@ def build_graph(horiz, vert, height_of=None):
         return by_point[key]
 
     for runs, cutsets, horizontal in ((horiz, hcuts, True), (vert, vcuts, False)):
-        for (coord, lo, hi), cuts in zip(runs, cutsets):
-            stops = sorted({lo, hi} | {c for c in cuts if lo < c < hi})
+        for (coord, lo, hi), crossings in zip(runs, cutsets):
+            # Crossings split a run because another wall meets it there. `cuts`
+            # splits it because we need the piece: a post is a short length of
+            # the same wall left at full height, and without a cut it is simply
+            # part of the longer segment and takes that segment's height.
+            asked = (cuts or {}).get((horizontal, round(coord, 4)), ())
+            stops = sorted({lo, hi} | {c for c in crossings if lo < c < hi}
+                           | {c for c in asked if lo < c < hi})
             for a, b in zip(stops, stops[1:]):
-                if b - a < MIN_WALL_IN:
+                # A run shorter than the minimum is noise, unless it is short
+                # because we asked for it to be: a 4x4 post is 4in of wall, and
+                # the minimum is 6.
+                if b - a < MIN_WALL_IN and a not in asked and b not in asked:
                     continue
                 height = height_of(coord, a, b, horizontal) if height_of else None
                 ends = ((a, coord), (b, coord)) if horizontal else ((coord, a), (coord, b))
@@ -403,29 +414,65 @@ def bracket(marks, a, b, slack=8.0):
     return (lo, hi) if hi - lo >= 12.0 else None
 
 
-def find_openings(walls, perpendicular, glass, swings, horizontal):
-    """Windows and doors: found by their contents, sized by their jambs.
+CONNECTED = 0.92     # a window's glazing runs jamb to jamb
+GLAZING_TOL_IN = 4.0
 
-    `walls` are lattice centrelines (coord, lo, hi); `coord` is y for horizontal
-    walls and x for vertical ones, so one body serves both.
 
-    The evidence comes first and the jambs only size it. Working the other way
-    round - taking each pair of adjacent jambs as an opening - looks natural and
-    quietly halves every double window, because the mullion between two sashes
-    is drawn as a jamb too. A 36in window came out as two 18in ones, neither
-    wide enough to hold the glazing that proved it was a window at all, so both
-    were discarded.
+def spans_linework(runs, coord, a, b, tol=GLAZING_TOL_IN):
+    """How the drawing fills the opening: (covered fraction, piece count).
 
-    So: glazing on the wall's centreline is a window and a swing box resting on
-    the wall is a door, and each is then widened out to the nearest jamb on
-    either side, which is what turns "there is glass around here" into a rough
-    opening with a real width.
+    This is the whole window/door test, and it comes from how the symbols are
+    drawn rather than from their shape. A window's glazing CONNECTS the two
+    jambs -- one continuous run, corner to corner. A door does not: a swing is
+    an arc off to one side, and a bypass slider is two leaves that overlap each
+    other and stop short, because they are drawn where they actually sit.
+
+    Measured on this sheet: the 36in window is 100% covered in one piece; the
+    49in closet slider is 77% covered in two, with an 11in gap. Nothing else is
+    needed to tell them apart.
     """
-    # Grouped by coordinate, not taken segment by segment. A door is a gap in
-    # the wall, so the centreline through a doorway is traced as two pieces with
-    # the door between them -- and testing the door against either piece put it
-    # outside both. Every swing on this sheet sat within 3in of a wall LINE and
-    # was rejected by its SEGMENT, which is how seven doors became none.
+    width = b - a
+    if width <= 0:
+        return 0.0, 0
+    pieces = []
+    for c, lo, hi in runs:
+        if abs(c - coord) > tol:
+            continue
+        lo, hi = max(lo, a), min(hi, b)
+        if hi > lo:
+            pieces.append([lo, hi])
+    pieces.sort()
+    merged = []
+    for lo, hi in pieces:
+        if merged and lo <= merged[-1][1] + 0.6:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return sum(hi - lo for lo, hi in merged) / width, len(merged)
+
+
+def find_openings(walls, perpendicular, symbol, architecture, swings, horizontal):
+    """Where the wall stops, and what the drawing put there instead.
+
+    Two pens answer two different questions, and between consecutive jambs they
+    are near-perfect complements. Measured on the north wall of this plan:
+
+        span 107in   architecture 100%   symbol   1%    solid wall
+        span  18in   architecture   0%   symbol 100%    opening
+        span  92in   architecture 100%   symbol  24%    solid wall
+        span  32in   architecture   0%   symbol 100%    opening
+
+    So the wall's own pen says WHERE it stops -- an opening is a span the
+    architecture line does not cross - and the symbol pen says WHAT is in it.
+    A window's glazing connects the two jambs, one run corner to corner; a door
+    does not, because a swing is an arc off to one side and a bypass slider is
+    two leaves that overlap each other and stop short of the far jamb. The
+    closet slider measures 77% in two pieces with an 11in gap; the window next
+    to it measures 100% in one.
+
+    Adjacent windows are merged afterwards: a mullion between two sashes is
+    drawn as a jamb too, so a 36in double window arrives as two 18in spans.
+    """
     lines = {}
     for coord, lo, hi in walls:
         span = lines.get(coord)
@@ -434,31 +481,41 @@ def find_openings(walls, perpendicular, glass, swings, horizontal):
     out = []
     for coord, (lo, hi) in sorted(lines.items()):
         marks = jambs_on((coord, lo, hi), perpendicular)
+        found = []
+        for a, b in zip(marks, marks[1:]):
+            width = b - a
+            if not 12.0 <= width <= MAX_OPENING_IN:
+                continue
+            solid, _ = spans_linework(architecture, coord, a, b)
+            if solid >= 0.5:
+                continue                       # the wall runs straight through
+            covered, pieces = spans_linework(symbol, coord, a, b)
+            swung = any(
+                min(abs((y0 if horizontal else x0) - coord),
+                    abs((y1 if horizontal else x1) - coord)) <= ON_WALL_TOL_IN
+                and (x0 if horizontal else y0) >= a - 8
+                and (x1 if horizontal else y1) <= b + 8
+                for x0, y0, x1, y1 in swings)
+            # The swing is checked BEFORE giving up on an empty span, not after.
+            # A swing arc is drawn out into the room, not along the wall, so a
+            # plain hinged door leaves the wall line itself blank - the two
+            # bedroom doorways on this plan measure 1.6% architecture and 2.7%
+            # symbol, and were being discarded as gaps with nothing in them.
+            if not swung and covered < 0.25:
+                continue
+            connected = covered >= CONNECTED and pieces == 1
+            found.append(["window" if connected and not swung else "door", a, b])
 
-        for gc, ga, gb in glass:
-            if abs(gc - coord) > 2.5 or ga < lo - 12 or gb > hi + 12:
-                continue
-            # No fallback to the glazing's own extent. Jambs on both sides are
-            # the evidence that this is an opening in a wall and not two lines
-            # an inch apart that happen to lie along one - a cabinet run, a
-            # counter edge, a dimension string. Without this the drawing yields
-            # twenty-one windows, most of them inside the house.
-            span = bracket(marks, ga, gb)
-            if span and 18.0 <= span[1] - span[0] <= 144.0:
-                out.append(("window", (span[0] + span[1]) / 2.0, coord,
-                            span[1] - span[0], horizontal))
+        merged = []
+        for kind, a, b in found:
+            if merged and merged[-1][0] == kind == "window"                     and abs(merged[-1][2] - a) < 1e-6:
+                merged[-1][2] = b
+            else:
+                merged.append([kind, a, b])
 
-        for x0, y0, x1, y1 in swings:
-            near = (y0, y1) if horizontal else (x0, x1)
-            along = (x0, x1) if horizontal else (y0, y1)
-            if min(abs(near[0] - coord), abs(near[1] - coord)) > ON_WALL_TOL_IN:
-                continue
-            if along[0] < lo - 12 or along[1] > hi + 12:
-                continue
-            span = bracket(marks, along[0], along[1]) or along
-            if 20.0 <= span[1] - span[0] <= 60.0:
-                out.append(("door", (span[0] + span[1]) / 2.0, coord,
-                            span[1] - span[0], horizontal))
+        for kind, a, b in merged:
+            if MIN_OPENING_IN <= b - a <= MAX_OPENING_IN:
+                out.append((kind, (a + b) / 2.0, coord, b - a, horizontal))
     return out
 
 
@@ -654,6 +711,11 @@ def main():
                          "h,12.0,25.0,38.0 for a horizontal one at y=12ft")
     ap.add_argument("--half-wall-height", type=float, default=42.0,
                     help="inches; 42 is a normal pony wall")
+    ap.add_argument("--post", choices=("start", "end", "none"), default="none",
+                    help="a full-height post at one end of the pony wall")
+    ap.add_argument("--post-size", type=float, default=4.0,
+                    help="inches; a 4in run of wall is a 4x4, since a wall is "
+                         "10cm thick by default")
     args = ap.parse_args()
 
     page = pymupdf.open(args.pdf)[args.page - 1]
@@ -681,8 +743,33 @@ def main():
 
     half = parse_half_wall(args.half_wall, xs, ys) if args.half_wall else None
 
+    # The post is just a short run of wall left at full height.
+    #
+    # architect3d has no column primitive - it knows walls, rooms and items -
+    # but a wall is 10cm thick by default, so a 4in length of one is a 4x4 and
+    # needs no model, no catalogue entry and no new concept. The pony wall is
+    # shortened to make room for it rather than overlapping it, so the two do
+    # not fight over the same span.
+    cuts = {}
+    if half and args.post != "none":
+        if args.post == "start":
+            edge = half["lo"] + args.post_size
+            half["lo"] = edge
+        else:
+            edge = half["hi"] - args.post_size
+            half["hi"] = edge
+        cuts[(half["horizontal"], round(half["coord"], 4))] = {edge}
+
     def height_of(coord, lo, hi, horizontal):
-        if half and half["horizontal"] == horizontal                 and abs(coord - half["coord"]) <= 6.0                 and lo >= half["lo"] - 6.0 and hi <= half["hi"] + 6.0:
+        # By midpoint, not containment. build_graph splits a run at every wall
+        # it crosses, so the pony wall arrives as several segments whose ends
+        # are lattice coordinates rather than the ends asked for - and once the
+        # post shortened the span, containment stopped matching any of them and
+        # the pony wall silently came back full height.
+        middle = (lo + hi) / 2.0
+        if (half and half['horizontal'] == horizontal
+                and abs(coord - half['coord']) <= 0.5
+                and half['lo'] - 1.0 <= middle <= half['hi'] + 1.0):
             return args.half_wall_height
         return args.ceiling
 
@@ -695,10 +782,10 @@ def main():
     # few inches off the wall that ends up in the file, because the box walls
     # sit on the canonical lattice and the traced ones do not quite.
     openings = dedupe_openings(
-        find_openings(plan["walls_h"], sym_v, glass_pairs(sym_h), swings, True)
-        + find_openings(plan["walls_v"], sym_h, glass_pairs(sym_v), swings, False))
+        find_openings(plan["walls_h"], sym_v, sym_h, horiz, swings, True)
+        + find_openings(plan["walls_v"], sym_h, sym_v, vert, swings, False))
 
-    corners, walls = build_graph(plan["walls_h"], plan["walls_v"], height_of)
+    corners, walls = build_graph(plan["walls_h"], plan["walls_v"], height_of, cuts)
     islands = 0
 
     if not corners:

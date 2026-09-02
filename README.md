@@ -58,8 +58,15 @@ A pony wall is a flag, because it is a design decision and not something the
 drawing records. Feet from the plan's north-west corner:
 
 ```sh
-python tools/extract.py "plans/your-plan.pdf" -o data/design.json     --half-wall h,12.0,25.0,38.0 --half-wall-height 42
+python tools/extract.py "plans/your-plan.pdf" -o data/design.json     --half-wall h,11.44,24.6,38.0 --half-wall-height 42 --post start
 ```
+
+`--post` leaves a short length of the wall at full height. architect3d has no
+column primitive, but a wall is 10cm thick by default, so 4in of one is a 4x4
+and needs no model and no new concept. Give the coordinate of the wall FACE you
+want, not the middle of the wall: the two faces of one wall are only a few
+inches apart and both are canonical lines, so 12.0 and 11.44 pick different
+sides of the same wall.
 
 Useful flags: `--clip X0 Y0 X1 Y1` picks the region of the sheet holding the
 plan (PDF points), `--page` picks the sheet, `--ceiling` sets wall height in
@@ -71,6 +78,14 @@ room boundary makes that impossible rather than rare -- 26 loose ends became 0
 on this plan. Walls crossing each other is fine and expected: they are split at
 their intersections into shared corners, and a boundary two rooms share is
 emitted once.
+
+Windows and doors are told apart the way the drawing draws them. Between two
+jambs, the architecture pen says WHERE the wall stops -- an opening is a span it
+does not cross -- and the symbol pen says WHAT is in it. A window's glazing
+connects the two jambs, one run corner to corner. A door does not: a swing is an
+arc off to one side, and a bypass slider is two leaves that overlap each other
+and stop short. On this plan the window measures 100% covered in one piece and
+the closet slider 77% in two, with an 11in gap.
 
 It also places windows and doors. Neither is a gap in the wall -- the wall's
 face lines run through both -- so they are found by what is drawn inside the
