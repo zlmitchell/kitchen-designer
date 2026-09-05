@@ -77,6 +77,10 @@ MAX_OPENING_IN = 96.0
 # A jamb mark is a stub. Longer than this and it is a piece of wall face, which
 # would have paired on its own and needs no bridging.
 MAX_JAMB_IN = 14.0
+# How much wall a width needs behind it to count as a construction type rather
+# than a coincidence. A closet is the smallest real case: two walls of about
+# 7ft between them on this plan.
+MIN_TYPE_LENGTH_IN = 72.0
 
 
 def merge_runs(runs, join):
@@ -259,19 +263,40 @@ def thicknesses(horizontal, vertical):
     """
     tally = defaultdict(float)
     for pair in list(horizontal) + list(vertical):
-        tally[round(pair["gap"] * 2) / 2] += pair["together"]
+        tally[round(pair["gap"] * 4) / 4] += pair["together"]
     if not tally:
         return []
-    peak = max(tally.values())
-    return sorted(w for w, weight in tally.items() if weight >= peak * 0.20)
+
+    # A flat floor, in feet of wall, and nothing relative.
+    #
+    # Two cleverer rules failed first. Keeping every bucket above a fraction of
+    # the PEAK measures a short partition against the longest exterior wall in
+    # the house: 4.5in carried 25ft of 2x4 partition and was thrown out, and
+    # the closet's 3.2in walls went with it, which is why the middle bedroom
+    # had no closet at all. Clustering the buckets into modes and judging each
+    # mode failed differently -- the distribution is not modal. There is a
+    # bucket at nearly every quarter inch from 3 to 11, so any join tolerance
+    # wide enough to gather one wall type chains the lot into a single mode.
+    #
+    # That is not noise, it is the drawing: this is a remodel, and existing
+    # walls, new walls and furred-out walls are genuinely different thicknesses.
+    # So the only honest question is whether a width is backed by enough wall
+    # to be a construction type rather than a coincidence, and that is an
+    # absolute quantity.
+    return sorted(w for w, weight in tally.items() if weight >= MIN_TYPE_LENGTH_IN)
 
 
 def _plugs_a_gap(centre, lo, hi, taken):
     """True if this run sits in a gap between two accepted stretches of one wall.
 
-    On the same line means within a wall thickness of the accepted centreline,
-    since a frame is drawn a little wider than the wall and its centreline is
-    therefore close but not equal.
+    A window is drawn a little wider than the wall it sits in, so its frame is
+    a parallel pair too -- 10in where the wall is 7in on the kitchen plan's
+    north wall -- and it lives exactly where the wall's own faces stop. Nothing
+    overlaps it, so the shadow test never sees it, and it gets accepted as a
+    wall that neatly plugs every window. The openings then vanish.
+
+    Sitting between two stretches of the same wall line, and touching neither,
+    is what a frame does and what a wall never does.
     """
     same = [box for box in taken
             if abs(centre - box["centre"]) <= max(box["thickness"], 1.0)]
