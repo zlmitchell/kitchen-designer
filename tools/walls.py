@@ -451,6 +451,36 @@ def _jamb_between(box, lo, hi, stubs):
     return False
 
 
+def close_corners(boxes_in):
+    """Run each box's drawn end out to the centreline of the wall it meets.
+
+    OVERSHOOT exists so that two boxes which should cross actually do, and a
+    blanket overshoot of one thickness does that -- but it is a device, not a
+    claim, and drawing it makes every wall overhang its corner by a whole
+    thickness. Rendering the un-extended run instead makes the corners look
+    like they failed to close.
+
+    Both are wrong because neither is where the wall ends. Walls meet at each
+    other's CENTRELINES, which is the convention the drawing uses and the one
+    architect3d wants, so a box's end belongs on the centreline of whatever it
+    runs into. Corners then close exactly, with nothing hanging over.
+    """
+    for box in boxes_in:
+        reach = box["thickness"] * OVERSHOOT + FACE_JOIN_IN
+        for other in boxes_in:
+            if other["horizontal"] == box["horizontal"]:
+                continue
+            # It has to actually cross, not merely point at us from elsewhere.
+            if not (other["lo"] <= box["centre"] <= other["hi"]):
+                continue
+            for end in ("drawn_lo", "drawn_hi"):
+                if abs(other["centre"] - box[end]) <= reach:
+                    box[end] = other["centre"]
+        box["drawn_lo"] = min(box["drawn_lo"], box["drawn_hi"])
+        box["drawn_hi"] = max(box["drawn_lo"], box["drawn_hi"])
+    return boxes_in
+
+
 def crossings(boxes_in):
     """Where each box's centreline is cut by another's.
 
@@ -508,7 +538,8 @@ def trace(horizontal_segments, vertical_segments, tol_in=0.5):
     if not found:
         return {"thicknesses": [], "boxes": [], "segments": [],
                 "faces": (h, v), "pairs": (pairs_h, pairs_v)}
-    built = combine(select(pairs_h, found, True), h)         + combine(select(pairs_v, found, False), v)
+    built = close_corners(combine(select(pairs_h, found, True), h)
+                          + combine(select(pairs_v, found, False), v))
     return {
         "thicknesses": found,
         "boxes": built,
