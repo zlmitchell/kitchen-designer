@@ -68,6 +68,9 @@ MIN_PAIR_IN = 4.0
 FACE_JOIN_IN = 2.0
 # How far to overshoot each end of a box, as a multiple of its thickness.
 OVERSHOOT = 1.0
+# Slack when asking whether a run sits between two others rather than beside
+# them. A jamb is drawn with a little overlap either way.
+GAP_TOUCH_IN = 2.0
 
 
 def merge_runs(runs, join):
@@ -257,6 +260,22 @@ def thicknesses(horizontal, vertical):
     return sorted(w for w, weight in tally.items() if weight >= peak * 0.20)
 
 
+def _plugs_a_gap(centre, lo, hi, taken):
+    """True if this run sits in a gap between two accepted stretches of one wall.
+
+    On the same line means within a wall thickness of the accepted centreline,
+    since a frame is drawn a little wider than the wall and its centreline is
+    therefore close but not equal.
+    """
+    same = [box for box in taken
+            if abs(centre - box["centre"]) <= max(box["thickness"], 1.0)]
+    if not same:
+        return False
+    before = [box for box in same if box["drawn_hi"] <= lo + GAP_TOUCH_IN]
+    after = [box for box in same if box["drawn_lo"] >= hi - GAP_TOUCH_IN]
+    return bool(before and after)
+
+
 def select(pairs, thickness_set, horizontal):
     """Take the strongest face pairs first, letting each shadow weaker overlaps.
 
@@ -279,6 +298,21 @@ def select(pairs, thickness_set, horizontal):
                    and min(hi, box["drawn_hi"]) - max(lo, box["drawn_lo"])
                    > (hi - lo) * 0.5
                    for box in taken):
+                continue
+            # Or if it fills a GAP in a wall already accepted on this line,
+            # which makes it an opening symbol rather than a wall.
+            #
+            # A window is drawn a little wider than the wall it sits in, so its
+            # frame is a parallel pair too -- 10in where the wall is 7in on the
+            # kitchen plan's north wall -- and it lives exactly where the wall's
+            # own faces stop. Nothing overlaps it, so the shadow test above
+            # never sees it, and it gets accepted as a wall that neatly plugs
+            # every window. The openings then vanish: the north wall reads as
+            # one continuous run and its three windows are gone.
+            #
+            # Sitting between two stretches of the same wall line, and touching
+            # neither, is what a frame does and what a wall never does.
+            if _plugs_a_gap(centre, lo, hi, taken):
                 continue
             reach = pair["gap"] * OVERSHOOT
             taken.append({
