@@ -445,15 +445,30 @@ def combine(boxes_in, jambs=None):
             kept["hi"] = max(kept["hi"], box["hi"])
             kept["drawn_lo"] = min(kept["drawn_lo"], box["drawn_lo"])
             kept["drawn_hi"] = max(kept["drawn_hi"], box["drawn_hi"])
-            # thickness is NOT widened here. Taking the max let a merged
-            # frame's 10in win over a 7in wall, and everything downstream that
-            # asks "which faces are mine" then caught the frame too.
+            # The DOMINANT contributor sets the thickness, not the first one
+            # merged and not the widest.
+            #
+            # Taking the max let a window frame's 10in win over the 7in wall it
+            # sat in. Keeping the first was worse and less obviously wrong: the
+            # merge order is by centreline, so on the bathroom's west wall a
+            # spurious 10.23in pair sorted ahead of the real 6.8in one and
+            # painted its width over the whole wall -- and did the same on the
+            # opposite wall, which is why the two matched each other at a width
+            # neither of them is.
+            #
+            # Longest wins, for the same reason it wins in select(): the pair
+            # with the most linework behind it is the one the drafter drew.
             kept["faces"] = kept.get("faces", [(kept["near"], kept["far"])])
             kept["faces"].append((box["near"], box["far"]))
+            if (box["drawn_hi"] - box["drawn_lo"]) > kept.get("_span", 0.0):
+                kept["_span"] = box["drawn_hi"] - box["drawn_lo"]
+                kept["thickness"] = box["thickness"]
+                kept["centre"] = box["centre"]
             break
         else:
             entry = dict(box)
             entry["faces"] = [(box["near"], box["far"])]
+            entry["_span"] = box["drawn_hi"] - box["drawn_lo"]
             out.append(entry)
     return out
 
