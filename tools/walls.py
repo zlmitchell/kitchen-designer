@@ -302,9 +302,21 @@ def _plugs_a_gap(centre, lo, hi, taken):
             if abs(centre - box["centre"]) <= max(box["thickness"], 1.0)]
     if not same:
         return False
-    before = [box for box in same if box["drawn_hi"] <= lo + GAP_TOUCH_IN]
-    after = [box for box in same if box["drawn_lo"] >= hi - GAP_TOUCH_IN]
-    return bool(before and after)
+    # By the MIDPOINT, not the ends. A window frame is drawn a little wider
+    # than the hole it fills, so it overlaps the wall face either side of it by
+    # an inch or two -- and an endpoint test then finds nothing "before" it and
+    # lets the frame through. On the north wall that let the frame take the
+    # whole run, shadow the real wall down to its last four feet, and swallow
+    # all three windows.
+    middle = (lo + hi) / 2.0
+    before = [box for box in same if box["drawn_hi"] <= middle]
+    after = [box for box in same if box["drawn_lo"] >= middle]
+    if not (before and after):
+        return False
+    # And it has to actually be a hole in that wall, not a continuation of it.
+    left = max(box["drawn_hi"] for box in before)
+    right = min(box["drawn_lo"] for box in after)
+    return right - left <= MAX_OPENING_IN
 
 
 def select(pairs, thickness_set, horizontal):
@@ -464,6 +476,11 @@ def combine(boxes_in, jambs=None):
                 kept["_span"] = box["drawn_hi"] - box["drawn_lo"]
                 kept["thickness"] = box["thickness"]
                 kept["centre"] = box["centre"]
+                # The pair that won is also the only one entitled to say where
+                # this wall's openings are. Reading every merged pair instead
+                # lets one that happens to span a doorway fill the gap that
+                # marks it, and the opening disappears.
+                kept["near"], kept["far"] = box["near"], box["far"]
             break
         else:
             entry = dict(box)
