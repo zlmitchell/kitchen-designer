@@ -5,21 +5,29 @@ fail in different ways and want different eyes on them -- a wall can be in the
 right place with every opening in it missed, and an opening can be found exactly
 where its wall is two inches off. Scoring them together hides both.
 
-## Where an opening comes from
+## Two detectors, because they miss different things
 
-Not from hunting symbols. The wall's own face lines STOP at each jamb, and the
-gap between them is the opening -- measured on this plan the gaps reproduce the
-symbol detector's thirteen openings at the same places and the same widths, to
-within an inch, with no glazing detection, no swing-arc fitting and no jamb
-bracketing. See walls.py for how the box spans the gap so the wall stays
-continuous while the faces still record where it stopped.
+An opening is found twice over, and the results are unioned rather than
+intersected.
 
-The symbol pen is still wanted, but only to say WHAT is in an opening already
-located, which is a far easier question than finding one:
+  symbols   what the drafter DREW in the wall: a swing arc off to one side,
+            two overlapping bypass leaves, glazing running jamb to jamb. This
+            finds most of them, and it is the only thing that finds a plain
+            hinged doorway -- the swing is drawn out in the room, so nothing on
+            the wall's own line marks it at all.
 
-    window   glazing runs jamb to jamb, one piece, on the wall's centreline
-    door     a swing arc off to one side, or two overlapping bypass leaves
-    cased    nothing drawn in it at all
+  gaps      where the wall's own face lines STOP. Structural rather than
+            symbolic, so it catches a cased opening with nothing drawn in it,
+            which no symbol reader can see. The box spans the gap so the wall
+            stays continuous while the faces still record where it stopped.
+
+Requiring both to agree would find fewer than either alone, which is why merge()
+is a union. Where they overlap, a kind from the symbol pen beats an unknown
+from a gap.
+
+Running symbols against the BOX walls rather than the old lattice ones matters:
+an opening then lands on the wall that actually gets written out, instead of a
+few inches off it.
 
 ## Correcting it, not authoring it
 
@@ -93,6 +101,83 @@ def find(traced):
                 "width_in": round(width, 2),
             })
     return sorted(out, key=lambda o: (not o["horizontal"], o["centre"], o["lo"]))
+
+
+def find_by_symbol(traced, page, clip, scale):
+    """What the drafter DREW in the wall: swing arcs, bypass leaves, glazing.
+
+    The other half of the job, and the half that finds most of it. Gaps in the
+    face coverage are structural evidence and they are honest, but a wall only
+    breaks where the drafter chose to break it -- a plain hinged doorway leaves
+    the wall line blank and its swing arc out in the room, so nothing on the
+    wall's own line marks it at all. Symbols find those. Between them the two
+    detectors miss different openings, which is the whole reason to run both.
+
+    This drives extract.find_openings against the BOX walls rather than the old
+    lattice ones, so an opening lands on the wall that will actually be written
+    out rather than a few inches off it.
+    """
+    walls_h = [(b["centre"], b["drawn_lo"], b["drawn_hi"])
+               for b in traced["boxes"] if b["horizontal"]]
+    walls_v = [(b["centre"], b["drawn_lo"], b["drawn_hi"])
+               for b in traced["boxes"] if not b["horizontal"]]
+
+    architecture_h, architecture_v = extract.segments(page, clip, scale)
+    symbol_h, symbol_v = extract.segments(page, clip, scale,
+                                          colour=extract.SYMBOLS)
+    swings = extract.swing_boxes(
+        extract.diagonals(page, clip, scale, colour=extract.SYMBOLS))
+
+    raw = (extract.find_openings(walls_h, symbol_v, symbol_h,
+                                 architecture_h, swings, True)
+           + extract.find_openings(walls_v, symbol_h, symbol_v,
+                                   architecture_v, swings, False))
+
+    thickness = {}
+    for box in traced["boxes"]:
+        thickness[(box["horizontal"], round(box["centre"], 1))] = box["thickness"]
+
+    out = []
+    for kind, along, coord, width, horizontal in raw:
+        out.append({
+            "kind": kind,
+            "horizontal": horizontal,
+            "centre": round(coord, 2),
+            "thickness": round(thickness.get((horizontal, round(coord, 1)), 5.0), 2),
+            "lo": round(along - width / 2.0, 2),
+            "hi": round(along + width / 2.0, 2),
+            "width_in": round(width, 2),
+            "from": "symbol",
+        })
+    return out
+
+
+def merge(*groups):
+    """One opening per place. First detector to claim a spot keeps it.
+
+    Deliberately not an intersection. The two detectors fail on different
+    openings -- the gap reader misses a doorway whose swing is drawn out in the
+    room, the symbol reader misses a cased opening with nothing drawn in it at
+    all -- so requiring both to agree would find fewer than either alone.
+    """
+    kept = []
+    for group in groups:
+        for opening in group:
+            duplicate = False
+            for other in kept:
+                if other["horizontal"] != opening["horizontal"]:
+                    continue
+                if abs(other["centre"] - opening["centre"]) > PLACE_TOL_IN * 2:
+                    continue
+                if min(other["hi"], opening["hi"]) - max(other["lo"], opening["lo"]) > 0:
+                    duplicate = True
+                    # A kind from the symbol pen beats "unknown" from a gap.
+                    if other["kind"] == "unknown" != opening["kind"]:
+                        other["kind"] = opening["kind"]
+                    break
+            if not duplicate:
+                kept.append(dict(opening))
+    return sorted(kept, key=lambda o: (not o["horizontal"], o["centre"], o["lo"]))
 
 
 def label(openings, page, clip, scale):
@@ -217,7 +302,9 @@ def main():
     clip = pymupdf.Rect(*args.clip)
     horizontal, vertical = extract.segments(page, clip, args.scale)
     traced = walls.trace(horizontal, vertical)
-    found = label(find(traced), page, clip, args.scale)
+    # Symbols first: they carry a kind, and merge() lets a kind beat "unknown".
+    found = merge(find_by_symbol(traced, page, clip, args.scale),
+                  label(find(traced), page, clip, args.scale))
 
     if args.emit:
         os.makedirs(os.path.dirname(args.fixture) or ".", exist_ok=True)
