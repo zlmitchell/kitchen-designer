@@ -81,6 +81,8 @@ MAX_JAMB_IN = 14.0
 # than a coincidence. A closet is the smallest real case: two walls of about
 # 7ft between them on this plan.
 MIN_TYPE_LENGTH_IN = 72.0
+# How much longer than it is thick a wall attached at only one end has to be.
+MIN_STUB_RATIO = 3.0
 
 
 def merge_runs(runs, join):
@@ -535,8 +537,23 @@ def drop_floating(boxes_in):
                 return True
         return False
 
-    return [box for box in boxes_in
-            if joins(box, box["drawn_lo"]) or joins(box, box["drawn_hi"])]
+    out = []
+    for box in boxes_in:
+        ends = sum(1 for edge in (box["drawn_lo"], box["drawn_hi"])
+                   if joins(box, edge))
+        if not ends:
+            continue
+        # A box hanging off ONE end has to be long relative to its thickness.
+        # The sink cabinet is 22in long and 9.7in thick -- barely longer than
+        # it is wide -- and hangs off the middle wall, so the floating test
+        # alone keeps it. A wall is not that shape. Ratio alone is no good
+        # either: a real return beside a doorway measures 6.7in on 4.5in, a
+        # ratio of 1.49, and it is a wall because it is joined at BOTH ends.
+        length = box["drawn_hi"] - box["drawn_lo"]
+        if ends == 1 and length < box["thickness"] * MIN_STUB_RATIO:
+            continue
+        out.append(box)
+    return out
 
 
 def close_corners(boxes_in):
