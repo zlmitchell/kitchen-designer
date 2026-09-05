@@ -508,6 +508,37 @@ def _jamb_between(box, lo, hi, stubs):
     return False
 
 
+def drop_floating(boxes_in):
+    """Throw out boxes that meet no other wall at either end.
+
+    A wall runs between other walls, or between a wall and the building
+    envelope. It does not float. What floats is a fixture outline that happens
+    to be drawn on the architecture pen and happens to pair at a wall-like
+    thickness -- in the kitchen, a 30in counter edge pairing with the half-wall
+    line, a 9.7in box under the sink, a 2in stub beside the post.
+
+    Those survive every test upstream because they ARE two parallel lines a
+    construction thickness apart running alongside each other. Geometry cannot
+    tell them from a wall. What tells them apart is that they are connected to
+    nothing, and a house is a connected thing.
+
+    Only boxes joined at NEITHER end go. A pony wall stops in open floor at one
+    end and is still a wall, so requiring both ends would throw it away.
+    """
+    def joins(box, edge):
+        for other in boxes_in:
+            if other is box or other["horizontal"] == box["horizontal"]:
+                continue
+            if (other["lo"] <= box["centre"] <= other["hi"]
+                    and abs(other["centre"] - edge) <= max(other["thickness"],
+                                                           box["thickness"])):
+                return True
+        return False
+
+    return [box for box in boxes_in
+            if joins(box, box["drawn_lo"]) or joins(box, box["drawn_hi"])]
+
+
 def close_corners(boxes_in):
     """Run each box's drawn end out to the centreline of the wall it meets.
 
@@ -598,8 +629,8 @@ def trace(horizontal_segments, vertical_segments, tol_in=0.5):
     built = combine(select(pairs_h, found, True), h)         + combine(select(pairs_v, found, False), v)
     # Zero-length and sliver boxes dropped AFTER the corner pass, since that
     # is what sets a box's final extent.
-    built = [b for b in close_corners(built)
-             if b["drawn_hi"] - b["drawn_lo"] > MIN_PAIR_IN]
+    built = drop_floating([b for b in close_corners(built)
+                           if b["drawn_hi"] - b["drawn_lo"] > MIN_PAIR_IN])
     return {
         "thicknesses": found,
         "boxes": built,
