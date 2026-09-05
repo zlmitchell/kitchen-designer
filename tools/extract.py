@@ -371,7 +371,10 @@ def glass_pairs(runs):
     return merge_collinear(found, tol=GLASS_MAX_IN, join=GLASS_JOIN_IN)
 
 
-def jambs_on(wall, perpendicular):
+MIN_JAMB_SPAN = 0.6   # of the wall's own thickness
+
+
+def jambs_on(wall, perpendicular, thickness=None):
     """Where a wall is interrupted, in wall-length coordinates.
 
     A jamb is drawn as a short line across the wall's thickness at each side of
@@ -381,11 +384,25 @@ def jambs_on(wall, perpendicular):
     glazing says WHAT the opening is, but the jambs say exactly where it starts
     and stops.
     """
-    coord, lo, hi = wall
+    coord, lo, hi = wall[:3]
+    # A jamb reaches from one face of the wall to the other. Anything shorter
+    # that still straddles the centreline is a symbol drawn INSIDE the wall,
+    # and the casement operator is exactly that: a 3.0in mark on a 6.1in wall,
+    # centred, two of them per opening sash.
+    #
+    #   wall faces     y 23.90 -> 24.41   6.1in
+    #   jamb           y 23.89 -> 24.42   6.4in   face to face
+    #   operator mark  y 24.06 -> 24.31   3.0in   inside
+    #
+    # Read as jambs they chop each opening sash into 1.7in slivers, every one
+    # of them under the 12in minimum, and a three-section picture window comes
+    # back as its middle pane alone -- the only one with no opening sash and so
+    # no operator to confuse it.
+    floor = thickness * MIN_JAMB_SPAN if thickness else WALL_MIN_IN
     marks = []
     for pc, pa, pb in perpendicular:
         length = pb - pa
-        if not (WALL_MIN_IN <= length <= WALL_MAX_IN + 3):
+        if not (floor <= length <= WALL_MAX_IN + 3):
             continue
         # Must straddle the centreline, not merely touch the wall.
         # Contains the centreline within a tolerance rather than strictly
@@ -474,13 +491,19 @@ def find_openings(walls, perpendicular, symbol, architecture, swings, horizontal
     drawn as a jamb too, so a 36in double window arrives as two 18in spans.
     """
     lines = {}
-    for coord, lo, hi in walls:
+    for wall in walls:
+        coord, lo, hi = wall[:3]
+        thickness = wall[3] if len(wall) > 3 else None
         span = lines.get(coord)
-        lines[coord] = (min(span[0], lo), max(span[1], hi)) if span else (lo, hi)
+        if span:
+            lines[coord] = (min(span[0], lo), max(span[1], hi),
+                            thickness or span[2])
+        else:
+            lines[coord] = (lo, hi, thickness)
 
     out = []
-    for coord, (lo, hi) in sorted(lines.items()):
-        marks = jambs_on((coord, lo, hi), perpendicular)
+    for coord, (lo, hi, thickness) in sorted(lines.items()):
+        marks = jambs_on((coord, lo, hi), perpendicular, thickness)
         found = []
         for a, b in zip(marks, marks[1:]):
             width = b - a

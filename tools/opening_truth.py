@@ -117,9 +117,11 @@ def find_by_symbol(traced, page, clip, scale):
     lattice ones, so an opening lands on the wall that will actually be written
     out rather than a few inches off it.
     """
-    walls_h = [(b["centre"], b["drawn_lo"], b["drawn_hi"])
+    # Thickness goes with each wall so jambs_on() can tell a jamb, which spans
+    # the wall face to face, from a symbol drawn inside it.
+    walls_h = [(b["centre"], b["drawn_lo"], b["drawn_hi"], b["thickness"])
                for b in traced["boxes"] if b["horizontal"]]
-    walls_v = [(b["centre"], b["drawn_lo"], b["drawn_hi"])
+    walls_v = [(b["centre"], b["drawn_lo"], b["drawn_hi"], b["thickness"])
                for b in traced["boxes"] if not b["horizontal"]]
 
     architecture_h, architecture_v = extract.segments(page, clip, scale)
