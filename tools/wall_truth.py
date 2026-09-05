@@ -106,7 +106,40 @@ def drawn(traced):
             "solid": [[round(lo, 2), round(hi, 2)] for lo, hi in solid],
             "openings": [[round(lo, 2), round(hi, 2)] for lo, hi in gaps],
         })
-    return sorted(out, key=lambda w: (not w["horizontal"], w["centre"]))
+    return _by_line(out)
+
+
+def _by_line(records):
+    """One record per wall LINE, not one per box.
+
+    combine() leaves several boxes sharing a centreline -- a wall bridged over
+    its openings, plus whatever fragments beyond them did not merge -- and
+    emitting each of them separately put the same wall in the fixture two and
+    three times over. A person correcting it would then have to correct it
+    twice and could not tell which copy mattered.
+    """
+    lines = {}
+    for record in records:
+        key = (record["horizontal"], round(record["centre"] / PLACE_TOL_IN))
+        kept = lines.get(key)
+        if kept is None:
+            lines[key] = dict(record)
+            continue
+        kept["solid"] = [list(span) for span in
+                         walls._cover([(0, lo, hi) for lo, hi
+                                       in kept["solid"] + record["solid"]])]
+        kept["openings"] = [[a[1], b[0]] for a, b in
+                            zip(kept["solid"], kept["solid"][1:])
+                            if MIN_OPENING_IN <= b[0] - a[1] <= MAX_OPENING_IN]
+        if record["thickness"] > kept["thickness"]:
+            kept["thickness"] = record["thickness"]
+    for record in lines.values():
+        record["solid"] = [[round(lo, 2), round(hi, 2)]
+                           for lo, hi in record["solid"]]
+        record["openings"] = [[round(lo, 2), round(hi, 2)]
+                              for lo, hi in record["openings"]]
+    return sorted(lines.values(),
+                  key=lambda w: (not w["horizontal"], w["centre"]))
 
 
 def _matches(one, two):
