@@ -19,17 +19,22 @@ import pymupdf
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import extract  # noqa: E402
+import layers  # noqa: E402
 import walls  # noqa: E402
 
 DEFAULT_PDF = "plans/25-025 Jo and Zach Kitchen Kitchen.pdf"
 DEFAULT_CLIP = (1500, 380, 2440, 980)
 
 
-def render(pdf, page_no, clip_box, scale, out, dpi=150):
+def render(pdf, page_no, clip_box, scale, out, dpi=150, layer=None):
     page = pymupdf.open(pdf)[page_no - 1]
     clip = pymupdf.Rect(*clip_box)
-    horizontal, vertical = extract.segments(page, clip, scale)
+    # From the structure LAYER, not from every black line on the sheet. The
+    # counter, the window frame and the cabinet runs are drawn with other pens
+    # and simply are not in here to be mistaken for walls.
+    horizontal, vertical, key = layers.structure(page, clip, scale, layer)
+    print(f"structure layer: {key[0] or 'no stroke'} w={key[1]:g}"
+          + (f" fill {key[2]}" if key[2] else ""))
     traced = walls.trace(horizontal, vertical)
 
     pixmap = page.get_pixmap(dpi=dpi, clip=clip)
@@ -92,8 +97,12 @@ def main():
                         metavar=("X0", "Y0", "X1", "Y1"))
     parser.add_argument("--scale", type=float, default=2 / 3,
                         help="real inches per PDF point")
+    parser.add_argument("--layer", default=None,
+                        help='structure layer, e.g. "#000000,0.5" or '
+                             '"none,0,#646464"; default is the best-ranked')
     args = parser.parse_args()
-    render(args.pdf, args.page, args.clip, args.scale, args.out)
+    render(args.pdf, args.page, args.clip, args.scale, args.out,
+           layer=layers.parse_key(args.layer) if args.layer else None)
 
 
 if __name__ == "__main__":

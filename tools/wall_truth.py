@@ -52,7 +52,7 @@ import pymupdf
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import extract  # noqa: E402
+import layers  # noqa: E402
 import walls  # noqa: E402
 
 DEFAULT_PDF = "plans/25-025 Jo and Zach Kitchen Kitchen.pdf"
@@ -198,9 +198,10 @@ def render(pdf, page_no, clip_box, scale, fixture, out, dpi=150):
     canvas.get_pixmap(dpi=100).save(out)
 
 
-def load(pdf, page_no, clip_box, scale):
+def load(pdf, page_no, clip_box, scale, layer=None):
     page = pymupdf.open(pdf)[page_no - 1]
-    horizontal, vertical = extract.segments(page, pymupdf.Rect(*clip_box), scale)
+    horizontal, vertical, _ = layers.structure(
+        page, pymupdf.Rect(*clip_box), scale, layer)
     return walls.trace(horizontal, vertical)
 
 
@@ -215,9 +216,11 @@ def main():
     parser.add_argument("--clip", nargs=4, type=float, default=DEFAULT_CLIP,
                         metavar=("X0", "Y0", "X1", "Y1"))
     parser.add_argument("--scale", type=float, default=2 / 3)
+    parser.add_argument("--layer", default=None)
     args = parser.parse_args()
 
-    traced = load(args.pdf, args.page, args.clip, args.scale)
+    traced = load(args.pdf, args.page, args.clip, args.scale,
+                  layers.parse_key(args.layer) if args.layer else None)
 
     if args.emit:
         fixture = drawn(traced)

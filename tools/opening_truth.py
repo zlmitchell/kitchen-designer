@@ -51,6 +51,7 @@ import pymupdf
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import extract  # noqa: E402
+import layers  # noqa: E402
 import walls  # noqa: E402
 
 DEFAULT_PDF = "plans/25-025 Jo and Zach Kitchen Kitchen.pdf"
@@ -103,7 +104,7 @@ def find(traced):
     return sorted(out, key=lambda o: (not o["horizontal"], o["centre"], o["lo"]))
 
 
-def find_by_symbol(traced, page, clip, scale):
+def find_by_symbol(traced, page, clip, scale, structure_layer=None):
     """What the drafter DREW in the wall: swing arcs, bypass leaves, glazing.
 
     The other half of the job, and the half that finds most of it. Gaps in the
@@ -124,7 +125,8 @@ def find_by_symbol(traced, page, clip, scale):
     walls_v = [(b["centre"], b["drawn_lo"], b["drawn_hi"], b["thickness"])
                for b in traced["boxes"] if not b["horizontal"]]
 
-    architecture_h, architecture_v = extract.segments(page, clip, scale)
+    architecture_h, architecture_v, _ = layers.structure(page, clip, scale,
+                                                         structure_layer)
     symbol_h, symbol_v = extract.segments(page, clip, scale,
                                           colour=extract.SYMBOLS)
     swings = extract.swing_boxes(
@@ -298,14 +300,16 @@ def main():
     parser.add_argument("--clip", nargs=4, type=float, default=DEFAULT_CLIP,
                         metavar=("X0", "Y0", "X1", "Y1"))
     parser.add_argument("--scale", type=float, default=2 / 3)
+    parser.add_argument("--layer", default=None)
     args = parser.parse_args()
 
     page = pymupdf.open(args.pdf)[args.page - 1]
     clip = pymupdf.Rect(*args.clip)
-    horizontal, vertical = extract.segments(page, clip, args.scale)
+    chosen = layers.parse_key(args.layer) if args.layer else None
+    horizontal, vertical, _ = layers.structure(page, clip, args.scale, chosen)
     traced = walls.trace(horizontal, vertical)
     # Symbols first: they carry a kind, and merge() lets a kind beat "unknown".
-    found = merge(find_by_symbol(traced, page, clip, args.scale),
+    found = merge(find_by_symbol(traced, page, clip, args.scale, chosen),
                   label(find(traced), page, clip, args.scale))
 
     if args.emit:

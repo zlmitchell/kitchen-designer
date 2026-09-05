@@ -54,6 +54,11 @@ PAIR_MIN_IN = 2.0
 PAIR_MAX_IN = 14.0
 # Two faces must run alongside each other this far to count as a pair.
 PAIR_OVERLAP_IN = 18.0
+# A structure layer's commonest pair gap is a CONSTRUCTION thickness. Wide
+# enough for a 2x6 wall with finishes, narrow enough to reject a 9in dimension
+# chain or a 12in cabinet.
+WALL_GAP_MIN_IN = 2.5
+WALL_GAP_MAX_IN = 8.5
 
 
 def _overlaps(clip, rect):
@@ -183,13 +188,21 @@ def concentration(layer):
 
 
 def rank(layers, page_area_sqin):
-    """A first guess at which layer is which. Check it, do not trust it.
+    """Score every layer for how much it looks like the structure of a house.
 
-    Deliberately a separate step from split(), and deliberately weak. The
-    evidence for these rules is two drafters, which is exactly the sample size
-    that produced "colour first, weight second" earlier in this project -- a
-    rule the LayOut sheets then demolished. Treat the score as a shortlist for
-    a human, not a decision.
+    Ink, times how axis-aligned it is, times how much of the plan it reaches.
+    All three, and NOT concentration, which was the first attempt and inverts
+    the answer: a run of kitchen cabinets is parallel lines at one repeated
+    depth and scores 1.00, while a real house has several wall thicknesses --
+    existing, new, furred out -- and scores 0.31. Rewarding a single repeated
+    gap therefore ranks the cabinets above the walls, which is exactly what it
+    did on the kitchen plan.
+
+    What no other layer imitates is enclosing the building. Cabinets cluster in
+    one room, swings scatter, annotation hugs the margins; only the walls run
+    the length and breadth of the plan and account for most of its ink. A layer
+    still has to pair up SOMEWHERE at a plausible thickness to qualify at all,
+    which is what keeps the elevation markers and dimension strings out.
     """
     scored = []
     for key, layer in layers.items():
@@ -197,16 +210,50 @@ def rank(layers, page_area_sqin):
             continue
         x0, y0, x1, y1 = layer["extent"]
         spread = ((x1 - x0) * (y1 - y0)) / page_area_sqin if page_area_sqin else 0.0
-        conc = concentration(layer)
-        # Structure: axis-aligned, spread across the plan, and pairing up on a
-        # repeated thickness. All three, because any two of them also describe
-        # a run of kitchen cabinets.
-        structure = (layer["axis_share"] * min(spread * 3.0, 1.0)
-                     * conc * math.log1p(layer["ink_in"]))
+        # The commonest gap has to be a thickness someone could build. Ink,
+        # axis-alignment and spread alone rank the DIMENSION lines first on
+        # every LayOut sheet -- they are long, dead straight, and reach further
+        # than the building does, so spread actively rewards them. What they
+        # never do is pair up at a construction thickness: Caroline's dimension
+        # layer pairs at 9in and her walls at 3.5in.
+        gap = (max(layer["pairs"].items(), key=lambda kv: kv[1])[0]
+               if layer["pairs"] else None)
+        buildable = gap is not None and WALL_GAP_MIN_IN <= gap <= WALL_GAP_MAX_IN
+        structure = (layer["ink_in"] * layer["axis_share"] * spread
+                     if buildable else 0.0)
         scored.append({
             "key": key, "layer": layer, "spread": spread,
-            "concentration": conc, "structure": structure,
-            "modal_gap": (max(layer["pairs"].items(), key=lambda kv: kv[1])[0]
-                          if layer["pairs"] else None),
+            "concentration": concentration(layer), "structure": structure,
+            "modal_gap": gap,
         })
     return sorted(scored, key=lambda s: -s["structure"])
+
+
+def structure(page, clip, scale, override=None):
+    """The layer the walls are drawn on, as (horizontal, vertical) runs.
+
+    `override` is a (colour, width, fill) key, for when the ranking is wrong --
+    which it will be sometimes, and layer_check.py is how you find out.
+    """
+    found = split(page, clip, scale)
+    if override is not None:
+        layer = found.get(tuple(override))
+        if layer is None:
+            raise SystemExit(f"no layer {tuple(override)} -- run layer_check.py")
+        return layer["horizontal"], layer["vertical"], tuple(override)
+    area = (clip.width * scale) * (clip.height * scale)
+    ordered = rank(found, area)
+    if not ordered or not ordered[0]["structure"]:
+        raise SystemExit("no layer looks like structure -- check --clip")
+    best = ordered[0]
+    return best["layer"]["horizontal"], best["layer"]["vertical"], best["key"]
+
+
+def parse_key(text):
+    """A layer key from the command line: "#000000,0.5" or "none,0,#646464"."""
+    parts = [p.strip() for p in text.split(",")]
+    while len(parts) < 3:
+        parts.append("none")
+    return tuple(None if p.lower() in ("none", "-", "") else
+                 (float(p) if index == 1 else p)
+                 for index, p in enumerate(parts))
