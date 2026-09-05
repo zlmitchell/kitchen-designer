@@ -77,6 +77,9 @@ MAX_OPENING_IN = 96.0
 # A jamb mark is a stub. Longer than this and it is a piece of wall face, which
 # would have paired on its own and needs no bridging.
 MAX_JAMB_IN = 14.0
+# How close a jamb must sit to a wall's end for that end to count as stopped
+# at an opening rather than simply finished.
+JAMB_AT_END_IN = 8.0
 # How much wall a width needs behind it to count as a construction type rather
 # than a coincidence. A closet is the smallest real case: two walls of about
 # 7ft between them on this plan.
@@ -490,6 +493,19 @@ def combine(boxes_in, jambs=None):
     return out
 
 
+def _jamb_at(box, edge, stubs):
+    """Is there a jamb mark on this wall's line, right at `edge`?"""
+    half = box["thickness"] / 2.0 + 1.0
+    for coord, a, b in stubs:
+        if abs(coord - box["centre"]) > half:
+            continue
+        if b - a > MAX_JAMB_IN:
+            continue
+        if min(abs(a - edge), abs(b - edge)) <= JAMB_AT_END_IN:
+            return True
+    return False
+
+
 def _jamb_between(box, lo, hi, stubs):
     """Is there a jamb mark on this wall's line, inside the gap lo..hi?
 
@@ -506,6 +522,51 @@ def _jamb_between(box, lo, hi, stubs):
         if a >= lo - GAP_TOUCH_IN and b <= hi + GAP_TOUCH_IN:
             return True
     return False
+
+
+def reach_across_openings(boxes_in, jambs):
+    """Run a wall out to the wall it meets, even across a door in between.
+
+    combine() bridges a wall over its own openings, but only between two
+    stretches of it -- so an opening at a wall's END, whose far side is a
+    PERPENDICULAR wall rather than more wall, cannot be bridged. There is
+    nothing on the other side to bridge to.
+
+    That is the bathroom and the pantry on this plan. Both doors sit in the
+    same wall, and between them they occupy all of it from x=13.08ft to the
+    pantry wall at x=15.80ft, so the wall was traced up to the first jamb and
+    stopped. Their swing arcs were found -- the symbol pen reports both -- and
+    then discarded, because an opening needs a wall to sit in and there was
+    none. close_corners() already reaches for a crossing wall but only about
+    8in, and this gap is 2.7ft.
+
+    So: if a box's end points at a perpendicular wall within an opening's
+    width, and a jamb mark lies in the gap between, the wall runs on to it. The
+    jamb is the drawing saying the wall stopped for a reason rather than simply
+    ending.
+    """
+    for box in boxes_in:
+        for end, direction in (("drawn_lo", -1), ("drawn_hi", 1)):
+            best = None
+            for other in boxes_in:
+                if other["horizontal"] == box["horizontal"]:
+                    continue
+                if not (other["lo"] <= box["centre"] <= other["hi"]):
+                    continue
+                reach = (other["centre"] - box[end]) * direction
+                if not 0 < reach <= MAX_OPENING_IN:
+                    continue
+                # The jamb has to sit AT the wall's end, not merely somewhere in
+                # the gap. Accepting one anywhere in an 8ft reach let walls run
+                # to any perpendicular they happened to point at -- 98ft of
+                # growth across the plan, one wall going from 8in to 27ft.
+                if not _jamb_at(box, box[end], jambs):
+                    continue
+                if best is None or reach < best:
+                    best = reach
+            if best is not None:
+                box[end] += direction * best
+    return boxes_in
 
 
 def close_corners(boxes_in):
@@ -595,8 +656,8 @@ def trace(horizontal_segments, vertical_segments, tol_in=0.5):
     if not found:
         return {"thicknesses": [], "boxes": [], "segments": [],
                 "faces": (h, v), "pairs": (pairs_h, pairs_v)}
-    built = close_corners(combine(select(pairs_h, found, True), h)
-                          + combine(select(pairs_v, found, False), v))
+    built = combine(select(pairs_h, found, True), h)         + combine(select(pairs_v, found, False), v)
+    built = close_corners(reach_across_openings(built, h + v))
     return {
         "thicknesses": found,
         "boxes": built,
