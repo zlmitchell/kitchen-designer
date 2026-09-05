@@ -53,6 +53,7 @@ import pymupdf
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import layers  # noqa: E402
+import opening_truth  # noqa: E402
 import walls  # noqa: E402
 
 DEFAULT_PDF = "plans/25-025 Jo and Zach Kitchen Kitchen.pdf"
@@ -69,44 +70,72 @@ MAX_OPENING_IN = 96.0
 MAX_JAMB_IN = 14.0
 
 
-def drawn(traced):
-    """Each wall line's solid stretches, and the openings between them.
+def drawn(traced, openings=None):
+    """Each wall line: how far it runs, and which parts of it are solid.
 
-    Grouped by wall LINE, not taken per box. select() already cuts a face pair
-    into one box per stretch where both faces actually run, so a single box has
-    no gap inside it by construction -- asking each box for its own openings
-    returned none at all. The opening is the space BETWEEN two boxes sharing a
-    centreline, which is the same thing the drawing shows: the wall's faces
-    stop at one jamb and start again at the other.
+    The openings are SUBTRACTED from the wall's extent rather than derived here
+    from gaps in the face coverage. Deriving them worked on the top wall and
+    failed on the left and bottom ones, whose chosen face pair happens to run
+    unbroken straight through its own windows -- so those walls came back solid
+    end to end with every opening in them missing.
+
+    opening_truth already answers this properly, by running the symbol detector
+    and the gap reader together, and it gets the exterior walls right. Asking a
+    second, weaker derivation of the same question for a second time was only
+    ever going to disagree with it. So: this owns where the walls ARE, that
+    owns where the holes are, and the drawn wall is the one minus the other.
     """
-    out = []
+    lines = {}
     for box in traced["boxes"]:
-        runs = traced["faces"][0 if box["horizontal"] else 1]
-        # ONLY the lines this box was built from. A tolerance band around the
-        # centreline also catches the window frame, which covers exactly the
-        # openings -- so reading the band back fills every gap and the windows
-        # disappear, which is what kept this returning two openings instead of
-        # thirteen.
-        wanted = {round(c, 3) for pair in box.get("faces", [(box["near"], box["far"])])
-                  for c in pair}
-        inside = [(lo, hi) for coord, lo, hi in runs
-                  if round(coord, 3) in wanted
-                  and hi > box["drawn_lo"] and lo < box["drawn_hi"]]
-        if not inside:
+        key = (box["horizontal"], round(box["centre"] / PLACE_TOL_IN))
+        entry = lines.get(key)
+        if entry is None:
+            lines[key] = {
+                "horizontal": box["horizontal"],
+                "centre": box["centre"],
+                "thickness": box["thickness"],
+                "runs": [(box["drawn_lo"], box["drawn_hi"])],
+            }
             continue
-        clipped = [(max(lo, box["drawn_lo"]), min(hi, box["drawn_hi"]))
-                   for lo, hi in inside]
-        solid = walls._cover([(0, lo, hi) for lo, hi in clipped if hi > lo])
-        gaps = [(a[1], b[0]) for a, b in zip(solid, solid[1:])
-                if MIN_OPENING_IN <= b[0] - a[1] <= MAX_OPENING_IN]
+        entry["runs"].append((box["drawn_lo"], box["drawn_hi"]))
+        entry["thickness"] = max(entry["thickness"], box["thickness"])
+
+    out = []
+    for entry in lines.values():
+        extent = walls._cover([(0, lo, hi) for lo, hi in entry["runs"]])
+        mine = sorted(
+            (o["lo"], o["hi"]) for o in (openings or [])
+            if o["horizontal"] == entry["horizontal"]
+            and abs(o["centre"] - entry["centre"]) <= PLACE_TOL_IN)
+        solid = _minus(extent, mine)
         out.append({
-            "horizontal": box["horizontal"],
-            "centre": round(box["centre"], 2),
-            "thickness": round(box["thickness"], 2),
+            "horizontal": entry["horizontal"],
+            "centre": round(entry["centre"], 2),
+            "thickness": round(entry["thickness"], 2),
             "solid": [[round(lo, 2), round(hi, 2)] for lo, hi in solid],
-            "openings": [[round(lo, 2), round(hi, 2)] for lo, hi in gaps],
+            "openings": [[round(lo, 2), round(hi, 2)] for lo, hi in mine],
         })
-    return _by_line(out)
+    return sorted(out, key=lambda w: (not w["horizontal"], w["centre"]))
+
+
+def _minus(spans, holes):
+    """What is left of `spans` once `holes` are cut out of them."""
+    out = []
+    for lo, hi in spans:
+        pieces = [(lo, hi)]
+        for a, b in holes:
+            nxt = []
+            for plo, phi in pieces:
+                if b <= plo or a >= phi:
+                    nxt.append((plo, phi))
+                    continue
+                if a > plo:
+                    nxt.append((plo, a))
+                if b < phi:
+                    nxt.append((b, phi))
+            pieces = nxt
+        out.extend(p for p in pieces if p[1] - p[0] > 1.0)
+    return out
 
 
 def _by_line(records):
@@ -147,9 +176,9 @@ def _matches(one, two):
             and abs(one["centre"] - two["centre"]) <= PLACE_TOL_IN)
 
 
-def score(fixture, traced):
+def score(fixture, traced, openings=None):
     """Compare a trace against the fixture, by length and by opening."""
-    mine = drawn(traced)
+    mine = drawn(traced, openings)
     hit = wrong = 0.0
     missed = 0.0
     matched_walls = 0
@@ -252,11 +281,16 @@ def main():
     parser.add_argument("--layer", default=None)
     args = parser.parse_args()
 
-    traced = load(args.pdf, args.page, args.clip, args.scale,
-                  layers.parse_key(args.layer) if args.layer else None)
+    chosen = layers.parse_key(args.layer) if args.layer else None
+    traced = load(args.pdf, args.page, args.clip, args.scale, chosen)
+    page = pymupdf.open(args.pdf)[args.page - 1]
+    clip = pymupdf.Rect(*args.clip)
+    found = opening_truth.merge(
+        opening_truth.find_by_symbol(traced, page, clip, args.scale, chosen),
+        opening_truth.label(opening_truth.find(traced), page, clip, args.scale))
 
     if args.emit:
-        fixture = drawn(traced)
+        fixture = drawn(traced, found)
         os.makedirs(os.path.dirname(args.fixture) or ".", exist_ok=True)
         with open(args.fixture, "w", newline="\n") as handle:
             json.dump(fixture, handle, indent=1)
@@ -275,7 +309,7 @@ def main():
     with open(args.fixture) as handle:
         fixture = json.load(handle)
 
-    result = score(fixture, traced)
+    result = score(fixture, traced, found)
     print(f"walls   {result['walls_matched']}/{result['walls_in_fixture']} matched "
           f"({result['walls_traced']} traced)")
     print(f"  recall    {result['recall'] * 100:5.1f}%   "

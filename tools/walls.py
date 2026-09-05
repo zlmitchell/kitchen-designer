@@ -63,7 +63,7 @@ THICKNESS_TOL_IN = 0.75
 # Two faces must run alongside each other for at least this much to be a pair.
 # Short, because a return beside a doorway is short and is exactly what the old
 # 18in minimum was throwing away.
-MIN_PAIR_IN = 4.0
+MIN_PAIR_IN = 2.5
 # Faces within this of each other on the same line are one face.
 FACE_JOIN_IN = 2.0
 # How far to overshoot each end of a box, as a multiple of its thickness.
