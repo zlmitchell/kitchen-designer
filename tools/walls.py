@@ -83,6 +83,9 @@ MAX_JAMB_IN = 14.0
 MIN_TYPE_LENGTH_IN = 72.0
 # How much longer than it is thick a wall attached at only one end has to be.
 MIN_STUB_RATIO = 3.0
+# Two stretches are the same wall only if built from the same two face lines,
+# to within this. Snapping moves a face by well under an inch.
+SAME_PAIR_IN = 1.0
 
 
 def merge_runs(runs, join):
@@ -448,6 +451,24 @@ def combine(boxes_in, jambs=None):
                                                          box["thickness"]) / 2.0:
                 continue
             gap = max(box["lo"] - kept["hi"], kept["lo"] - box["hi"])
+            # Two stretches that OVERLAP but were built from different face
+            # lines are different things sharing a line, and must stay apart.
+            # architect3d keeps height and thickness per WALL, so anything the
+            # drafter drew differently has to arrive as its own wall or there
+            # is nothing to set the property on. In the kitchen 12.058in is
+            # both the middle wall's far face and the half wall's near edge,
+            # so merging on centre proximity alone swallowed the half wall
+            # into a full-height run and left nothing to designate.
+            #
+            # A GAP is the opposite case: one wall interrupted by a door, whose
+            # face is broken there so a neighbouring line takes over for the
+            # next stretch. Applying the same-pair test to those as well cost
+            # two doors -- the closet's and the bathroom's -- by splitting the
+            # walls they sit in.
+            same_pair = (abs(kept["near"] - box["near"]) <= SAME_PAIR_IN
+                         and abs(kept["far"] - box["far"]) <= SAME_PAIR_IN)
+            if gap <= 0 and not same_pair:
+                continue
             if gap > 0:
                 if gap > MAX_OPENING_IN:
                     continue
