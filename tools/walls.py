@@ -71,6 +71,12 @@ OVERSHOOT = 1.0
 # Slack when asking whether a run sits between two others rather than beside
 # them. A jamb is drawn with a little overlap either way.
 GAP_TOUCH_IN = 2.0
+# A wall may be bridged across an opening no wider than this. Wider than a
+# double door and a cased opening; narrower than a room.
+MAX_OPENING_IN = 96.0
+# A jamb mark is a stub. Longer than this and it is a piece of wall face, which
+# would have paired on its own and needs no bridging.
+MAX_JAMB_IN = 14.0
 
 
 def merge_runs(runs, join):
@@ -318,6 +324,13 @@ def select(pairs, thickness_set, horizontal):
             taken.append({
                 "centre": centre,
                 "thickness": pair["gap"],
+                # The two lines this box was actually built from. Kept because
+                # a tolerance band around the centreline is not good enough to
+                # find them again later: the band also contains the window
+                # frame, which covers exactly the openings, so reading the band
+                # back fills every gap and the openings vanish.
+                "near": pair["near"],
+                "far": pair["far"],
                 "lo": lo - reach,
                 "hi": hi + reach,
                 "horizontal": horizontal,
@@ -360,13 +373,33 @@ def _overlap(one, two):
     return out
 
 
-def combine(boxes_in):
-    """Merge boxes that are the same wall seen twice.
+def combine(boxes_in, jambs=None):
+    """Merge boxes that are the same wall, including across their openings.
 
-    Collinear, overlapping along their length, and of compatible thickness --
-    which on a lattice of bare centrelines was invisible, and is why every wall
-    used to come out doubled. Here it is three comparisons.
+    Two jobs, and the second is the one that matters. Overlapping collinear
+    boxes are the same wall seen twice -- invisible on a lattice of bare
+    centrelines, which is why every wall used to come out doubled, and three
+    comparisons here.
+
+    The second job is bridging a wall across its own openings. A wall is drawn
+    in the stretches BETWEEN its doors, so a wall that is nearly all door is
+    barely drawn at all: the closet in the middle bedroom carries a bypass
+    slider across almost its whole width, and all that survives of the wall is
+    four jamb stubs 2.7in long. Nothing pairs, nothing is traced, and a wall
+    that is plainly there goes missing. The same thing empties the door zone in
+    the middle of the house and loses the half wall by the sink.
+
+    So a gap between two collinear boxes is bridged when there is JAMB evidence
+    inside it -- a short stub on the wall's own line, which is the drawing
+    saying "the wall stops here and starts again there". Requiring the evidence
+    is what keeps this from welding two genuinely separate walls that happen to
+    share a line with a room in between.
+
+    The result is the CONTINUOUS wall, which is what architect3d wants: one
+    wall carrying its windows and doors as placed items. The drawn stretches
+    are still recoverable from the face coverage, and wall_truth.py does that.
     """
+    stubs = jambs or []
     out = []
     for box in sorted(boxes_in, key=lambda b: (b["horizontal"], b["centre"], b["lo"])):
         for kept in out:
@@ -375,17 +408,47 @@ def combine(boxes_in):
             if abs(kept["centre"] - box["centre"]) > max(kept["thickness"],
                                                          box["thickness"]) / 2.0:
                 continue
-            if box["lo"] > kept["hi"] or box["hi"] < kept["lo"]:
-                continue
+            gap = max(box["lo"] - kept["hi"], kept["lo"] - box["hi"])
+            if gap > 0:
+                if gap > MAX_OPENING_IN:
+                    continue
+                lo = min(kept["drawn_hi"], box["drawn_hi"])
+                hi = max(kept["drawn_lo"], box["drawn_lo"])
+                if not _jamb_between(kept, lo, hi, stubs):
+                    continue
             kept["lo"] = min(kept["lo"], box["lo"])
             kept["hi"] = max(kept["hi"], box["hi"])
             kept["drawn_lo"] = min(kept["drawn_lo"], box["drawn_lo"])
             kept["drawn_hi"] = max(kept["drawn_hi"], box["drawn_hi"])
-            kept["thickness"] = max(kept["thickness"], box["thickness"])
+            # thickness is NOT widened here. Taking the max let a merged
+            # frame's 10in win over a 7in wall, and everything downstream that
+            # asks "which faces are mine" then caught the frame too.
+            kept["faces"] = kept.get("faces", [(kept["near"], kept["far"])])
+            kept["faces"].append((box["near"], box["far"]))
             break
         else:
-            out.append(dict(box))
+            entry = dict(box)
+            entry["faces"] = [(box["near"], box["far"])]
+            out.append(entry)
     return out
+
+
+def _jamb_between(box, lo, hi, stubs):
+    """Is there a jamb mark on this wall's line, inside the gap lo..hi?
+
+    A jamb is a short stub lying in the wall's own band. It is what the drafter
+    draws where a wall meets an opening, so finding one is the drawing saying
+    the wall continues past here rather than ending.
+    """
+    half = box["thickness"] / 2.0 + 1.0
+    for coord, a, b in stubs:
+        if abs(coord - box["centre"]) > half:
+            continue
+        if b - a > MAX_JAMB_IN:
+            continue
+        if a >= lo - GAP_TOUCH_IN and b <= hi + GAP_TOUCH_IN:
+            return True
+    return False
 
 
 def crossings(boxes_in):
@@ -445,7 +508,7 @@ def trace(horizontal_segments, vertical_segments, tol_in=0.5):
     if not found:
         return {"thicknesses": [], "boxes": [], "segments": [],
                 "faces": (h, v), "pairs": (pairs_h, pairs_v)}
-    built = combine(select(pairs_h, found, True) + select(pairs_v, found, False))
+    built = combine(select(pairs_h, found, True), h)         + combine(select(pairs_v, found, False), v)
     return {
         "thicknesses": found,
         "boxes": built,

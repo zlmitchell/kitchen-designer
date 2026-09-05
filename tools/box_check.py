@@ -57,12 +57,16 @@ def render(pdf, page_no, clip_box, scale, out, dpi=150):
 
     for box in traced["boxes"]:
         half = box["thickness"] / 2.0
+        # The box's FULL extent, overshoot included. Drawing the un-extended
+        # run instead made every corner look like it failed to close, when the
+        # boxes were overlapping by a wall thickness all along -- the overlap
+        # simply was not being drawn.
         if box["horizontal"]:
-            rect = pymupdf.Rect(px(box["drawn_lo"]), py(box["centre"] - half),
-                                px(box["drawn_hi"]), py(box["centre"] + half))
+            rect = pymupdf.Rect(px(box["lo"]), py(box["centre"] - half),
+                                px(box["hi"]), py(box["centre"] + half))
         else:
-            rect = pymupdf.Rect(px(box["centre"] - half), py(box["drawn_lo"]),
-                                px(box["centre"] + half), py(box["drawn_hi"]))
+            rect = pymupdf.Rect(px(box["centre"] - half), py(box["lo"]),
+                                px(box["centre"] + half), py(box["hi"]))
         canvas.draw_rect(rect, color=(1, 0, 0), fill=(1, 0, 0),
                          fill_opacity=0.35, width=0.8)
 

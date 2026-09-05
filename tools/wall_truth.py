@@ -65,6 +65,8 @@ PLACE_TOL_IN = 3.0
 # An opening narrower than a cupboard door is a break in the linework.
 MIN_OPENING_IN = 12.0
 MAX_OPENING_IN = 96.0
+# A face run this short is a jamb mark, not a stretch of wall face.
+MAX_JAMB_IN = 14.0
 
 
 def drawn(traced):
@@ -77,27 +79,30 @@ def drawn(traced):
     centreline, which is the same thing the drawing shows: the wall's faces
     stop at one jamb and start again at the other.
     """
-    lines = {}
-    for box in traced["boxes"]:
-        key = (box["horizontal"], round(box["centre"] / PLACE_TOL_IN))
-        entry = lines.setdefault(key, {
-            "horizontal": box["horizontal"],
-            "centre": box["centre"],
-            "thickness": box["thickness"],
-            "pieces": [],
-        })
-        entry["thickness"] = max(entry["thickness"], box["thickness"])
-        entry["pieces"].append((box["drawn_lo"], box["drawn_hi"]))
-
     out = []
-    for entry in lines.values():
-        solid = walls._cover([(0, lo, hi) for lo, hi in entry["pieces"]])
+    for box in traced["boxes"]:
+        runs = traced["faces"][0 if box["horizontal"] else 1]
+        # ONLY the lines this box was built from. A tolerance band around the
+        # centreline also catches the window frame, which covers exactly the
+        # openings -- so reading the band back fills every gap and the windows
+        # disappear, which is what kept this returning two openings instead of
+        # thirteen.
+        wanted = {round(c, 3) for pair in box.get("faces", [(box["near"], box["far"])])
+                  for c in pair}
+        inside = [(lo, hi) for coord, lo, hi in runs
+                  if round(coord, 3) in wanted
+                  and hi > box["drawn_lo"] and lo < box["drawn_hi"]]
+        if not inside:
+            continue
+        clipped = [(max(lo, box["drawn_lo"]), min(hi, box["drawn_hi"]))
+                   for lo, hi in inside]
+        solid = walls._cover([(0, lo, hi) for lo, hi in clipped if hi > lo])
         gaps = [(a[1], b[0]) for a, b in zip(solid, solid[1:])
                 if MIN_OPENING_IN <= b[0] - a[1] <= MAX_OPENING_IN]
         out.append({
-            "horizontal": entry["horizontal"],
-            "centre": round(entry["centre"], 2),
-            "thickness": round(entry["thickness"], 2),
+            "horizontal": box["horizontal"],
+            "centre": round(box["centre"], 2),
+            "thickness": round(box["thickness"], 2),
             "solid": [[round(lo, 2), round(hi, 2)] for lo, hi in solid],
             "openings": [[round(lo, 2), round(hi, 2)] for lo, hi in gaps],
         })
