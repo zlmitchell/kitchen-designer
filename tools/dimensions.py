@@ -89,6 +89,20 @@ VALUE = re.compile(r"""^\s*
     \s*$""", re.VERBOSE)
 
 
+def _overlaps(clip, rect):
+    """Do these rectangles share any ground?
+
+    Not Rect.intersects(): pymupdf calls a zero-AREA rectangle empty and
+    reports no intersection for it, and a path holding a single horizontal or
+    vertical line has exactly that -- zero height or zero width. So the test
+    silently threw away every axis-aligned line on the sheet. On the kitchen
+    plan it cut 10600 black-stroked paths down to 36, which is the wall layer
+    reduced to nothing while every hatched and filled thing survived intact.
+    """
+    return (rect.x1 >= clip.x0 and rect.x0 <= clip.x1
+            and rect.y1 >= clip.y0 and rect.y0 <= clip.y1)
+
+
 def parse_value(text):
     """A dimension string in real inches, or None if it is not one."""
     cleaned = " ".join(text.translate(_QUOTES).split())
@@ -110,7 +124,7 @@ def short_segments(page, clip):
     """Every drawn segment small enough to be a terminator."""
     out = []
     for path in page.get_drawings():
-        if not clip.intersects(path["rect"]):
+        if not _overlaps(clip, path["rect"]):
             continue
         for item in path["items"]:
             if item[0] != "l":
