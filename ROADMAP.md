@@ -180,6 +180,20 @@ What it turned out to need, beyond the obvious:
   configured default, so every pony wall would have been textured for a wall
   twice its height.
 
+**A post is an item, not a very short wall.** `README.md` reasoned that
+architect3d has no column primitive but a wall is 10cm thick by default, so 4in
+of one is a 4x4 and needs no model and no new concept. The first half is true;
+the second is not, and it fails destructively. Two floors get in the way:
+`snapTolerance` quantises grid snapping to 25cm, so the shortest wall you can
+drag or type is 9.84in — which is where "the smallest was 10 inches" comes from —
+and `cornerTolerance` is a hardcoded 20cm, so two corners closer than that
+**fuse**. Measured: asked for 8in a wall survives; asked for 6in its ends merge
+and the wall ceases to exist, with no error. An exported design carried a 0.56cm
+wall, the remnant. So `generated:post` — any size, cannot collapse, and not part
+of the wall loops rooms are found from. It does not follow a wall when the wall
+moves, which for a post capping a pony wall is usually right and is the honest
+trade.
+
 Still open: the top of a half wall is drawn (commit `01f5fa9` gave every wall a
 top) but in the wall's own colour. A counter-height rail wants a cap in a counter
 material, which is a Phase 2 material question rather than a geometry one. And

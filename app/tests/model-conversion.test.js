@@ -414,7 +414,12 @@ function expandRuns(runs)
 
 describe('the merge pipeline rewrite', () =>
 {
-	const models = CATALOG.items.map((item) => item.model).filter((model, i, all) => all.indexOf(model) === i);
+	// File-backed entries only. A generated item has no file to have been read by
+	// r98 and no merge to be compared against - it is built from a spec at
+	// runtime, so there is nothing here for it to be frozen against.
+	const models = CATALOG.items
+		.filter((item) => item.format !== 'generated')
+		.map((item) => item.model).filter((model, i, all) => all.indexOf(model) === i);
 
 	it('covers every distinct model in the catalog', () =>
 	{

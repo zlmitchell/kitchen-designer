@@ -1234,6 +1234,21 @@
 			"model": "models/gltf/washerDryerStacked.glb",
 			"type": 1,
 			"format": "gltf"
+		},
+		{
+			"name": "Post",
+			"image": "models/thumbnails_new/nopreview.png",
+			"model": "generated:post",
+			"type": 1,
+			"format": "generated",
+			"spec": {
+				"kind": "post",
+				"width": 10.16,
+				"depth": 10.16,
+				"height": 106.68,
+				"profile": "square",
+				"trim": "none"
+			}
 		}
 	]
 }

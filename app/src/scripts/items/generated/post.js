@@ -1,0 +1,166 @@
+// @ts-check
+import {BoxGeometry, CylinderGeometry, Group, Mesh} from 'three';
+import {mergeMeshes} from '../../core/geometry_merge.js';
+import {materialsForSlots} from '../../core/materials.js';
+
+/**
+ * A post: the thing at the open end of a pony wall.
+ *
+ * ## Why this is not a short wall
+ *
+ * Because a short wall cannot be short enough, and fails at it silently.
+ *
+ * `README.md` reasoned that architect3d has no column primitive but a wall is
+ * 10cm thick by default, so 4in of one is a 4x4 and needs no model and no new
+ * concept. The first half is true and the second is not. Two floors get in the
+ * way, and the inner one destroys data:
+ *
+ *   - grid snapping quantises to `snapTolerance`, 25cm by default - so the
+ *     shortest wall you can drag or type is 9.84in, which is where "the smallest
+ *     was 10 inches" comes from;
+ *   - `cornerTolerance` is a hardcoded 20cm, and two corners closer than that
+ *     FUSE. Measured: asked for 8in a wall survives, asked for 6in its two ends
+ *     merge and the wall ceases to exist. No error, no warning. A design
+ *     exported after trying it carried a 0.56cm wall - the remnant.
+ *
+ * So a 4x4 was unreachable, and asking for one deleted the wall.
+ *
+ * A post is also not a wall in the ways that matter to the rest of the model.
+ * Rooms are found by walking closed loops of walls, so a column standing in open
+ * floor is a wall run that goes nowhere and has to be argued out again -
+ * `extract.py:600 drop_islands` exists partly for that. And a post has no
+ * inside and outside, no items in it, and no need of two half edges.
+ *
+ * ## What it is instead
+ *
+ * A `FloorItem` built from a spec, which is the machinery phase 0 put in.
+ * Nothing here touches corners, so any size works and nothing can collapse.
+ *
+ * The trade, stated plainly: a post does not follow a wall when the wall is
+ * dragged. It is furniture, and it stays where it was put. For a post that caps
+ * a pony wall that is usually right - the wall is not moving - but it is a real
+ * difference from the wall-as-post trick and it is why this is worth writing
+ * down rather than assuming.
+ */
+
+/** What the parts are made of unless the spec says otherwise. */
+const SLOTS = {
+	post: 'paint-white',
+	trim: 'paint-white',
+};
+
+const DEFAULTS = {
+	/** 4in nominal - actually a 3.5in finished 4x4, but a post cap is usually
+	 *  wrapped, so the nominal number is the one somebody types. */
+	width: 10.16,
+	depth: 10.16,
+	/** 42in, which is the pony wall this most often stands at the end of. */
+	height: 106.68,
+	profile: 'square',
+	trim: 'none',
+	/** How far a base or cap band stands proud of the shaft. */
+	trimProud: 1.6,
+	/** How tall those bands are. */
+	trimHeight: 8.9,
+};
+
+/**
+ * @typedef {Object} PostSpec
+ * @property {number} [width] Across, in cm. The diameter when round.
+ * @property {number} [depth] The other way. Ignored when round.
+ * @property {number} [height]
+ * @property {('square'|'round')} [profile]
+ * @property {('none'|'base'|'both')} [trim] A band at the foot, or at both ends.
+ * @property {Object} [material] `post` and `trim` slots.
+ */
+
+/** A box or a cylinder of the given footprint, centred at `y`. */
+function shaft(mat, profile, width, depth, height, y)
+{
+	var geometry = (profile === 'round')
+		// 24 sides: a 4in post is small on screen and this is already more than
+		// the silhouette needs. Cylinders are the one place a generated part is
+		// not boxes, and the only reason is that a round post read as an octagon
+		// at 8.
+		? new CylinderGeometry(width / 2, width / 2, height, 24)
+		: new BoxGeometry(width, height, depth);
+	var mesh = new Mesh(geometry, mat);
+	mesh.position.set(0, y, 0);
+	return mesh;
+}
+
+/**
+ * What a panel may ask about a post.
+ *
+ * `depth` is hidden for a round post rather than ignored quietly, which is what
+ * the schema's `when` is for - a field that does nothing is worse than a field
+ * that is not there.
+ */
+export const POST_SCHEMA = {
+	label: 'Post',
+	fields: [
+		{key: 'profile', label: 'Profile', type: 'choice', options: [
+			{value: 'square', label: 'Square'},
+			{value: 'round', label: 'Round'},
+		]},
+		{key: 'width', label: 'Width', type: 'length', min: 2, max: 60, step: 0.5},
+		{key: 'depth', label: 'Depth', type: 'length', min: 2, max: 60, step: 0.5,
+			when: {profile: 'square'}},
+		{key: 'height', label: 'Height', type: 'length', min: 20, max: 400, step: 1},
+		{key: 'trim', label: 'Trim', type: 'choice', options: [
+			{value: 'none', label: 'Plain'},
+			{value: 'base', label: 'Base'},
+			{value: 'both', label: 'Base + cap'},
+		]},
+		{key: 'material.post', label: 'Post', type: 'material'},
+		{key: 'material.trim', label: 'Trim', type: 'material', when: {trim: 'base'}},
+	],
+};
+
+/**
+ * Build a post.
+ *
+ * Centred on the origin in all three axes, like every generated part: `Item`'s
+ * constructor recentres geometry on its bounding box, so building centred makes
+ * that a no-op. `FloorItem` then sets `position.y = halfSize.y`, which stands the
+ * base on the floor.
+ *
+ * Everything is in the item's own geometry rather than in children - a post has
+ * no moving parts and nothing that should escape its bounds, which is the exact
+ * opposite of a door and worth noticing. `parts` is empty on purpose.
+ *
+ * @param {PostSpec} spec
+ * @returns {{geometry: import('three').BufferGeometry, materials: Array, parts: Array}}
+ */
+export function buildPost(spec)
+{
+	var s = Object.assign({}, DEFAULTS, spec || {});
+	var mats = materialsForSlots(s.material, SLOTS);
+	var width = Math.max(0.5, s.width);
+	var depth = (s.profile === 'round') ? width : Math.max(0.5, s.depth);
+	var height = Math.max(1, s.height);
+
+	var group = new Group();
+	var half = height / 2;
+
+	var hasBase = s.trim === 'base' || s.trim === 'both';
+	var hasCap = s.trim === 'both';
+	// The shaft runs the full height either way. A band is added around it rather
+	// than the shaft being shortened to make room: a post with its trim removed
+	// should be the same post, not a shorter one.
+	group.add(shaft(mats.post, s.profile, width, depth, height, 0));
+
+	if (hasBase)
+	{
+		group.add(shaft(mats.trim, s.profile, width + 2 * s.trimProud, depth + 2 * s.trimProud,
+			s.trimHeight, -half + s.trimHeight / 2));
+	}
+	if (hasCap)
+	{
+		group.add(shaft(mats.trim, s.profile, width + 2 * s.trimProud, depth + 2 * s.trimProud,
+			s.trimHeight, half - s.trimHeight / 2));
+	}
+
+	var merged = mergeMeshes(group);
+	return {geometry: merged.geometry, materials: merged.materials, parts: []};
+}

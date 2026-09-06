@@ -38,6 +38,7 @@ import {installCanvas2D} from './helpers/dom.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CATALOG = JSON.parse(readFileSync(join(ROOT, 'src/catalog/catalog.json'), 'utf8'));
+import {GENERATED_BUILDERS} from '../src/scripts/items/generated/index.js';
 
 let canvasStub;
 
@@ -61,8 +62,9 @@ describe('the unified catalog', () =>
 	it('replaces both hand-maintained lists', () =>
 	{
 		// 27 legacy entries + 142 glTF entries, less the one that pointed at a
-		// cabinet.json that has never existed in this repository.
-		expect(CATALOG.items.length).toBe(168);
+		// cabinet.json that has never existed in this repository. Plus the
+		// generated Post, which names a builder rather than a file - see below.
+		expect(CATALOG.items.length).toBe(169);
 	});
 
 	it('has dropped the entry whose model file was never in the repository', () =>
@@ -70,18 +72,47 @@ describe('the unified catalog', () =>
 		expect(CATALOG.items.some((item) => item.model.endsWith('cabinet.json'))).toBe(false);
 	});
 
-	it('is entirely glTF - nothing points at the retired JSON format', () =>
+	it('nothing points at the retired JSON format', () =>
 	{
-		const legacy = CATALOG.items.filter((item) => item.format !== 'gltf' || item.model.endsWith('.js'));
+		// This asked that every entry be glTF, which was the S3 exit gate: the
+		// legacy three.js JSON format is gone and nothing may name it. That
+		// guarantee is unchanged and is what is checked here.
+		//
+		// What has changed is that "not legacy" no longer means "a glTF file". A
+		// generated entry names a BUILDER - `generated:post` - and ships in the
+		// code rather than as an asset, so it has no file to be in a format. The
+		// test was reading the absence of the old format off the presence of one
+		// particular new one, and those came apart the moment a second kind of
+		// item existed.
+		const legacy = CATALOG.items.filter((item) => item.model.endsWith('.js')
+			|| (item.format !== 'gltf' && item.format !== 'generated'));
 		expect(legacy).toEqual([]);
 	});
 
 	it('ships every model and thumbnail it lists', () =>
 	{
+		// A generated entry names a builder, not a file, so it has nothing to ship
+		// and nothing to be missing. Its thumbnail is still a real image and is
+		// still checked - the drawer draws one for it like anything else.
 		const missing = CATALOG.items
-			.flatMap((item) => [item.model, item.image])
+			.flatMap((item) => (item.format === 'generated' ? [item.image] : [item.model, item.image]))
 			.filter((path) => !existsSync(join(ROOT, 'public', path)));
 		expect(missing).toEqual([]);
+	});
+
+	it('backs every generated entry with a registered builder', () =>
+	{
+		// The equivalent guarantee for the other kind: a file entry must ship its
+		// file, and a generated entry must ship its builder. Without this a typo in
+		// `generated:pots` would be a catalog row that fails only when clicked.
+		const generated = CATALOG.items.filter((item) => item.format === 'generated');
+		expect(generated.length).toBeGreaterThan(0);
+		for (const item of generated)
+		{
+			expect(item.model.startsWith('generated:'), `${item.name} names a builder`).toBe(true);
+			expect(GENERATED_BUILDERS[item.model.slice('generated:'.length)],
+				`${item.name} has a builder`).toBeTypeOf('function');
+		}
 	});
 
 	it('only uses item types the factory can build', () =>
@@ -302,7 +333,7 @@ describe('a model no loader can open', () =>
 		// The S3 exit-gate guarantee, restated against the new counter: every
 		// catalog entry declares a format the build can actually load.
 		const formats = new Set(CATALOG.items.map((item) => item.format));
-		expect([...formats].sort()).toEqual(['gltf']);
+		expect([...formats].sort()).toEqual(['generated', 'gltf']);
 		expect(Scene.unloadableItemCount).toBe(0);
 	});
 });

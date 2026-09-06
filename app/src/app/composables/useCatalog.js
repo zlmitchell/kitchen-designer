@@ -100,6 +100,16 @@ export function useCatalog(store, placementContext)
 			format: entry.format,
 		};
 
+		// A generated entry carries the spec it should be built from. Copied, not
+		// shared: the catalog is a module singleton, so handing the same object to
+		// two placed items would make editing one edit the other - and the second
+		// would only notice on its next rebuild, which is the kind of bug that
+		// reads as random.
+		if (entry.spec)
+		{
+			metadata.spec = JSON.parse(JSON.stringify(entry.spec));
+		}
+
 		if (WALL_BOUND_TYPES.indexOf(entry.type) !== -1 && context.wall)
 		{
 			scene.addItem(entry.type, entry.model, metadata, null, null, null, false,

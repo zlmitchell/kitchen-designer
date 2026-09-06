@@ -345,8 +345,9 @@ describe('the catalog drawer', () =>
 		const panel = drawer();
 		expect(panel).not.toBeNull();
 
-		// One flat list rather than eight accordions, so the count is the catalog.
-		expect(panel.querySelectorAll('li').length).toBe(168);
+		// One flat list rather than eight accordions, so the count is the catalog -
+		// generated entries included, since the drawer places those the same way.
+		expect(panel.querySelectorAll('li').length).toBe(169);
 
 		const chips = [...panel.querySelectorAll('button')]
 			.map((button) => button.textContent.trim());
