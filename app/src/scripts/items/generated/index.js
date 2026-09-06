@@ -1,5 +1,5 @@
 // @ts-check
-import {buildDoor} from './door.js';
+import {buildDoor, DOOR_SCHEMA} from './door.js';
 
 /**
  * Items whose geometry is generated from a spec instead of fetched.
@@ -37,6 +37,34 @@ import {buildDoor} from './door.js';
 export const GENERATED_BUILDERS = {
 	door: buildDoor,
 };
+
+/**
+ * What a panel may ask about each kind, keyed the same way.
+ *
+ * Separate from the builders because they are consumed by different layers - the
+ * model layer builds, the app layer asks - and a builder must stay importable
+ * without dragging a UI contract along with it.
+ *
+ * @type {Record<string, {label: string, fields: Array<Object>}>}
+ */
+export const GENERATED_SCHEMAS = {
+	door: DOOR_SCHEMA,
+};
+
+/**
+ * The schema for whatever a spec is, or null.
+ *
+ * @param {?Object} spec
+ * @returns {?{label: string, fields: Array<Object>}}
+ */
+export function schemaForSpec(spec)
+{
+	if (!spec || !spec.kind)
+	{
+		return null;
+	}
+	return GENERATED_SCHEMAS[spec.kind] || null;
+}
 
 const PREFIX = 'generated:';
 

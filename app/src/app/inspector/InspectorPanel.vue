@@ -6,6 +6,7 @@ import CornerInspector from './CornerInspector.vue';
 import RoomInspector from './RoomInspector.vue';
 import Wall2DInspector from './Wall2DInspector.vue';
 import ItemInspector from './ItemInspector.vue';
+import SpecInspector from './SpecInspector.vue';
 import SurfaceInspector from './SurfaceInspector.vue';
 import SettingsPanel from './SettingsPanel.vue';
 import {MousePointerClick, SlidersHorizontal} from '@lucide/vue';
@@ -89,6 +90,25 @@ const component = computed(() =>
 	(props.selection ? INSPECTORS[props.selection.type] || null : null));
 
 /**
+ * A generated item gets a second panel above the stock one.
+ *
+ * Above, and not instead of, because the two answer different questions and both
+ * are worth having. `SpecInspector` changes what the item IS - ask a door for a
+ * wider opening and the builder makes one, with the same jambs. `ItemInspector`
+ * still offers position, lock, duplicate and delete, and its width/height/depth
+ * fields still scale the mesh. For a generated item those stay at 1 and the spec
+ * is what you edit; leaving them on screen is honest about the fact that the old
+ * behaviour is still there and still does what it always did.
+ */
+const specItem = computed(() =>
+{
+	const selection = props.selection;
+	if (!selection || selection.type !== SELECTION_ITEM) {return null;}
+	const item = selection.object;
+	return (item && item.metadata && item.metadata.spec) ? item : null;
+});
+
+/**
  * Each inspector takes the model object under the name it uses, so its own
  * props stay readable; the surface inspector is the exception because it needs
  * to know whether it was a wall or a floor that was clicked.
@@ -146,6 +166,11 @@ watch(() => props.selection, (selection) =>
 
 		<div class="inspector-body">
 			<template v-if="tab === 'selection'">
+				<SpecInspector
+					v-if="specItem"
+					:key="`spec-${specItem.designId}`"
+					:item="specItem"
+					@changed="emit('changed')" />
 				<component
 					:is="component" v-if="component && props.selection"
 					:key="props.selection.object.id || props.selection.object"

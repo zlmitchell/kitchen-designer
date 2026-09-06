@@ -21,6 +21,7 @@ import {Floorplan3D} from './floorPlan.js';
 import {Lights} from './lights.js';
 import {Skybox} from './skybox.js';
 import {isStudio, setRenderProfile} from '../core/render_profile.js';
+import {FrameClock} from './frame_clock.js';
 import {runtimeOf} from '../core/design_runtime.js';
 
 
@@ -156,6 +157,16 @@ export class Main extends EventDispatcher
 
 		/** @type {?WebGLRenderer} */
 		this.renderer = null;
+		/**
+		 * Elapsed time for anything that moves (ROADMAP.md 0d).
+		 *
+		 * Per viewer, not module-level: two viewers on a page are two documents and
+		 * must not share a clock - the same reasoning that made lights, profiles
+		 * and the load session per-instance.
+		 *
+		 * @type {FrameClock}
+		 */
+		this.frameClock = new FrameClock();
 		// Annotated because init() assigns it through a `scope` alias rather than
 		// through `this`, so inference sees only this line and concludes the
 		// property is permanently null - which made getController() useless to
@@ -505,6 +516,7 @@ export class Main extends EventDispatcher
 		scope.model.floorplan.addEventListener(EVENT_CHANGESET, this.updatedevent);
 		scope.model.addEventListener(EVENT_GLTF_READY, this.gltfreadyevent);
 
+		scope.frameClock.reset();
 		scope.lights = new Lights(scope.scene, scope.model.floorplan, scope.renderProfile);
 		scope.floorplan = new Floorplan3D(scope.scene, scope.model.floorplan, scope.controls, scope.renderProfile);
 
@@ -513,6 +525,18 @@ export class Main extends EventDispatcher
 			renderer.setAnimationLoop(function()
 			{
 				scope.applyPendingResize();
+				// Before the draw, so anything that moves this frame is drawn where
+				// it moved to rather than one frame behind. Skipped while paused, so
+				// a hidden viewer does not bank up time and hand the first frame
+				// after a resume a delta of however long it was away.
+				if (!scope.pauseRender)
+				{
+					scope.frameClock.tick();
+				}
+				else
+				{
+					scope.frameClock.reset();
+				}
 				scope.render();
 			});
 			scope.render();
@@ -549,6 +573,14 @@ export class Main extends EventDispatcher
 		if (this.renderer)
 		{
 			this.renderer.setAnimationLoop(null);
+		}
+
+		// Updaters hold closures over scene objects, so a spent viewer that kept
+		// them would keep the scene alive too - the same shape of leak `Lights`
+		// had with its floorplan listener.
+		if (this.frameClock)
+		{
+			this.frameClock.dispose();
 		}
 
 		if (this._resizeObserver)

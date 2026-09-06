@@ -1,7 +1,8 @@
 // @ts-check
-import {BoxGeometry, Group, Mesh, MeshStandardMaterial, Object3D} from 'three';
+import {BoxGeometry, Group, Mesh, Object3D} from 'three';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {disposeObject} from '../../core/resource_registry.js';
+import {materialsForSlots} from '../../core/materials.js';
 
 /**
  * A door, generated from a spec rather than loaded from a file.
@@ -125,13 +126,20 @@ const DEFAULTS = {
  * @property {boolean} [knob]
  */
 
-/** A named material, so `mergeMeshes` pools by name and the panel can label it. */
-function material(name, color, roughness)
-{
-	var m = new MeshStandardMaterial({color: color, roughness: roughness, metalness: 0});
-	m.name = name;
-	return m;
-}
+/**
+ * What each slot is made of unless the spec says otherwise.
+ *
+ * Four slots, because a door is four things: the lining, the leaf that swings in
+ * it, the trim that covers the joint, and the ironmongery. They are routinely
+ * different materials - a walnut leaf in a painted frame is a normal thing to
+ * want - and were three hardcoded hex values before the library existed.
+ */
+const SLOTS = {
+	frame: 'paint-white',
+	leaf: 'paint-white',
+	casing: 'paint-white',
+	hardware: 'metal-brushed-nickel',
+};
 
 /**
  * A box spanning `[x0,x1] x [y0,y1] x [z0,z1]`.
@@ -202,7 +210,7 @@ export function resolveHanding(spec, rotationY)
  *
  * @returns {Array<Object3D>}
  */
-function buildSwingParts(s, hingeSign, dirSign)
+function buildSwingParts(s, hingeSign, dirSign, mats)
 {
 	if (s.operation === 'cased')
 	{
@@ -214,8 +222,8 @@ function buildSwingParts(s, hingeSign, dirSign)
 	}
 
 	var f = frameOf(s);
-	var metalMat = material('Door hardware', 0xb9bcc0, 0.35);
-	var leafMat = material('Door leaf', 0xe8e6e1, 0.5);
+	var metalMat = mats.hardware;
+	var leafMat = mats.leaf;
 	var parts = [];
 
 	// Hinges: three leaves on the hinge jamb, at the heights a carpenter puts
@@ -275,10 +283,10 @@ function buildSwingParts(s, hingeSign, dirSign)
 }
 
 /** The casing: a picture frame lapping the wall on each face. */
-function buildCasing(s)
+function buildCasing(s, mats)
 {
 	var f = frameOf(s);
-	var casingMat = material('Door casing', 0xf2f0ec, 0.55);
+	var casingMat = mats.casing;
 	return [-1, 1].map(function (side)
 	{
 		var casing = new Group();
@@ -312,6 +320,7 @@ export function applyHanding(item)
 		return;
 	}
 	var s = Object.assign({}, DEFAULTS, spec);
+	var mats = materialsForSlots(s.material, SLOTS);
 	var handing = resolveHanding(s, item.rotation.y);
 
 	// Drop the old handing-dependent children. The casing is not among them - it
@@ -326,12 +335,54 @@ export function applyHanding(item)
 		disposeObject(part);
 	});
 
-	var fresh = buildSwingParts(s, handing.hingeSign, handing.dirSign);
+	var fresh = buildSwingParts(s, handing.hingeSign, handing.dirSign, mats);
 	fresh.forEach(function (part) {item.add(part);});
 	item.generatedParts = item.generatedParts
 		.filter(function (part) {return stale.indexOf(part) === -1;})
 		.concat(fresh);
 }
+
+/**
+ * What a panel may ask about a door, and how to ask it.
+ *
+ * Data rather than a Vue component, for the same reason `useCatalog` reads
+ * `catalog.json`: adding an option to a door should be a change here and nowhere
+ * else. `SpecInspector.vue` renders whatever this describes, so a new builder
+ * gets a working inspector by exporting one of these and no UI work at all.
+ *
+ * `unit: 'length'` means the value is centimetres in the spec and is shown in
+ * whatever the user picked - the panel converts, because `Dimensioning` is the
+ * one place that knows how.
+ */
+export const DOOR_SCHEMA = {
+	label: 'Door',
+	fields: [
+		{key: 'operation', label: 'Operation', type: 'choice', options: [
+			{value: 'swing', label: 'Swinging'},
+			{value: 'cased', label: 'Cased opening'},
+		]},
+		{key: 'width', label: 'Opening width', type: 'length', min: 40, max: 250, step: 1},
+		{key: 'height', label: 'Opening height', type: 'length', min: 150, max: 300, step: 1},
+		// Not editable: it is the wall's, and a door that disagrees with its wall
+		// is a bug rather than a choice. Shown so the number is visible.
+		{key: 'wallThickness', label: 'Wall thickness', type: 'length', readOnly: true},
+		{key: 'hand', label: 'Hinged at', type: 'choice', when: {operation: 'swing'}, options: [
+			{value: 'lo', label: 'Start of wall'},
+			{value: 'hi', label: 'End of wall'},
+		]},
+		{key: 'swing', label: 'Opens toward', type: 'choice', when: {operation: 'swing'}, options: [
+			{value: 'negative', label: 'One side'},
+			{value: 'positive', label: 'The other'},
+		]},
+		{key: 'openFraction', label: 'How far open', type: 'fraction', when: {operation: 'swing'},
+			min: 0, max: 1, step: 0.05},
+		{key: 'material.leaf', label: 'Leaf', type: 'material', when: {operation: 'swing'}},
+		{key: 'material.frame', label: 'Frame', type: 'material'},
+		{key: 'material.casing', label: 'Casing', type: 'material'},
+		{key: 'material.hardware', label: 'Hardware', type: 'material', when: {operation: 'swing'},
+			group: 'metal'},
+	],
+};
 
 /**
  * Build a door.
@@ -350,7 +401,8 @@ export function buildDoor(spec)
 {
 	var s = Object.assign({}, DEFAULTS, spec || {});
 	var f = frameOf(s);
-	var frameMat = material('Door frame', 0xf2f0ec, 0.55);
+	var mats = materialsForSlots(s.material, SLOTS);
+	var frameMat = mats.frame;
 
 	// The item's own geometry: jambs and head, filling the wall. Symmetric, and
 	// deliberately free of anything the handing decides.
@@ -365,8 +417,8 @@ export function buildDoor(spec)
 	// to Group[], and the swing parts include a bare Object3D pivot.
 	/** @type {Array<Object3D>} */
 	var parts = [];
-	buildCasing(s).forEach(function (part) {parts.push(part);});
-	buildSwingParts(s, handing.hingeSign, handing.dirSign).forEach(function (part) {parts.push(part);});
+	buildCasing(s, mats).forEach(function (part) {parts.push(part);});
+	buildSwingParts(s, handing.hingeSign, handing.dirSign, mats).forEach(function (part) {parts.push(part);});
 
 	return {
 		geometry: merged.geometry,

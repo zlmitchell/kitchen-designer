@@ -1,0 +1,167 @@
+{
+	"version": 1,
+	"_comment": "PBR surfaces for generated items, shaped like textures.json but describing a MATERIAL rather than a picture. textures.json answers 'what image goes on this wall'; this answers 'what is this thing made of', which is a different question with different fields - roughness and metalness rather than stretch and scale. Split by `group` so a panel can offer only the surfaces that make sense for a slot: you paint a cabinet door, you do not paint a hinge. Colours are sRGB hex, exactly as authored; roughness and metalness are linear 0..1 and are the two knobs that decide whether something reads as paint, as stone or as steel. Every id here is stable and is what a saved spec stores, so renaming one is a save-format change and adding one is not.",
+	"groups": {
+		"paint": "Painted and lacquered",
+		"wood": "Wood and stained",
+		"stone": "Stone and solid surface",
+		"metal": "Metal",
+		"glass": "Glass"
+	},
+	"materials": {
+		"paint-white": {
+			"label": "White",
+			"group": "paint",
+			"color": "#f2f0ec",
+			"roughness": 0.55,
+			"metalness": 0
+		},
+		"paint-alabaster": {
+			"label": "Alabaster",
+			"group": "paint",
+			"color": "#ece7dc",
+			"roughness": 0.5,
+			"metalness": 0
+		},
+		"paint-greige": {
+			"label": "Greige",
+			"group": "paint",
+			"color": "#c9c2b6",
+			"roughness": 0.5,
+			"metalness": 0
+		},
+		"paint-sage": {
+			"label": "Sage",
+			"group": "paint",
+			"color": "#9aa793",
+			"roughness": 0.5,
+			"metalness": 0
+		},
+		"paint-navy": {
+			"label": "Navy",
+			"group": "paint",
+			"color": "#2f3d50",
+			"roughness": 0.45,
+			"metalness": 0
+		},
+		"paint-charcoal": {
+			"label": "Charcoal",
+			"group": "paint",
+			"color": "#3a3c3d",
+			"roughness": 0.5,
+			"metalness": 0
+		},
+		"lacquer-white": {
+			"label": "White lacquer",
+			"group": "paint",
+			"_comment": "A sprayed finish is the same colour as the paint above and half the roughness. That difference is the whole reason a gloss door looks like a gloss door, and it is one number.",
+			"color": "#f4f3f1",
+			"roughness": 0.22,
+			"metalness": 0
+		},
+		"wood-white-oak": {
+			"label": "White oak",
+			"group": "wood",
+			"color": "#cbb08a",
+			"roughness": 0.6,
+			"metalness": 0
+		},
+		"wood-walnut": {
+			"label": "Walnut",
+			"group": "wood",
+			"color": "#6b4c35",
+			"roughness": 0.55,
+			"metalness": 0
+		},
+		"wood-maple": {
+			"label": "Maple",
+			"group": "wood",
+			"color": "#d8c3a0",
+			"roughness": 0.6,
+			"metalness": 0
+		},
+		"wood-birch-ply": {
+			"label": "Birch ply",
+			"group": "wood",
+			"_comment": "Carcass stock. Nobody looks at it, and it should not read as a finished surface.",
+			"color": "#d9c9ad",
+			"roughness": 0.75,
+			"metalness": 0
+		},
+		"stone-quartz-white": {
+			"label": "White quartz",
+			"group": "stone",
+			"color": "#eeece7",
+			"roughness": 0.15,
+			"metalness": 0
+		},
+		"stone-marble-carrara": {
+			"label": "Carrara marble",
+			"group": "stone",
+			"color": "#e4e5e3",
+			"roughness": 0.18,
+			"metalness": 0
+		},
+		"stone-soapstone": {
+			"label": "Soapstone",
+			"group": "stone",
+			"color": "#4a4e4d",
+			"roughness": 0.4,
+			"metalness": 0
+		},
+		"stone-butcher-block": {
+			"label": "Butcher block",
+			"group": "stone",
+			"color": "#b98f5d",
+			"roughness": 0.6,
+			"metalness": 0
+		},
+		"metal-brushed-nickel": {
+			"label": "Brushed nickel",
+			"group": "metal",
+			"color": "#b9bcc0",
+			"roughness": 0.35,
+			"metalness": 1
+		},
+		"metal-stainless": {
+			"label": "Stainless",
+			"group": "metal",
+			"color": "#c4c7ca",
+			"roughness": 0.3,
+			"metalness": 1
+		},
+		"metal-matte-black": {
+			"label": "Matte black",
+			"group": "metal",
+			"color": "#2b2b2d",
+			"roughness": 0.5,
+			"metalness": 1
+		},
+		"metal-brass": {
+			"label": "Unlacquered brass",
+			"group": "metal",
+			"color": "#b08d4f",
+			"roughness": 0.35,
+			"metalness": 1
+		},
+		"glass-clear": {
+			"label": "Clear glass",
+			"group": "glass",
+			"_comment": "Transparency by opacity rather than MeshPhysicalMaterial.transmission, which costs a render target. Settle this once: the sink bowls, the cabinet fronts and the window glazing all want the same answer, and it should be A/B'd against the parity grid before it changes.",
+			"color": "#dfe6e8",
+			"roughness": 0.05,
+			"metalness": 0,
+			"opacity": 0.18,
+			"transparent": true
+		},
+		"glass-frosted": {
+			"label": "Frosted glass",
+			"group": "glass",
+			"color": "#e6eaea",
+			"roughness": 0.55,
+			"metalness": 0,
+			"opacity": 0.45,
+			"transparent": true
+		}
+	}
+}

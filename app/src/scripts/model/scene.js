@@ -392,8 +392,10 @@ export class Scene extends EventDispatcher
 		 * @param {?function(Object): void} [onBound] Called when the item binds to
 		 *        a wall edge - the only moment its own axes are known. See
 		 *        `Item.onBound`.
+		 * @param {?function(Object): Object} [specBuilder] The builder that made
+		 *        this, so `Item.setSpec` can ask it again at a new size.
 		 */
-		var loaderCallback = function (geometry, materials, parts, onBound)
+		var loaderCallback = function (geometry, materials, parts, onBound, specBuilder)
 		{
 			if (!scope.loadSession.finished(generation))
 			{
@@ -426,6 +428,11 @@ export class Scene extends EventDispatcher
 			if (onBound)
 			{
 				item.onBound = onBound;
+			}
+			if (specBuilder)
+			{
+				// So `setSpec` can rebuild at a new size rather than scale this one.
+				item._specBuilder = specBuilder;
 			}
 			item.fixed = fixed || false;
 			scope.items.push(item);
@@ -532,7 +539,7 @@ export class Scene extends EventDispatcher
 			try
 			{
 				var built = builder(metadata.spec || {});
-				loaderCallback(built.geometry, built.materials, built.parts, built.onBound);
+				loaderCallback(built.geometry, built.materials, built.parts, built.onBound, builder);
 			}
 			catch (error)
 			{

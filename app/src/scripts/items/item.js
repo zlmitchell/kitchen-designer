@@ -218,6 +218,18 @@ export class Item extends Mesh
 		 */
 		this.onBound = null;
 
+		/**
+		 * The builder that made this item, if it was generated.
+		 *
+		 * Held so `setSpec` can ask for the object again at a new size instead of
+		 * scaling the one it has. Assigned by `Scene.addItem`, which is where the
+		 * registry lookup already happens - the item does not import the registry,
+		 * so the model layer keeps one direction of dependency.
+		 *
+		 * @type {?function(Object): {geometry: Object, materials: Array, parts: Array, onBound?: function}}
+		 */
+		this._specBuilder = null;
+
 		this.scene = this.model.scene;
 		this._freePosition = true;
 
@@ -640,6 +652,115 @@ export class Item extends Mesh
 	resized()
 	{
 
+	}
+
+	/**
+	 * Rebuild this item from a new spec.
+	 *
+	 * The counterpart of `resize()` for a generated item, and deliberately not
+	 * the same thing. `resize()` scales a mesh - ask a 24in cabinet for 36in and
+	 * its door panels, stiles and hardware all come out 1.5x wide, which is the
+	 * defect ROADMAP.md names as root cause A. This asks the builder for the
+	 * object at the new size instead, so a wider door has a wider opening and the
+	 * same 1.5in stiles.
+	 *
+	 * Position, rotation and scale are untouched: this changes what the item IS,
+	 * not where it is. Scale stays at 1 for a generated item and nothing here
+	 * changes that.
+	 *
+	 * @param {Object} spec The full replacement spec, not a patch. Callers hold a
+	 *        copy from `getSpec()` and hand back an edited one, so an interrupted
+	 *        edit cannot leave a half-applied spec on the item.
+	 * @returns {boolean} Whether a rebuild happened - false when this item is not
+	 *          generated, which is most of them.
+	 */
+	setSpec(spec)
+	{
+		var builder = this._specBuilder;
+		if (!builder || !spec)
+		{
+			return false;
+		}
+
+		var built = builder(spec);
+
+		// Old geometry and materials go back before the new ones land. Nothing
+		// else disposes them: this item is not being removed, so `removed()` will
+		// not run, and it is the only other place that frees them.
+		var previous = this.geometry;
+		var previousMaterial = this.originalmaterial;
+
+		this.generatedParts.forEach((part) =>
+		{
+			this.remove(part);
+			disposeObject(part);
+		});
+		this.generatedParts = [];
+
+		this.geometry = built.geometry;
+		this.material = built.materials;
+		this.originalmaterial = built.materials;
+		// Same recentring the constructor does, and for the same reason: children
+		// are positioned in a frame whose origin is the geometry's centre.
+		this.geometry.computeBoundingBox();
+		var box = this.bounds();
+		this.geometry.applyMatrix4(new Matrix4().makeTranslation(
+			-0.5 * (box.max.x + box.min.x), -0.5 * (box.max.y + box.min.y), -0.5 * (box.max.z + box.min.z)));
+		this.geometry.computeBoundingBox();
+		this.halfSize = this.objectHalfSize().multiply(this.scale);
+
+		(built.parts || []).forEach((part) => {this.add(part);});
+		this.generatedParts = built.parts || [];
+		this.metadata.spec = spec;
+		if (built.onBound)
+		{
+			this.onBound = /** @type {function(Item): void} */ (built.onBound);
+		}
+		// The item may already be on a wall, in which case its axes are known and
+		// the freshly built parts are still in the builder's plan-space guess.
+		// `currentWallEdge` belongs to WallItem, not to Item - a generated floor
+		// item has no wall to be re-handed against, and asking is how we tell.
+		var bound = /** @type {any} */ (this).currentWallEdge;
+		if (this.onBound && bound)
+		{
+			this.onBound(this);
+		}
+
+		if (previous && previous !== this.geometry)
+		{
+			previous.dispose();
+		}
+		if (previousMaterial && previousMaterial !== this.material)
+		{
+			disposeMaterial(previousMaterial);
+		}
+
+		// The wall's hole is cut from this item's bounds, so a resized opening
+		// leaves the old hole behind until the wall is told.
+		this.resized();
+		if (this.bhelper)
+		{
+			this.bhelper.update();
+		}
+		this.scene.needsUpdate = true;
+		return true;
+	}
+
+	/**
+	 * A copy of this item's spec, or null.
+	 *
+	 * A copy, because a panel edits what it is given and the item must not see a
+	 * half-edited spec - `setSpec` takes the finished one back.
+	 *
+	 * @returns {?Object}
+	 */
+	getSpec()
+	{
+		if (!this.metadata || !this.metadata.spec)
+		{
+			return null;
+		}
+		return JSON.parse(JSON.stringify(this.metadata.spec));
 	}
 
 	/** */

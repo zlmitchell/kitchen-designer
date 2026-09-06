@@ -155,8 +155,9 @@ describe('the generated door', () =>
 		// small child groups and never touches the geometry the wall's hole was
 		// cut from. Hinges belong to whichever jamb the handing picks, so they are
 		// children too.
-		const names = buildDoor(SPEC).materials.map((m) => m.name).sort();
-		expect(names).toEqual(['Door frame']);
+		const frameOnly = buildDoor(SPEC).materials;
+		expect(frameOnly).toHaveLength(1);
+		expect(frameOnly[0].userData.materialId).toBe('paint-white');
 
 		const lo = buildDoor(Object.assign({}, SPEC, {hand: 'lo'}));
 		const hi = buildDoor(Object.assign({}, SPEC, {hand: 'hi'}));
@@ -164,6 +165,42 @@ describe('the generated door', () =>
 		hi.geometry.computeBoundingBox();
 		expect(lo.geometry.boundingBox.min.x).toBeCloseTo(hi.geometry.boundingBox.min.x, 4);
 		expect(lo.geometry.attributes.position.count).toBe(hi.geometry.attributes.position.count);
+	});
+
+	it('finishes each slot from the material library', () =>
+	{
+		// A tint could not tell white paint from white lacquer from white quartz:
+		// same colour, three surfaces, and the difference is entirely roughness
+		// and metalness. So a spec names a library id per slot.
+		const built = buildDoor(Object.assign({}, SPEC, {
+			material: {frame: 'wood-walnut', hardware: 'metal-matte-black'},
+		}));
+		expect(built.materials[0].userData.materialId).toBe('wood-walnut');
+		expect(built.materials[0].roughness).toBeCloseTo(0.55, 3);
+
+		const hardware = [];
+		built.parts.forEach((part) => part.traverse((o) =>
+		{
+			if (o.isMesh && o.material.userData.materialId === 'metal-matte-black') {hardware.push(o);}
+		}));
+		expect(hardware.length).toBeGreaterThan(0);
+		expect(hardware[0].material.metalness).toBe(1);
+
+		// A slot the spec does not mention keeps the builder's own answer.
+		expect(built.parts.some((part) =>
+		{
+			let found = false;
+			part.traverse((o) => {if (o.isMesh && o.material.userData.materialId === 'paint-white') {found = true;}});
+			return found;
+		})).toBe(true);
+	});
+
+	it('falls back rather than throwing on a finish this build has retired', () =>
+	{
+		// A saved design outlives the library. Opening it should look wrong, not
+		// fail - the tolerance resolveModelUrl extends to a retired model.
+		const built = buildDoor(Object.assign({}, SPEC, {material: {frame: 'no-such-finish'}}));
+		expect(built.materials[0].userData.materialId).toBe('paint-white');
 	});
 
 	it('a cased opening has no leaf at all', () =>
