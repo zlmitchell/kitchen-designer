@@ -291,8 +291,11 @@ def main():
     parser.add_argument("--layer", default=None,
                         help='structure layer, e.g. "#000000,0.5"; default is '
                              'the best-ranked -- see tools/layer_check.py')
-    parser.add_argument("--open-doors", action="store_true",
-                        help="draw a door the plan shows swinging as open")
+    parser.add_argument("--closed-doors", action="store_true",
+                        help="draw every door shut. The default is open, "
+                             "because a shut door hides that the opening leads "
+                             "anywhere, and the plan drew the swing for a "
+                             "reason")
     parser.add_argument("--underlay", default="underlay.png")
     parser.add_argument("--url-prefix", default="plan/")
     args = parser.parse_args()
@@ -345,7 +348,7 @@ def main():
           o["centre"] if o["horizontal"] else (o["lo"] + o["hi"]) / 2.0,
           o["width_in"], o["horizontal"], o["thickness"],
           o.get("hinge"), o.get("swing")) for o in openings],
-        ox, oy, open_doors=args.open_doors)
+        ox, oy, open_doors=not args.closed_doors)
 
     with open(args.out, "w", newline="\n") as handle:
         json.dump(design(corners, walls, args.ceiling, underlay, placed),
