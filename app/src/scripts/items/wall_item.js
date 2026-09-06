@@ -274,6 +274,17 @@ export class WallItem extends Item
 		{
 			wallEdge.wall.onItems.push(this);
 		}
+
+		// `rotation.y` was just set from this edge's normal, so anything the item
+		// holds in PLAN axes can finally be resolved into its own. See
+		// `Item.onBound`; a generated door re-hands itself here.
+		//
+		// After the wall bookkeeping, so a hook that inspects `currentWallEdge`
+		// or the wall's item list sees the finished state.
+		if (this.onBound)
+		{
+			this.onBound(this);
+		}
 	}
 
 	/** Returns an array of planes to use other than the ground plane

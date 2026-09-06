@@ -192,12 +192,45 @@ An array, one entry per placed object:
 |---|---|
 | `id` | This item's identity. Added in RM-003 A3; absent in older files and assigned on load. |
 | `item_type` | Which class builds it. See the table below. |
-| `format` | `"gltf"`, or absent on a pre-migration file. |
-| `model_url` | Relative URL. Rewritten on load if it names one of the 25 converted legacy models. |
+| `format` | `"gltf"`, `"generated"`, or absent on a pre-migration file. |
+| `model_url` | Relative URL, or a `generated:` name. Rewritten on load if it names one of the 25 converted legacy models. |
 | `xpos`/`ypos`/`zpos` | Position in centimetres, like everything else. |
 | `rotation` | Y rotation in radians. X and Z are not stored. |
 | `fixed` | Locked in place. |
+| `spec` | Parameters for a generated item. Absent for every item loaded from a file. |
 | `material_colors` | Sparse: a `#rrggbb` for each material slot somebody recoloured, `null` for the rest. Absent when nothing was recoloured. |
+
+### Generated items
+
+An item whose geometry is **built from numbers rather than fetched**. It names a
+builder instead of a file and carries that builder's parameters in `spec`:
+
+```json
+{
+  "item_name": "Door", "item_type": 7,
+  "format": "generated", "model_url": "generated:door",
+  "xpos": 380.5, "ypos": 102.55, "zpos": 361.5, "rotation": 0,
+  "scale_x": 1, "scale_y": 1, "scale_z": 1,
+  "spec": {
+    "kind": "door", "width": 78.31, "height": 203.2, "wallThickness": 11.66,
+    "hand": "lo", "swing": "in", "openFraction": 0.75
+  }
+}
+```
+
+The builder name is the part after `generated:`, and
+`src/scripts/items/generated/index.js` is the registry. A file naming a builder
+this build does not have fails the same way a missing model file does.
+
+**The scale factors are always 1, and that is the point.** A generated item is
+told the size it should be and makes it, where a model can only be stretched to
+it — which stretches its casing, its stiles and its hardware along with its
+overall size. `spec` is also why `scale_z` is gone from doors: a door is handed
+its wall's real thickness and builds a frame that fits, rather than having its
+depth scaled to span it.
+
+`spec` is optional and sparse, exactly like `material_colors`: absent from every
+record that has nothing to put in it, so no existing file changes shape.
 
 ::: tip `id`, and why items are the only thing that carries one
 Corners have always had one. Walls, rooms and half edges have one too since

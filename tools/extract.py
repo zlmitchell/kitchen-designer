@@ -314,12 +314,21 @@ WINDOW = {"model": "models/js-glb/whitewindow.glb", "type": 3,
 DOOR = {"model": "models/js-glb/closed-door28x80_baked.glb", "type": 7,
         "name": "Closed Door", "w": 97.1, "h": 221.58, "d": 8.036,
         "height_cm": 203.2, "centre_cm": 101.6}     # 80" tall, on the floor
-# The same door, drawn open. Identical width and height, hinged at its own -x
-# end and swinging toward -z, which is what the handing below is expressed
-# against.
-OPEN_DOOR = {"model": "models/js-glb/open_door.glb", "type": 7,
-             "name": "Open Door", "w": 97.1, "h": 221.58, "d": 7.624,
-             "height_cm": 203.2, "centre_cm": 101.6}
+# open_door.glb is NOT an open door, and this is where believing it was cost the
+# most. Decoded, it holds the same frame, the same in-plane leaf panel
+# (85.1 x 215.1 x 1.5) and the same four hinges as the closed door, with the
+# three doorknob parts deleted -- and its whole bounding box is
+# 97.1 x 221.58 x 7.624cm. A 32in leaf swung 90 degrees projects about 81cm.
+# Nothing in that file leaves the wall, so no placement could show a door open.
+#
+# The depth scaling below would have flattened a correct asset anyway: scaling z
+# by thickness/89 squashes an 81cm swing into the wall plane. So a door is now
+# GENERATED -- see app/src/scripts/items/generated/door.js -- which also lets a
+# handing be stated instead of half-encoded in a rotation.
+DOOR_JAMB_CM = 1.9      # 3/4in jamb stock; the builder's default
+DOOR_OPEN_FRACTION = 0.75   # how far an interior door is drawn open
+GENERATED_DOOR = {"model": "generated:door", "type": 7, "format": "generated",
+                  "name": "Door", "height_cm": 203.2}
 
 
 def diagonals(page, clip, k, colour=ARCHITECTURE):
@@ -567,6 +576,78 @@ def dedupe_openings(openings):
     return kept
 
 
+def door_item(index, kind, x, y, width, horizontal, thickness_cm,
+              hinge, swing, exterior, open_doors, ox, oy):
+    """A generated door: a spec, not a model and not a scale factor.
+
+    Nothing here is scaled. The builder is handed the opening it measured and
+    the wall's own thickness and makes a frame that fits, which is what the
+    three scale factors were approximating -- badly, since scaling a model
+    stretches its casing and its stiles along with its overall size.
+
+    A door the drawing showed swinging is drawn OPEN, because that is what the
+    drawing says about it and a closed door hides the fact that the opening
+    leads anywhere. A door with no arc -- a bypass slider, a cased opening --
+    has no handing and stays shut. So does an exterior door however clearly the
+    plan drew its swing: a front door standing open in a walkthrough is simply
+    wrong.
+
+    `hand` is the drawing's `lo`/`hi` along the wall, passed straight through.
+    That is the plan axis, and the item's own +x is fixed later by
+    WallItem.changeWallEdge from the wall normal -- so on a wall whose edge runs
+    the other way a door comes out hinged at the far jamb. It is one flag in the
+    spec to correct, which is why the field exists at all rather than being
+    folded into the rotation the way the swing side used to be.
+    """
+    height_cm = GENERATED_DOOR["height_cm"]
+    # The rough opening: the frame stands outside the clear opening by a jamb on
+    # each side and one over the head. Item's constructor recentres geometry, so
+    # the item's origin sits at half the ROUGH height, not half the door's.
+    rough_height = height_cm + DOOR_JAMB_CM
+    spec = {
+        "kind": "door",
+        "width": round(width * CM_PER_INCH, 2),
+        "height": height_cm,
+        "wallThickness": round(thickness_cm, 2) if thickness_cm else 11.43,
+        # PLAN axes, both of them, because that is what the drawing knows. The
+        # item resolves them into its own on binding -- a wall has two half
+        # edges and the one an item lands on sets its rotation, so "swings
+        # toward -z" points into opposite rooms on two identical doors. Measured
+        # before this was split out: door-7 and door-9 carry the same spec and
+        # their leaves ended up at world dz +35.9 and -28.9.
+        "hand": hinge if hinge in ("lo", "hi") else "lo",
+        "swing": swing if swing in ("positive", "negative") else "negative",
+        # No swing arc means no leaf. A bypass slider or a cased opening drawn
+        # as one slab filling the hole is worse than drawing nothing: the three
+        # 48.7in closet openings on this plan came out as solid 48.7in doors,
+        # and an opening that should read as open read as a wall.
+        "operation": "swing" if hinge else "cased",
+        "openFraction": (DOOR_OPEN_FRACTION
+                         if (open_doors and hinge and not exterior) else 0),
+    }
+    return {
+        "id": f"{kind}-{index}",
+        "item_name": GENERATED_DOOR["name"],
+        "item_type": GENERATED_DOOR["type"],
+        "model_url": GENERATED_DOOR["model"],
+        "format": GENERATED_DOOR["format"],
+        "xpos": round((x - ox) * CM_PER_INCH, 2),
+        "ypos": round(rough_height / 2.0, 2),
+        "zpos": round((y - oy) * CM_PER_INCH, 2),
+        # Wall orientation only. The swing side is spec["swing"] now, so this no
+        # longer has to carry half a handing -- and it never could: changeWallEdge
+        # overwrites rotation.y from the wall normal as soon as the item binds.
+        "rotation": (0 if horizontal else math.pi / 2),
+        "scale_x": 1,
+        "scale_y": 1,
+        "scale_z": 1,
+        "fixed": False,
+        "resizable": True,
+        "material_colors": [],
+        "spec": spec,
+    }
+
+
 def items_for(openings, ox, oy, open_doors=False):
     """architect3d items. Wall items snap to the nearest wall edge on load, so
     an approximate position along the right wall is enough to orient them."""
@@ -580,18 +661,12 @@ def items_for(openings, ox, oy, open_doors=False):
         hinge = opening[6] if len(opening) > 6 else None
         swing = opening[7] if len(opening) > 7 else None
         exterior = opening[8] if len(opening) > 8 else False
-        if kind == "window":
-            spec = WINDOW
-        else:
-            # A door the drawing showed swinging is drawn open, because that is
-            # what the drawing says about it and a closed door hides the fact
-            # that the opening leads anywhere. A door with no arc -- a bypass
-            # slider, a cased opening -- has no handing and stays closed.
-            # Open only if it is interior. An exterior door standing open in
-            # a walkthrough is simply wrong, however clearly the plan drew its
-            # swing.
-            spec = (OPEN_DOOR if (open_doors and hinge and not exterior)
-                    else DOOR)
+        if kind != "window":
+            items.append(door_item(index, kind, x, y, width, horizontal,
+                                   thickness_cm, hinge, swing, exterior,
+                                   open_doors, ox, oy))
+            continue
+        spec = WINDOW
         items.append({
             "id": f"{kind}-{index}",
             "item_name": spec["name"],
@@ -601,14 +676,7 @@ def items_for(openings, ox, oy, open_doors=False):
             "xpos": round((x - ox) * CM_PER_INCH, 2),
             "ypos": spec["centre_cm"],
             "zpos": round((y - oy) * CM_PER_INCH, 2),
-            # Handing, as far as one rotation can carry it. Turning the door
-            # through half a circle swaps BOTH which end it is hinged on and
-            # which way it opens, so the two are not independent here: rotation
-            # reaches two of the four handings a joiner would name, and the
-            # other two need the model mirrored. Swing side is the one chosen,
-            # being what tells you which room the door opens into.
-            "rotation": ((0 if horizontal else math.pi / 2)
-                         + (math.pi if swing == "positive" else 0)),
+            "rotation": (0 if horizontal else math.pi / 2),
             # Width from the drawing; height from the standard the drawing does
             # not give in plan view. Both are editable in the inspector.
             "scale_x": round(width * CM_PER_INCH / spec["w"], 4),

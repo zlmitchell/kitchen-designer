@@ -121,6 +121,26 @@ describe('the traced plan', () =>
 
 		for (const item of items)
 		{
+			if (item.format === 'generated')
+			{
+				// A generated opening is TOLD its size rather than stretched to it,
+				// so the believability check moves from the scale factor to the
+				// width itself - which is the same question asked of the number
+				// that now carries the answer, and asked in centimetres rather
+				// than in multiples of whatever the model happened to be.
+				expect(item.model_url).toMatch(/^generated:/);
+				expect(item.scale_x).toBe(1);
+				expect(item.scale_y).toBe(1);
+				expect(item.scale_z).toBe(1);
+				// 20in is a closet door, 96in a pair of patio sliders. Outside that
+				// the drawing was measured wrong.
+				expect(item.spec.width).toBeGreaterThan(50);
+				expect(item.spec.width).toBeLessThan(250);
+				// And it fills a wall somebody could build, rather than a default.
+				expect(item.spec.wallThickness).toBeGreaterThan(5);
+				expect(item.spec.wallThickness).toBeLessThan(40);
+				continue;
+			}
 			expect(item.model_url).toMatch(/\.glb$/);
 			// Scaled from the drawing's rough opening to the model's own size. The
 			// window model is 4ft wide, so a run of patio glazing legitimately

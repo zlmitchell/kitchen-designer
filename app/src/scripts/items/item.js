@@ -178,6 +178,46 @@ export class Item extends Mesh
 		/** @type {?BoxHelper} Built by init(), released by dispose(). */
 		this.bhelper = null;
 
+		/**
+		 * Children a generated builder supplied, held so `removed()` can release
+		 * them.
+		 *
+		 * A generated item's moving and overhanging pieces cannot live in
+		 * `this.geometry`: `bounds()` reads only that, and three things downstream
+		 * read those bounds - the wall's hole (`three/edge.js`), the along-wall
+		 * drag clamp (`WallItem.boundMove`) and the across-wall centring
+		 * (`InWallItem.getWallOffset`). A door leaf that swings out of the wall
+		 * must not enlarge any of them, so it is a child.
+		 *
+		 * Which means nothing else would ever free it. `removed()` names the label
+		 * planes explicitly rather than calling `disposeObject(this)`, precisely so
+		 * that it does not reach shared materials - so children added later are not
+		 * covered by it either, and a deleted door would leak its leaf.
+		 *
+		 * @type {Array<import('three').Object3D>}
+		 */
+		this.generatedParts = [];
+
+		/**
+		 * Called after this item binds to a wall edge, if a generated builder
+		 * supplied one.
+		 *
+		 * Binding is when a wall-bound item's axes stop being the file's hint and
+		 * become the wall's answer: a wall has two half edges, and
+		 * `WallItem.changeWallEdge` takes `rotation.y` from the normal of whichever
+		 * one the item landed on. Anything stated in the PLAN's axes - which is
+		 * everything the drawing knows, a door's hinge end and swing side included
+		 * - can only be turned into the item's own axes here.
+		 *
+		 * Measured before this existed: `door-7` and `door-9` on the traced plan
+		 * carry identical specs and their leaves ended up swinging to world dz
+		 * +35.9 and -28.9, because each had resolved its swing against its own
+		 * local frame and the two frames were 180 degrees apart.
+		 *
+		 * @type {?function(Item): void}
+		 */
+		this.onBound = null;
+
 		this.scene = this.model.scene;
 		this._freePosition = true;
 
@@ -703,6 +743,13 @@ export class Item extends Mesh
 		{
 			this.geometry.dispose();
 		}
+		// Children a generated builder supplied - a door's leaf and casing. Named
+		// here for the same reason the label planes are: this method deliberately
+		// does not call disposeObject(this), so anything hanging off the item has
+		// to be released by name or not at all. See `generatedParts`.
+		this.generatedParts.forEach((part) => {disposeObject(part);});
+		this.generatedParts = [];
+
 		disposeMaterial(this.originalmaterial);
 		disposeMaterial(this.wirematerial);
 	}
@@ -1064,6 +1111,14 @@ export class Item extends Mesh
 			xpos: this.position.x, ypos: this.position.y, zpos: this.position.z,
 			rotation: this.rotation.y,
 			scale_x: this.scale.x, scale_y: this.scale.y,scale_z: this.scale.z,fixed: this.fixed};
+
+		// A generated item's parameters. Sparse and optional, exactly like
+		// material_colors below: absent from the record when the item has none, so
+		// no existing file changes shape and no reader has to know about it.
+		if(this.metadata.spec)
+		{
+			data.spec = this.metadata.spec;
+		}
 
 		if(matattribs)
 		{

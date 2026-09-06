@@ -16,6 +16,7 @@ import {Utils} from '../core/utils.js';
 import {mergeMeshes} from '../core/geometry_merge.js';
 import {resolveModelUrl} from '../core/legacy_models.js';
 import {Factory} from '../items/factory.js';
+import {GENERATED_BUILDERS, generatedKind, isGenerated} from '../items/generated/index.js';
 import {EVENT_ITEM_LOADING, EVENT_ITEM_LOADED, EVENT_ITEM_REMOVED} from '../core/events.js';
 
 /**
@@ -379,7 +380,20 @@ export class Scene extends EventDispatcher
 		// path - goes through the session exactly once.
 		var generation = this.loadSession.started();
 
-		var loaderCallback = function (geometry, materials)
+		/**
+		 * @param {Object} geometry
+		 * @param {Array} materials
+		 * @param {Array<import('three').Object3D>} [parts] Children to hang off the
+		 *        item once it exists - a generated door's leaf and casing. They
+		 *        must NOT be merged into `geometry`: `Item.bounds()` reads only
+		 *        that, and the wall's hole, the along-wall drag clamp and the
+		 *        across-wall centring are all computed from those bounds. See
+		 *        `items/generated/door.js`.
+		 * @param {?function(Object): void} [onBound] Called when the item binds to
+		 *        a wall edge - the only moment its own axes are known. See
+		 *        `Item.onBound`.
+		 */
+		var loaderCallback = function (geometry, materials, parts, onBound)
 		{
 			if (!scope.loadSession.finished(generation))
 			{
@@ -400,6 +414,19 @@ export class Scene extends EventDispatcher
 			}
 
 			var item = new (Factory.getClass(itemType))(scope.model, metadata, geometry, materials, position, rotation, scale);
+			// Before initObject(), so the item is whole by the time anything is told
+			// it exists. Order is otherwise free: the constructor recentres only
+			// `geometry`, and halfSize is computed from that alone, so a child added
+			// either side of it lands in the same place.
+			if (parts && parts.length)
+			{
+				parts.forEach(function (part) {item.add(part);});
+				item.generatedParts = parts;
+			}
+			if (onBound)
+			{
+				item.onBound = onBound;
+			}
 			item.fixed = fixed || false;
 			scope.items.push(item);
 			scope.add(item);
@@ -484,6 +511,37 @@ export class Scene extends EventDispatcher
 		};
 
 		this.dispatchEvent({type:EVENT_ITEM_LOADING});
+
+		// A generated item builds its own geometry from `metadata.spec`.
+		//
+		// Ahead of everything below it, and of the itemLoader seam, because none of
+		// what follows applies: there is no file, so the asset manifest cannot
+		// declare it and would reject it as missing, and there is no network, so the
+		// seam that exists to remove the network has nothing to remove. It also
+		// means generated items work under vitest exactly as they do in a browser,
+		// which is what makes the door testable without a renderer.
+		if (isGenerated(fileName))
+		{
+			var kind = generatedKind(fileName);
+			var builder = kind ? GENERATED_BUILDERS[kind] : null;
+			if (!builder)
+			{
+				failed(`no generated builder is registered for "${kind}". See src/scripts/items/generated/index.js.`);
+				return;
+			}
+			try
+			{
+				var built = builder(metadata.spec || {});
+				loaderCallback(built.geometry, built.materials, built.parts, built.onBound);
+			}
+			catch (error)
+			{
+				// Through the same exit as a failed fetch, so the load-in-flight count
+				// stays balanced whether a build throws or a file 404s.
+				failed(describeError(error));
+			}
+			return;
+		}
 
 		/**
 		 * Availability as a policy rather than a console line (RM-003 A5).
