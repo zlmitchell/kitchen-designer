@@ -252,10 +252,14 @@ def main():
         "anchorYPx": round((oy - clip.y0 * args.scale) * per_inch, 2),
     }
 
+    # Thickness goes with each opening so the item can be scaled to span its
+    # wall. An in-wall item is placed flush to the near face at its own depth,
+    # so a door narrower than the wall is simply buried in it.
     placed = extract.items_for(
         [(o["kind"], (o["lo"] + o["hi"]) / 2.0 if o["horizontal"] else o["centre"],
           o["centre"] if o["horizontal"] else (o["lo"] + o["hi"]) / 2.0,
-          o["width_in"], o["horizontal"]) for o in openings], ox, oy)
+          o["width_in"], o["horizontal"], o["thickness"]) for o in openings],
+        ox, oy)
 
     with open(args.out, "w", newline="\n") as handle:
         json.dump(design(corners, walls, args.ceiling, underlay, placed),

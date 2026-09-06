@@ -300,11 +300,19 @@ SWING_MAX_SEGMENTS = 14  # a swing is a few long chords; hatching is hundreds
 ON_WALL_TOL_IN = 6.0
 
 # Both models measure in centimetres, read from their GLB POSITION accessors.
+#
+# `d` is the model's own depth, and it matters because an in-wall item is not
+# fitted to its wall. half_edge.js sets `offset = wall.thickness / 2`, and
+# InWallItem.getWallOffset() places the item at `-offset + 0.5` -- flush to the
+# near face, at whatever depth the model happens to be. While every wall was
+# the configured 10cm that was invisible. Measured walls are 7.7 to 19cm, so a
+# 8cm door in a 19cm wall is buried in it and a 14.75cm window in a 7.7cm wall
+# stands proud of both faces.
 WINDOW = {"model": "models/js-glb/whitewindow.glb", "type": 3,
-          "name": "Window", "w": 123.0769, "h": 170.473,
+          "name": "Window", "w": 123.0769, "h": 170.473, "d": 14.75,
           "height_cm": 152.4, "centre_cm": 157.0}   # 60" tall, 32" sill
 DOOR = {"model": "models/js-glb/closed-door28x80_baked.glb", "type": 7,
-        "name": "Closed Door", "w": 97.1, "h": 221.58,
+        "name": "Closed Door", "w": 97.1, "h": 221.58, "d": 8.036,
         "height_cm": 203.2, "centre_cm": 101.6}     # 80" tall, on the floor
 
 
@@ -557,7 +565,12 @@ def items_for(openings, ox, oy):
     """architect3d items. Wall items snap to the nearest wall edge on load, so
     an approximate position along the right wall is enough to orient them."""
     items = []
-    for index, (kind, x, y, width, horizontal) in enumerate(openings):
+    for index, opening in enumerate(openings):
+        kind, x, y, width, horizontal = opening[:5]
+        # Wall thickness, when the caller knows it. Without it the item keeps
+        # its native depth, which is what the lattice pipeline always did
+        # because every wall it wrote was the same 10cm.
+        thickness_cm = opening[5] * CM_PER_INCH if len(opening) > 5 else None
         spec = WINDOW if kind == "window" else DOOR
         items.append({
             "id": f"{kind}-{index}",
@@ -573,7 +586,10 @@ def items_for(openings, ox, oy):
             # not give in plan view. Both are editable in the inspector.
             "scale_x": round(width * CM_PER_INCH / spec["w"], 4),
             "scale_y": round(spec["height_cm"] / spec["h"], 4),
-            "scale_z": 1,
+            # Scaled to span the wall, so the opening reads as a hole through
+            # it rather than a panel stuck on one face.
+            "scale_z": (round(thickness_cm / spec["d"], 4)
+                        if thickness_cm else 1),
             "fixed": False,
             "resizable": True,
             "material_colors": [],
