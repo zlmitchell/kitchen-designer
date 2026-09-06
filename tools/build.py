@@ -50,6 +50,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import extract  # noqa: E402  (items_for, parse_half_wall, the underlay maths)
 import layers  # noqa: E402
 import opening_truth  # noqa: E402
+import spaces  # noqa: E402
 import walls as wallmod  # noqa: E402
 
 CM_PER_INCH = 2.54
@@ -58,6 +59,43 @@ WALL_TEXTURE = {"url": "rooms/textures/wallmap.png", "stretch": True, "scale": 0
 # corner.js welds corners closer than this. It is 20cm there; in inches here,
 # because everything upstream of the writer is in inches.
 WELD_IN = 20.0 / CM_PER_INCH
+
+
+def mark_exterior(boxes, openings, clip, scale):
+    """Say which openings have the outdoors on one side of them.
+
+    An exterior door is drawn shut and an interior one open. Both are what the
+    drawing means: a swing arc says how a door opens, but the front door
+    standing open in a walkthrough is just wrong, and an interior door standing
+    shut hides that the rooms connect.
+
+    Which is which is not a guess. spaces.py already floods the plan and knows
+    which region is the outside -- the one touching the edge of the clip -- so
+    each opening is asked directly: sample a point just beyond each face of its
+    wall, and if either lands outside, the opening faces the weather.
+    """
+    bounds = (clip.x0 * scale, clip.y0 * scale, clip.x1 * scale, clip.y1 * scale)
+    grid, wide, high = spaces.paint(boxes, bounds, openings)
+    label, regions = spaces.regions(grid, wide, high)
+    outside = {r["index"] for r in regions if r["outside"]}
+    x0, y0 = bounds[0], bounds[1]
+
+    def region_at(x, y):
+        column, row = int((x - x0) / spaces.CELL_IN), int((y - y0) / spaces.CELL_IN)
+        if not (0 <= column < wide and 0 <= row < high):
+            return None
+        return label[row * wide + column]
+
+    for opening in openings:
+        along = (opening["lo"] + opening["hi"]) / 2.0
+        reach = opening["thickness"] / 2.0 + spaces.CELL_IN * 3
+        sides = []
+        for direction in (-1, 1):
+            across = opening["centre"] + direction * reach
+            point = (along, across) if opening["horizontal"] else (across, along)
+            sides.append(region_at(*point))
+        opening["exterior"] = any(s in outside or s == 0 for s in sides)
+    return openings
 
 
 def bridge_openings(boxes, openings):
@@ -321,6 +359,7 @@ def main():
     # it crossed, and that pair is what collapsed.
     boxes = [b for b in bridge_openings(traced["boxes"], openings)
              if b["drawn_hi"] - b["drawn_lo"] >= WELD_IN]
+    openings = mark_exterior(boxes, openings, clip, args.scale)
     corners, walls = graph(fuse_parallel(boxes), args.ceiling)
 
     outdir = os.path.dirname(args.out) or "."
@@ -347,7 +386,7 @@ def main():
         [(o["kind"], (o["lo"] + o["hi"]) / 2.0 if o["horizontal"] else o["centre"],
           o["centre"] if o["horizontal"] else (o["lo"] + o["hi"]) / 2.0,
           o["width_in"], o["horizontal"], o["thickness"],
-          o.get("hinge"), o.get("swing")) for o in openings],
+          o.get("hinge"), o.get("swing"), o.get("exterior")) for o in openings],
         ox, oy, open_doors=not args.closed_doors)
 
     with open(args.out, "w", newline="\n") as handle:

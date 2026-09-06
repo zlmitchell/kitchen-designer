@@ -579,6 +579,7 @@ def items_for(openings, ox, oy, open_doors=False):
         thickness_cm = opening[5] * CM_PER_INCH if len(opening) > 5 else None
         hinge = opening[6] if len(opening) > 6 else None
         swing = opening[7] if len(opening) > 7 else None
+        exterior = opening[8] if len(opening) > 8 else False
         if kind == "window":
             spec = WINDOW
         else:
@@ -586,7 +587,11 @@ def items_for(openings, ox, oy, open_doors=False):
             # what the drawing says about it and a closed door hides the fact
             # that the opening leads anywhere. A door with no arc -- a bypass
             # slider, a cased opening -- has no handing and stays closed.
-            spec = OPEN_DOOR if (open_doors and hinge) else DOOR
+            # Open only if it is interior. An exterior door standing open in
+            # a walkthrough is simply wrong, however clearly the plan drew its
+            # swing.
+            spec = (OPEN_DOOR if (open_doors and hinge and not exterior)
+                    else DOOR)
         items.append({
             "id": f"{kind}-{index}",
             "item_name": spec["name"],
