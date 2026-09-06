@@ -55,6 +55,9 @@ import walls as wallmod  # noqa: E402
 CM_PER_INCH = 2.54
 QUARTER_SCALE = 2 / 3
 WALL_TEXTURE = {"url": "rooms/textures/wallmap.png", "stretch": True, "scale": 0}
+# corner.js welds corners closer than this. It is 20cm there; in inches here,
+# because everything upstream of the writer is in inches.
+WELD_IN = 20.0 / CM_PER_INCH
 
 
 def bridge_openings(boxes, openings):
@@ -136,7 +139,7 @@ def graph(boxes, ceiling_in, height_of=None):
         return by_point[key]
 
     for index, box in enumerate(boxes):
-        stops = sorted({box["drawn_lo"], box["drawn_hi"]} | cuts[index])
+        stops = _thin(sorted({box["drawn_lo"], box["drawn_hi"]} | cuts[index]))
         for lo, hi in zip(stops, stops[1:]):
             if hi - lo < wallmod.MIN_PAIR_IN:
                 continue
@@ -151,6 +154,70 @@ def graph(boxes, ceiling_in, height_of=None):
             walls.append({"corner1": pair[0], "corner2": pair[1],
                           "thickness_in": box["thickness"]})
     return corners, walls
+
+
+def _thin(stops):
+    """Drop a cut that would leave a piece the app is going to weld anyway.
+
+    corner.js welds any two corners within cornerTolerance of each other, and
+    that constant is 20 CENTIMETRES -- near enough eight inches, where the
+    walls on this plan are three to seven and a half thick. So a wall stub
+    shorter than that cannot survive being loaded: its two corners merge, the
+    wall between them becomes zero-length, and the 3D view builds a room
+    polygon around a degenerate edge. Two of them on this plan produced the
+    shards in the middle of the floor.
+
+    A stub that short is not worth its own wall in any case. Keeping the outer
+    stops and dropping the cut merges it into the neighbour it was split from,
+    which also closes the loose end the split created.
+    """
+    kept = [stops[0]]
+    for stop in stops[1:-1]:
+        if stop - kept[-1] >= WELD_IN:
+            kept.append(stop)
+    if len(stops) > 1:
+        if stops[-1] - kept[-1] < WELD_IN and len(kept) > 1:
+            kept.pop()
+        kept.append(stops[-1])
+    return kept
+
+
+def fuse_parallel(boxes):
+    """Merge parallel walls too close together for the app to keep apart.
+
+    corner.js welds corners within cornerTolerance -- 20cm, near enough eight
+    inches -- so two parallel walls 3.77in apart put corner pairs inside that
+    on every wall they both cross, and the loader merges them blind. The wall
+    between the merged pair becomes zero-length and the 3D view builds a room
+    polygon around a degenerate edge: the shards in the middle of the floor.
+
+    Welding the corners here instead does not help, and is worse. Two corners
+    at different places cannot both be kept, so the survivor moves, and moving
+    it in x throws the vertical wall through it off its axis. Measured: 3.36in
+    of skew merging to the group mean, 3.77in merging to a member, against a
+    plan whose whole point is that it is exactly square.
+
+    So the merge belongs here, where a whole wall moves at once and every wall
+    stays axis-aligned by construction. The longer of the two keeps its
+    centreline, for the same reason the dominant face pair sets thickness.
+    """
+    out = []
+    for box in sorted(boxes, key=lambda b: -(b["drawn_hi"] - b["drawn_lo"])):
+        for kept in out:
+            if kept["horizontal"] != box["horizontal"]:
+                continue
+            if abs(kept["centre"] - box["centre"]) >= WELD_IN:
+                continue
+            if min(kept["drawn_hi"], box["drawn_hi"]) <= max(kept["drawn_lo"],
+                                                             box["drawn_lo"]):
+                continue
+            kept["drawn_lo"] = min(kept["drawn_lo"], box["drawn_lo"])
+            kept["drawn_hi"] = max(kept["drawn_hi"], box["drawn_hi"])
+            kept["thickness"] = max(kept["thickness"], box["thickness"])
+            break
+        else:
+            out.append(dict(box))
+    return out
 
 
 def verify(corners, walls):
@@ -232,8 +299,13 @@ def main():
         opening_truth.find_by_symbol(traced, page, clip, args.scale, chosen),
         opening_truth.label(opening_truth.find(traced), page, clip, args.scale))
 
-    boxes = bridge_openings(traced["boxes"], openings)
-    corners, walls = graph(boxes, args.ceiling)
+    # A box shorter than the weld tolerance cannot become a wall: the app
+    # merges its two corners on load and the wall between them vanishes. The
+    # 3.4in stub at x=5.71ft is what put two corners 9.58cm apart on the wall
+    # it crossed, and that pair is what collapsed.
+    boxes = [b for b in bridge_openings(traced["boxes"], openings)
+             if b["drawn_hi"] - b["drawn_lo"] >= WELD_IN]
+    corners, walls = graph(fuse_parallel(boxes), args.ceiling)
 
     outdir = os.path.dirname(args.out) or "."
     os.makedirs(outdir, exist_ok=True)

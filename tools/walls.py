@@ -603,22 +603,36 @@ def close_corners(boxes_in):
     architect3d wants, so a box's end belongs on the centreline of whatever it
     runs into. Corners then close exactly, with nothing hanging over.
     """
+    # To a fixed point, because one pass is order-dependent. Each box is
+    # snapped against its neighbours' CURRENT extents, so a box visited early
+    # sees runs that later grow: on this plan a wall at y=9.75ft ended 3.77in
+    # past the vertical it meets, because when it was visited that vertical had
+    # not yet been extended up to reach it. The two corners then sat inside the
+    # app's 20cm weld tolerance and it merged them on load.
+    for _ in range(8):
+        moved = False
+        for box in boxes_in:
+            reach = box["thickness"] * OVERSHOOT + FACE_JOIN_IN
+            for other in boxes_in:
+                if other["horizontal"] == box["horizontal"]:
+                    continue
+                # It has to actually cross, not merely point at us from
+                # elsewhere.
+                if not (other["lo"] <= box["centre"] <= other["hi"]):
+                    continue
+                for end in ("drawn_lo", "drawn_hi"):
+                    if 0 < abs(other["centre"] - box[end]) <= reach:
+                        box[end] = other["centre"]
+                        moved = True
+        if not moved:
+            break
     for box in boxes_in:
-        reach = box["thickness"] * OVERSHOOT + FACE_JOIN_IN
-        for other in boxes_in:
-            if other["horizontal"] == box["horizontal"]:
-                continue
-            # It has to actually cross, not merely point at us from elsewhere.
-            if not (other["lo"] <= box["centre"] <= other["hi"]):
-                continue
-            for end in ("drawn_lo", "drawn_hi"):
-                if abs(other["centre"] - box[end]) <= reach:
-                    box[end] = other["centre"]
         # Both from the ORIGINAL pair. Assigning drawn_lo first and then
         # reading it back to compute drawn_hi collapses the box to a point
         # whenever snapping crossed the two over.
         low, high = box["drawn_lo"], box["drawn_hi"]
         box["drawn_lo"], box["drawn_hi"] = min(low, high), max(low, high)
+
     return boxes_in
 
 
