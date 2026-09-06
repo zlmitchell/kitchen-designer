@@ -34,12 +34,29 @@ looks like a failing test and is a slow filesystem.
 
 ## Getting a plan in
 
-`tools/extract.py` traces a scaled architectural PDF into a design the app can
+`tools/build.py` traces a scaled architectural PDF into a design the app can
 open. It needs `pymupdf` (`pip install -r tools/requirements.txt`).
 
 ```sh
-python tools/extract.py "plans/your-plan.pdf" -o data/design.json
+python tools/build.py "plans/your-plan.pdf" -o data/design.json
 ```
+
+It works in layers, and each stage takes the one above and nothing else:
+
+```
+1. split the sheet by pen -- (colour, width, fill)     tools/layers.py
+2. trace the structure layer into wall boxes           tools/walls.py
+3. find windows and doors: symbols, and face gaps      tools/opening_truth.py
+4. rooms, as the complement of the walls               tools/spaces.py
+```
+
+Walls carry their measured thickness, face to face, so a 2x4 partition and a
+10in exterior wall arrive as themselves rather than as one configured default.
+Windows and doors are items placed on a wall, not gaps in it, so a wall runs
+continuously past its own openings.
+
+`tools/extract.py` is the previous tracer, kept until nothing needs it. See
+AGENTS.md before changing anything in `tools/`.
 
 It writes two things into `data/`, which compose serves at `/plan`:
 

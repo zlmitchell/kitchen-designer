@@ -705,6 +705,11 @@ export class Floorplan extends EventDispatcher
 				floorplans.walls.push({
 					'corner1': wall.getStart().id,
 					'corner2': wall.getEnd().id,
+					// Per-wall, because it is: a 2x4 partition and a 2x6
+					// exterior wall are different thicknesses in the same
+					// house, and the plan extractor measures each one face to
+					// face rather than assuming the configured default.
+					'thickness': wall.thickness,
 					'frontTexture': wall.frontTexture,
 					'backTexture': wall.backTexture,
 					'wallType': wall.wallType.description,
@@ -866,6 +871,14 @@ export class Floorplan extends EventDispatcher
 		floorplan.walls.forEach((wall, wallIndex) => {
 			var newWall = scope.newWall(corners[wall.corner1], corners[wall.corner2], undefined, undefined, wallIds[wallIndex]);
 			
+			// Asked of the record, not of a version stamp -- same reasoning as
+			// the control points below. A file written before this field
+			// existed simply keeps the thickness its constructor took from
+			// configuration.
+			if (wall.thickness !== undefined)
+			{
+				newWall.thickness = wall.thickness;
+			}
 			if (wall.frontTexture)
 			{
 				newWall.frontTexture = wall.frontTexture;
