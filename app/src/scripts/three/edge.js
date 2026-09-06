@@ -440,10 +440,14 @@ export class Edge extends EventDispatcher
 		// bottom
 		// put into basePlanes since this is always visible
 		this.basePlanes.push(this.resources.registerObject(this.buildFillerUniformHeight(this.edge, 0, BackSide, this.baseColor)));
-		if(this.edge.wall.start.getAttachedRooms().length < 2 || this.edge.wall.end.getAttachedRooms().length < 2)
-		{
-			this.planes.push(this.resources.registerObject(this.buildFillerVaryingHeights(this.edge, DoubleSide, this.fillerColor)));
-		}
+		// The top is built for EVERY wall, not only for walls with an exterior
+		// face. It used to sit behind the same room-count test as the exterior
+		// plane above, and that test is right for a face and wrong for a top:
+		// a wall between two rooms has its two SIDES drawn by its two
+		// half-edges, but nothing anywhere draws its top. So every interior
+		// wall was open along its length -- from above you saw down into it,
+		// with the end cap showing through at each junction as a triangle.
+		this.planes.push(this.resources.registerObject(this.buildFillerVaryingHeights(this.edge, DoubleSide, this.fillerColor)));
 
 		// sides
 		this.planes.push(this.resources.registerObject(this.buildSideFillter(this.edge.interiorStart(), this.edge.exteriorStart(), extStartCorner.elevation, this.sideColor)));
@@ -588,6 +592,11 @@ export class Edge extends EventDispatcher
 		
 		var fillerMaterial = this.makeFillerMaterial(color, side);
 
+		// A fan is right here and stays. The four points are a wall's top: a
+		// rectangle on a straight run and a mitred trapezoid at a corner, both
+		// convex, so fanning from a covers it exactly. Earcut would give the
+		// same surface with the vertices in a different order, which buys
+		// nothing and breaks the r98 golden that guards this geometry.
 		var geometry = triangleFanGeometry([a, b, c, d]);
 
 		var filler = new Mesh(geometry, fillerMaterial);
