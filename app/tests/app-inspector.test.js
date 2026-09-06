@@ -261,6 +261,11 @@ describe('ItemInspector', () =>
 		return Object.assign({
 			metadata: {itemName: 'Sofa - Grey'},
 			fixed: false,
+			// A real Item extends Mesh, so it always has these two. The stub grew
+			// them when the panel gained a rotation control - which is the stub
+			// being incomplete rather than the panel being defensive.
+			allowRotate: true,
+			rotation: {y: 0},
 			material: {name: 'grey', color: {getHexString: () => 'cccccc'}},
 			width: 200, height: 80, depth: 90,
 			proportional: false,

@@ -277,6 +277,52 @@ docker compose run --rm --no-deps -T -v "$OUT:/plan-out" dev node /app/render-sc
 "can you see through this opening"; stand 300cm back from one door on its own
 axis and look.
 
+### 3b. Which container to run in, and why it matters
+
+Two services, and picking the wrong one wastes a lot of time:
+
+| | `test` | `dev` |
+|---|---|---|
+| source | the **image's copy** | the **host, bind-mounted** |
+| writes reach the host | no | yes |
+| use it for | running the suite | anything that must WRITE a file |
+
+So a script that renders a thumbnail into `public/` has to run in `dev`, or it
+writes into a container that is then thrown away. `--build` is what makes `test`
+see your edit at all; without it you are testing the last image.
+
+**Bare `node` cannot import this project's JSON.** `core/materials.js` does
+`import catalog from '../../catalog/materials.json'`, which Vite and vitest
+resolve and plain node rejects with `ERR_IMPORT_ATTRIBUTE_MISSING`. So a scratch
+script that touches materials — which is any script that builds a part — must go
+through vitest rather than `node file.mjs`:
+
+```sh
+docker compose run --rm --no-deps dev npx vitest run tests/zz-scratch.test.js
+```
+
+Name scratch files `zz-*` so they sort last and are obvious, and delete them
+before committing.
+
+### 3c. Mounting a panel
+
+An inspector is testable without the app around it. `@vue/test-utils` plus a
+hand-built item, which is a deliberate style here — it pins the contract without
+building a scene:
+
+```js
+// @vitest-environment jsdom
+installCanvas2D(window);                       // jsdom has no 2D context
+const item = {rotation: {y: 0}, allowRotate: true, getWidth: () => 10, /* ... */};
+const panel = mount(ItemInspector, {props: {item}});
+await panel.findAll('input[type=number]').at(3).setValue(90);
+```
+
+The trap: a hand-built item is an **incomplete** Item. A real one extends `Mesh`
+and therefore always has `rotation`, `scale` and the rest — so when a panel starts
+reading one of those, the honest fix is to grow the stub, not to make the panel
+defensive about a field that cannot actually be missing.
+
 ### 4. Raycast for a yes/no
 
 When the question is binary, do not squint at a render. Cast a ray and report
@@ -298,11 +344,33 @@ fix, run it, watch it fail, restore. The float-error case in
 of the three that failed, which is exactly why the other two would not have
 caught the bug.
 
-### The ledger
+### The ledgers, and other things that fail late
 
-Adding a file with `// @ts-check` means updating the CHECKED counts in
-`tsconfig.json`. `tests/type-coverage.test.js` fails otherwise, and it is
-supposed to.
+Three bookkeeping files will fail the suite rather than the feature, and all
+three are meant to:
+
+- **`tsconfig.json`** — adding a file with `// @ts-check` means updating the
+  CHECKED counts. `tests/type-coverage.test.js` enforces both the total and the
+  per-directory rows.
+- **`public/asset-manifest.json`** — adding any file under `public/` means
+  `npm run manifest` (in the `dev` service, so the write lands). The manifest is
+  how the app answers "does this build ship that asset" before touching the
+  network.
+- **the catalog tests** — `catalog-and-shim.test.js` pins the item count and the
+  set of formats. A generated entry must also be backed by a registered builder,
+  so a typo like `generated:pots` fails the suite instead of failing on click.
+
+### Drawing a thumbnail
+
+A generated item has no model file to screenshot, so render its own geometry.
+300x225, opaque white, into `public/models/thumbnails_new/`. Two things that are
+not obvious:
+
+- **Show the catalog default.** A thumbnail of a trimmed post is a promise the
+  click does not keep.
+- **Hold the brightest face below white.** The default finish is white paint and
+  the background is white, so a face at full lambert vanishes into it. Roughly
+  0.46–0.90 keeps three distinct values and a silhouette.
 
 ---
 

@@ -4,7 +4,7 @@ import {onBeforeUnmount, reactive, ref, watch} from 'vue';
 import NumberField from './fields/NumberField.vue';
 import CheckField from './fields/CheckField.vue';
 import ColorField from './fields/ColorField.vue';
-import {Trash2, Copy} from '@lucide/vue';
+import {Trash2, Copy, RotateCcw, RotateCw} from '@lucide/vue';
 import {Dimensioning} from '../../scripts/blueprint.js';
 import {useDisplayUnit} from '../composables/useDisplayUnit.js';
 
@@ -33,6 +33,8 @@ const {unit} = useDisplayUnit();
 
 const name = ref('');
 const dimensions = reactive({width: 0, height: 0, depth: 0});
+const rotation = ref(0);
+const canRotate = ref(false);
 const flags = reactive({proportional: false, fixed: false});
 // `ref([])` infers `Ref<never[]>`, so filling it is an error and reading from
 // it is an error on `never` - one omission producing four (RM-004 B3).
@@ -47,6 +49,14 @@ function readBack()
 	dimensions.depth = Dimensioning.cmToMeasureRaw(props.item.getDepth());
 	flags.proportional = props.item.getProportionalResize();
 	flags.fixed = props.item.fixed;
+	// Degrees, because nobody thinks in radians about which way a chair faces.
+	// Normalised into 0..360 so dragging the handle past north does not read back
+	// as -170.
+	rotation.value = Math.round((((props.item.rotation.y * 180 / Math.PI) % 360) + 360) % 360);
+	// Wall-bound items take their facing from the wall they are on
+	// (`WallItem.changeWallEdge` overwrites rotation.y), so offering the control
+	// would be offering a number the next bind discards.
+	canRotate.value = Boolean(props.item.allowRotate) && !props.item.fixed;
 }
 
 /**
@@ -81,6 +91,43 @@ function resize(axis, next)
 		Dimensioning.cmFromMeasureRaw(dimensions.depth));
 	readBack();
 	emit('changed');
+}
+
+/**
+ * Turn the item on the spot.
+ *
+ * There has always been a way to do this and it is easy to miss: the HUD draws a
+ * drag handle when an item is selected IN THE 3D VIEW - `hud.js` - and it sits
+ * at `height = 5`, five centimetres off the floor, in white. On a 107cm post in
+ * a white room that is an ankle-height white arrow against a white floor.
+ *
+ * A number is also just better for the cases the handle is bad at: square to a
+ * wall, or the same angle as the thing next to it. The handle keeps its 90-degree
+ * snapping; this does not, because typing 45 should give 45.
+ */
+function setRotation(next)
+{
+	var degrees = ((Number(next) % 360) + 360) % 360;
+	props.item.rotation.y = degrees * Math.PI / 180;
+	rotation.value = Math.round(degrees);
+	emit('changed');
+}
+
+/**
+ * A quarter turn, which is what furniture actually does.
+ *
+ * Separate from the field rather than folded into it because they are different
+ * gestures: a quarter turn is the common one and should be one click, and typing
+ * 45 should give 45 rather than snapping. The drag handle in the 3D view snaps to
+ * 90 degrees too (`Item.rotate`), so the button agrees with it.
+ */
+function nudge(degrees)
+{
+	// From the item, not from the field: the handle may have moved it since the
+	// panel last read back, and rounding here keeps repeated clicks landing on
+	// exact quarters rather than drifting off whatever angle a drag left behind.
+	var current = props.item.rotation.y * 180 / Math.PI;
+	setRotation(Math.round((current + degrees) / degrees) * degrees);
 }
 
 function setProportional(next)
@@ -128,6 +175,22 @@ onBeforeUnmount(() => {materials.value = [];});
 		<NumberField
 			label="Depth" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.depth"
 			@update:model-value="resize('depth', $event)" />
+
+		<NumberField
+			v-if="canRotate" label="Rotation" unit="degrees" :min="0" :max="360" :step="15"
+			:model-value="rotation" @update:model-value="setRotation" />
+		<div v-if="canRotate" class="mt-1 flex gap-1.5">
+			<button
+				type="button" class="btn btn-outline flex-1" title="Rotate a quarter turn left"
+				@click="nudge(-90)">
+				<RotateCcw :size="14" /> Left
+			</button>
+			<button
+				type="button" class="btn btn-outline flex-1" title="Rotate a quarter turn right"
+				@click="nudge(90)">
+				<RotateCw :size="14" /> Right
+			</button>
+		</div>
 
 		<CheckField
 			label="Keep proportions" :model-value="flags.proportional"

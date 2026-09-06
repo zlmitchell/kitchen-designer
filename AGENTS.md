@@ -3,6 +3,12 @@
 This covers `tools/` — turning a scaled architectural PDF into an architect3d
 design. For the app itself see `README.md`.
 
+**Working on the app instead?** Read `app/docs/generated-items.md` first. It
+covers how a parametric part is built and — the part that is expensive to
+rediscover — how to test one: which of the two containers to run in and why,
+the two lines that make the model layer run headlessly, how to render the real
+scene without a GPU, and the bookkeeping files that fail late.
+
 Read this before changing anything in `tools/`. Most of it is a record of
 things that were tried and failed, which is the part that is expensive to
 rediscover.
