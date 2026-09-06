@@ -1237,7 +1237,7 @@
 		},
 		{
 			"name": "Post",
-			"image": "models/thumbnails_new/nopreview.png",
+			"image": "models/thumbnails_new/post.png",
 			"model": "generated:post",
 			"type": 1,
 			"format": "generated",

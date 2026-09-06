@@ -1739,6 +1739,11 @@
 			"hash": "sha256-+p70Uh93undIvxUGaGqCZ0hU2cFuGAwSdpVrTvJEMjI=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/post.png": {
+			"bytes": 986,
+			"hash": "sha256-RhI1FSQ5GgYGAC/I2lFIeOJcEXEk2k9792vZvSig/iQ=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/pottedPlant.png": {
 			"bytes": 5876,
 			"hash": "sha256-87JpxMM0TCKpxC9VQSPuD4Ubx8z/8/OGNvOQC69d5po=",
