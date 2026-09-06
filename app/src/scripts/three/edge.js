@@ -14,6 +14,15 @@ import {runtimeOf} from '../core/design_runtime.js';
  */
 const LIGHT_MAP_URL = 'rooms/textures/walllightmap.png';
 
+/**
+ * How far inside the wall's own outline an opening is held, in centimetres.
+ *
+ * A tenth of a millimetre: far below anything visible, and far above the float32
+ * rounding on a geometry bounding box that made every doorway on the traced plan
+ * miss the floor by 3e-6 cm and be thrown away. See `makeWall`.
+ */
+const HOLE_INSET = 0.01;
+
 export class Edge extends EventDispatcher
 {
 	/**
@@ -472,6 +481,33 @@ export class Edge extends EventDispatcher
 		var spoints = [new Vector2(points[0].x, points[0].y),new Vector2(points[1].x, points[1].y),new Vector2(points[2].x, points[2].y),new Vector2(points[3].x, points[3].y)];
 		var shape = new Shape(spoints);
 
+		// The contour's own extent, so a hole can be held strictly inside it.
+		//
+		// `ShapeUtils.triangulateShape` does not CLIP a hole that strays outside
+		// the contour - it discards it, in full and in silence. Measured on a
+		// 100x200 contour: a hole reaching 0.5mm below the bottom edge yields two
+		// triangles and a solid face, where the same hole starting at zero yields
+		// six and a real opening.
+		//
+		// That is a hair-trigger for a doorway, because a doorway's hole is meant
+		// to reach the floor exactly. An item resting on the floor has
+		// `position.y == halfSize.y`, so the hole's bottom is the contour's bottom
+		// - and `halfSize` comes from a **float32** geometry bounding box while
+		// `position.y` comes from a float64 in the save file. On the traced plan
+		// the two disagreed by 3e-6 cm in the wrong direction, and every doorway
+		// in the house came out solid. Nothing warned; the wall simply had no hole.
+		//
+		// So clamp. A tenth of a millimetre of wall left under a door is invisible
+		// and is behind the door frame in any case, where a discarded hole is a
+		// wall you cannot walk through.
+		var contourXs = spoints.map(function (p) {return p.x;});
+		var contourYs = spoints.map(function (p) {return p.y;});
+		var insetX0 = Math.min.apply(null, contourXs) + HOLE_INSET;
+		var insetX1 = Math.max.apply(null, contourXs) - HOLE_INSET;
+		var insetY0 = Math.min.apply(null, contourYs) + HOLE_INSET;
+		var insetY1 = Math.max.apply(null, contourYs) - HOLE_INSET;
+		var clamp = function (value, lo, hi) {return Math.min(Math.max(value, lo), hi);};
+
 		// add holes for each wall item
 		this.wall.items.forEach((item) => {
 			var pos = item.position.clone();
@@ -482,7 +518,19 @@ export class Edge extends EventDispatcher
 			min.add(pos);
 			max.add(pos);
 
-			var holePoints = [new Vector2(min.x, min.y),new Vector2(max.x, min.y),new Vector2(max.x, max.y),new Vector2(min.x, max.y)];
+			var x0 = clamp(min.x, insetX0, insetX1);
+			var x1 = clamp(max.x, insetX0, insetX1);
+			var y0 = clamp(min.y, insetY0, insetY1);
+			var y1 = clamp(max.y, insetY0, insetY1);
+			// An item that misses this wall entirely clamps to a degenerate rect.
+			// Cutting that would leave a zero-area slit in the triangulation, so
+			// skip it - the item is on another wall.
+			if (x1 - x0 < HOLE_INSET || y1 - y0 < HOLE_INSET)
+			{
+				return;
+			}
+
+			var holePoints = [new Vector2(x0, y0),new Vector2(x1, y0),new Vector2(x1, y1),new Vector2(x0, y1)];
 			shape.holes.push(new Path(holePoints));
 		});
 
