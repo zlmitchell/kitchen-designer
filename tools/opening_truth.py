@@ -64,6 +64,10 @@ MIN_OPENING_IN = 12.0
 MAX_OPENING_IN = 96.0
 # How far an opening may sit from its counterpart and still be the same one.
 PLACE_TOL_IN = 6.0
+# How far off a wall's centreline a swing box may sit and still belong to it.
+# A swing reaches a door's width into the room, so its box centre is about half
+# a door away from the wall.
+SWING_ACROSS_IN = 48.0
 
 COLOUR = {
     "window": (0.10, 0.35, 0.95),
@@ -224,6 +228,57 @@ def _within(swing, along, centre, horizontal):
             and abs(across - centre) <= 60.0)
 
 
+def hand(openings, page, clip, scale):
+    """Which end a door is hinged on, and which way it swings.
+
+    Both come off the swing arc's bounding box, and between them they are the
+    door's handing. The box is a square whose side is the door's width, with
+    one corner at the hinge: the corner nearest a jamb says which END the hinge
+    is on, and which side of the wall the box sits on says which way the door
+    opens. Four combinations, which is exactly the four handings a joiner would
+    name.
+
+    Matched one to one, nearest first. A loose match let a single swing be
+    claimed by three different doors -- the one at 16.19-17.94ft was handed to
+    the bath, the pantry and the closet at once -- because three openings sit
+    within a couple of feet of each other there.
+
+    A door with no swing keeps hinge None. That is not a failure: the closet
+    bypass sliders do not swing, and neither does a cased opening.
+    """
+    swings = extract.swing_boxes(
+        extract.diagonals(page, clip, scale, colour=extract.SYMBOLS))
+    doors = [o for o in openings if o["kind"] == "door"]
+    for door in doors:
+        door["hinge"] = None
+        door["swing"] = None
+
+    pairs = []
+    for door in doors:
+        centre = (door["lo"] + door["hi"]) / 2.0
+        for index, box in enumerate(swings):
+            x0, y0, x1, y1 = box
+            along = (x0 + x1) / 2.0 if door["horizontal"] else (y0 + y1) / 2.0
+            across = (y0 + y1) / 2.0 if door["horizontal"] else (x0 + x1) / 2.0
+            if abs(across - door["centre"]) > SWING_ACROSS_IN:
+                continue
+            pairs.append((abs(along - centre), door, index, box))
+
+    taken = set()
+    for gap, door, index, box in sorted(pairs, key=lambda p: p[0]):
+        if index in taken or door["hinge"] is not None:
+            continue
+        if gap > (door["hi"] - door["lo"]):
+            continue
+        taken.add(index)
+        x0, y0, x1, y1 = box
+        lo, hi = (x0, x1) if door["horizontal"] else (y0, y1)
+        across = (y0 + y1) / 2.0 if door["horizontal"] else (x0 + x1) / 2.0
+        door["hinge"] = "lo" if abs(lo - door["lo"]) < abs(hi - door["hi"]) else "hi"
+        door["swing"] = "positive" if across > door["centre"] else "negative"
+    return openings
+
+
 def score(fixture, found):
     """Match by wall line and overlap; report what is missed and invented."""
     used, hits = set(), []
@@ -309,8 +364,9 @@ def main():
     horizontal, vertical, _ = layers.structure(page, clip, args.scale, chosen)
     traced = walls.trace(horizontal, vertical)
     # Symbols first: they carry a kind, and merge() lets a kind beat "unknown".
-    found = merge(find_by_symbol(traced, page, clip, args.scale, chosen),
-                  label(find(traced), page, clip, args.scale))
+    found = hand(merge(find_by_symbol(traced, page, clip, args.scale, chosen),
+                       label(find(traced), page, clip, args.scale)),
+                 page, clip, args.scale)
 
     if args.emit:
         os.makedirs(os.path.dirname(args.fixture) or ".", exist_ok=True)

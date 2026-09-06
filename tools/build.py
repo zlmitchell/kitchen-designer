@@ -291,6 +291,8 @@ def main():
     parser.add_argument("--layer", default=None,
                         help='structure layer, e.g. "#000000,0.5"; default is '
                              'the best-ranked -- see tools/layer_check.py')
+    parser.add_argument("--open-doors", action="store_true",
+                        help="draw a door the plan shows swinging as open")
     parser.add_argument("--underlay", default="underlay.png")
     parser.add_argument("--url-prefix", default="plan/")
     args = parser.parse_args()
@@ -304,9 +306,11 @@ def main():
     if not traced["boxes"]:
         raise SystemExit("traced nothing -- check --clip against the sheet")
 
-    openings = opening_truth.merge(
-        opening_truth.find_by_symbol(traced, page, clip, args.scale, chosen),
-        opening_truth.label(opening_truth.find(traced), page, clip, args.scale))
+    openings = opening_truth.hand(
+        opening_truth.merge(
+            opening_truth.find_by_symbol(traced, page, clip, args.scale, chosen),
+            opening_truth.label(opening_truth.find(traced), page, clip, args.scale)),
+        page, clip, args.scale)
 
     # A box shorter than the weld tolerance cannot become a wall: the app
     # merges its two corners on load and the wall between them vanishes. The
@@ -339,8 +343,9 @@ def main():
     placed = extract.items_for(
         [(o["kind"], (o["lo"] + o["hi"]) / 2.0 if o["horizontal"] else o["centre"],
           o["centre"] if o["horizontal"] else (o["lo"] + o["hi"]) / 2.0,
-          o["width_in"], o["horizontal"], o["thickness"]) for o in openings],
-        ox, oy)
+          o["width_in"], o["horizontal"], o["thickness"],
+          o.get("hinge"), o.get("swing")) for o in openings],
+        ox, oy, open_doors=args.open_doors)
 
     with open(args.out, "w", newline="\n") as handle:
         json.dump(design(corners, walls, args.ceiling, underlay, placed),

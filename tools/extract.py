@@ -314,6 +314,12 @@ WINDOW = {"model": "models/js-glb/whitewindow.glb", "type": 3,
 DOOR = {"model": "models/js-glb/closed-door28x80_baked.glb", "type": 7,
         "name": "Closed Door", "w": 97.1, "h": 221.58, "d": 8.036,
         "height_cm": 203.2, "centre_cm": 101.6}     # 80" tall, on the floor
+# The same door, drawn open. Identical width and height, hinged at its own -x
+# end and swinging toward -z, which is what the handing below is expressed
+# against.
+OPEN_DOOR = {"model": "models/js-glb/open_door.glb", "type": 7,
+             "name": "Open Door", "w": 97.1, "h": 221.58, "d": 7.624,
+             "height_cm": 203.2, "centre_cm": 101.6}
 
 
 def diagonals(page, clip, k, colour=ARCHITECTURE):
@@ -561,7 +567,7 @@ def dedupe_openings(openings):
     return kept
 
 
-def items_for(openings, ox, oy):
+def items_for(openings, ox, oy, open_doors=False):
     """architect3d items. Wall items snap to the nearest wall edge on load, so
     an approximate position along the right wall is enough to orient them."""
     items = []
@@ -571,7 +577,16 @@ def items_for(openings, ox, oy):
         # its native depth, which is what the lattice pipeline always did
         # because every wall it wrote was the same 10cm.
         thickness_cm = opening[5] * CM_PER_INCH if len(opening) > 5 else None
-        spec = WINDOW if kind == "window" else DOOR
+        hinge = opening[6] if len(opening) > 6 else None
+        swing = opening[7] if len(opening) > 7 else None
+        if kind == "window":
+            spec = WINDOW
+        else:
+            # A door the drawing showed swinging is drawn open, because that is
+            # what the drawing says about it and a closed door hides the fact
+            # that the opening leads anywhere. A door with no arc -- a bypass
+            # slider, a cased opening -- has no handing and stays closed.
+            spec = OPEN_DOOR if (open_doors and hinge) else DOOR
         items.append({
             "id": f"{kind}-{index}",
             "item_name": spec["name"],
@@ -581,7 +596,14 @@ def items_for(openings, ox, oy):
             "xpos": round((x - ox) * CM_PER_INCH, 2),
             "ypos": spec["centre_cm"],
             "zpos": round((y - oy) * CM_PER_INCH, 2),
-            "rotation": 0 if horizontal else math.pi / 2,
+            # Handing, as far as one rotation can carry it. Turning the door
+            # through half a circle swaps BOTH which end it is hinged on and
+            # which way it opens, so the two are not independent here: rotation
+            # reaches two of the four handings a joiner would name, and the
+            # other two need the model mirrored. Swing side is the one chosen,
+            # being what tells you which room the door opens into.
+            "rotation": ((0 if horizontal else math.pi / 2)
+                         + (math.pi if swing == "positive" else 0)),
             # Width from the drawing; height from the standard the drawing does
             # not give in plan view. Both are editable in the inspector.
             "scale_x": round(width * CM_PER_INCH / spec["w"], 4),
