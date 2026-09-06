@@ -86,6 +86,9 @@ MIN_STUB_RATIO = 3.0
 # Two stretches are the same wall only if built from the same two face lines,
 # to within this. Snapping moves a face by well under an inch.
 SAME_PAIR_IN = 1.0
+# Centrelines closer than this are the same wall however they were paired.
+# Well under a stud width, so two genuinely different walls cannot collide.
+SAME_LINE_IN = 1.5
 
 
 def merge_runs(runs, join):
@@ -467,7 +470,16 @@ def combine(boxes_in, jambs=None):
             # walls they sit in.
             same_pair = (abs(kept["near"] - box["near"]) <= SAME_PAIR_IN
                          and abs(kept["far"] - box["far"]) <= SAME_PAIR_IN)
-            if gap <= 0 and not same_pair:
+            # Unless the two centrelines all but coincide, in which case they
+            # are one wall that picked up a second pair, not two things sharing
+            # a line. The left wall came out as two boxes half an inch apart --
+            # 6.87in and 9.83in thick, the second having caught a further face
+            # -- and close_corners then honestly snapped the bottom wall to
+            # both, leaving two corners half an inch apart where the plan has
+            # one. The half wall is 2.8in off the middle wall's centreline and
+            # is unaffected.
+            on_one_line = abs(kept["centre"] - box["centre"]) <= SAME_LINE_IN
+            if gap <= 0 and not same_pair and not on_one_line:
                 continue
             if gap > 0:
                 if gap > MAX_OPENING_IN:
@@ -602,8 +614,11 @@ def close_corners(boxes_in):
             for end in ("drawn_lo", "drawn_hi"):
                 if abs(other["centre"] - box[end]) <= reach:
                     box[end] = other["centre"]
-        box["drawn_lo"] = min(box["drawn_lo"], box["drawn_hi"])
-        box["drawn_hi"] = max(box["drawn_lo"], box["drawn_hi"])
+        # Both from the ORIGINAL pair. Assigning drawn_lo first and then
+        # reading it back to compute drawn_hi collapses the box to a point
+        # whenever snapping crossed the two over.
+        low, high = box["drawn_lo"], box["drawn_hi"]
+        box["drawn_lo"], box["drawn_hi"] = min(low, high), max(low, high)
     return boxes_in
 
 
