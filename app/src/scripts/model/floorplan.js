@@ -428,17 +428,33 @@ export class Floorplan extends EventDispatcher
 	 *            generated .d.ts declared it required, so every two-argument
 	 *            call was an error for a typed consumer. That is every real call
 	 *            in this repository.
+	 * @param {number} [elevation] The height of the wall top here, in cm. Given,
+	 *        it also narrows the merge: a corner only fuses with one at the same
+	 *        height, which is what lets a half wall meet a full one.
 	 * @returns {Corner} The new corner.
 	 */
-	newCorner(x, y, id)
+	newCorner(x, y, id, elevation)
 	{
 		var scope = this;
 		var corner = new Corner(this, x, y, id);
-		
+		if (elevation !== undefined && elevation !== null)
+		{
+			corner.elevation = elevation;
+		}
+
 		for (var i=0;i<this.corners.length;i++)
 		{
 				var existingCorner = this.corners[i];
-				if(existingCorner.distanceFromCorner(corner) < cornerTolerance)
+				// Position AND height. A pony wall meeting a full wall shares a point
+				// on the plan and must not share a corner - a wall takes its height
+				// from its two corners, so one corner cannot be both 42in and 96in.
+				// `tools/extract.py` has keyed corners by (x, y, height) since it
+				// first wrote a pony wall out; this is the same rule inside the
+				// editor. Callers that pass no elevation get the old behaviour
+				// exactly, because the corner is born at the configured wall height
+				// and so is everything it might merge with.
+				if(existingCorner.distanceFromCorner(corner) < cornerTolerance
+					&& Math.abs(existingCorner.elevation - corner.elevation) < 0.5)
 				{
 					return existingCorner;
 				}
@@ -854,11 +870,11 @@ export class Floorplan extends EventDispatcher
 		for (var id in floorplan.corners)
 		{
 			var corner = floorplan.corners[id];
-			corners[id] = this.newCorner(toCentimetres(corner.x), toCentimetres(corner.y), id);
-			if(corner.elevation)
-			{
-				corners[id].elevation = toCentimetres(corner.elevation);
-			}
+			// Elevation goes IN rather than being set afterwards, so two corners a
+			// pony wall keeps apart are not fused on the way in and then given
+			// different heights they can no longer have.
+			var elevation = corner.elevation ? toCentimetres(corner.elevation) : undefined;
+			corners[id] = this.newCorner(toCentimetres(corner.x), toCentimetres(corner.y), id, elevation);
 		}
 		var scope = this;
 		// Identity is reconstructed here rather than assigned in the constructor

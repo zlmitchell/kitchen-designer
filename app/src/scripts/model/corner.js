@@ -25,6 +25,30 @@ import {configurationOf, configWallHeight, cornerTolerance} from '../core/config
 /**
  * Corners are used to define Walls.
  */
+/**
+ * Are these two corners at the same height?
+ *
+ * Position alone used to decide whether two corners were the same corner, and
+ * that is wrong wherever a wall changes height. A pony wall meeting a full wall
+ * shares a point on the plan and must NOT share a corner: architect3d takes a
+ * wall's height from its two corners, so one corner cannot be both 42in and 96in.
+ *
+ * `tools/extract.py` has keyed corners by `(x, y, height)` since it first wrote a
+ * pony wall out, for exactly this reason. This is the same rule, inside the
+ * editor, so a half wall survives being dragged as well as being loaded.
+ *
+ * The tolerance is generous because elevations are set in whatever unit the user
+ * picked and converted back; a millimetre of rounding is not a second corner.
+ *
+ * @param {Corner} a
+ * @param {Corner} b
+ * @returns {boolean}
+ */
+function sameElevation(a, b)
+{
+	return Math.abs(a.elevation - b.elevation) < 0.5;
+}
+
 export class Corner extends EventDispatcher
 {
 
@@ -187,11 +211,22 @@ export class Corner extends EventDispatcher
 	set elevation(value)
 	{
 		var oldvalue = this._elevation;
-		if( value - this._elevation < 1e-6)
+		var next = Number(value);
+		// `value - this._elevation < 1e-6` before this, which is a one-way test
+		// wearing a two-way tolerance: true when the corner moves DOWN or stays
+		// put, false when it moves UP. So lowering a corner dispatched and raising
+		// one did not, and nothing redrew - the floorplan turns this event into
+		// `update()` and therefore into the ChangeSet the 3D view rebuilds from.
+		//
+		// The effect was that a wall could be dropped to half height and never
+		// brought back, which is exactly the gesture half walls need to be
+		// reversible. Compared as a magnitude now, so either direction counts and
+		// a no-op still says nothing.
+		if (Math.abs(next - this._elevation) > 1e-6)
 		{
 			this._hasChanged = true;
 		}
-		this._elevation = Number(value);//Dimensioning.cmFromMeasureRaw(Number(value));
+		this._elevation = next;
 		if(this._hasChanged)
 		{
 			this.dispatchEvent({type:EVENT_CORNER_ATTRIBUTES_CHANGED, item:this, info:{from: oldvalue, to: this._elevation}});
@@ -743,7 +778,8 @@ export class Corner extends EventDispatcher
 		for (i = 0; i < this.floorplan.getCorners().length; i++)
 		{
 			var corner = this.floorplan.getCorners()[i];
-			if (this.distanceFromCorner(corner) < cornerTolerance && corner != this)
+			if (this.distanceFromCorner(corner) < cornerTolerance && corner != this
+				&& sameElevation(this, corner))
 			{
 				this.combineWithCorner(corner);
 				return true;

@@ -16,7 +16,7 @@ meshes. Every "no" below comes back to the same two root causes.
 
 | Part | Today | Verdict |
 |---|---|---|
-| Half / pony walls | Wall tops come from **corner `elevation`** (`three/edge.js:461`), which is serialized and editable in `CornerInspector` | **Almost** — three defects, §1 |
+| Half / pony walls | `Wall.setHeight`, and a Full/Half control on the wall panel | **Done** |
 | Window types | One `whitewindow.glb` plus two Kenney wall panels | No |
 | Muntins / grille in the glass | — | No |
 | Window width / height | Mesh `setScale` — stretches the frame along with the glass | No |
@@ -146,10 +146,47 @@ a list of per-frame updaters that honours the existing `pauseRender`, and a
 ceiling fan turns. Nothing else on the list needs it, so keep it to about twenty
 lines and resist building an animation system.
 
-### Phase 1 — half walls
+### Phase 1 — half walls ✅
 
-Cheapest item on the list, and `AGENTS.md` records the cost of not having it:
-the kitchen and great room currently read as **one 385 sqft space**.
+Done. `AGENTS.md` records the cost of not having had it: the kitchen and great
+room read as **one 385 sqft space**, because the wall between them was not there.
+
+What it turned out to need, beyond the obvious:
+
+- **The elevation event fired backwards.** `value - this._elevation < 1e-6` is a
+  one-way test wearing a two-way tolerance — true when a corner moves *down*,
+  false when it moves *up*. The floorplan turns that event into `update()` and so
+  into the ChangeSet the 3D view rebuilds from, so a wall could be dropped to
+  half height and never brought back. Compared as a magnitude now.
+- **Corner identity had to become elevation-aware.** A wall takes its height from
+  its two corners, so one corner cannot be both 42in and 96in — a pony wall
+  meeting a full wall shares a point on the plan and must not share a corner.
+  `newCorner` keys on position *and* height now, which is the rule
+  `extract.py:246` has used since it first wrote a pony wall out.
+- **`Wall.setHeight` splits only the corners it must.** An end that carries
+  nothing else, or whose neighbours are coming along, is simply set; only a
+  junction with something staying tall gains a corner. Verified on the traced
+  plan: the target wall dropped to 106.68cm, its three neighbours stayed at
+  243.84, and the corner count went 28 → 30.
+- **`wall.height` is derived from the corners.** It was a second, unserialized
+  height that drove texture repeat and new-item placement, and it disagreed with
+  the corners the moment anything moved. This one has a visible consequence and
+  is an **intended departure from the r98 parity golden**: that golden's corners
+  are 250/250/310/280 while `wall.height` was the configured 250, so a wall
+  tiled its texture to 310/250 = 1.24 — the image ran 24% past the top of the
+  wall. `geometry-r98.json` cannot be regenerated (the capture tool needs r98 and
+  refuses to run without it), so the departure is asserted in the test instead.
+  It matters beyond tidiness: a half wall's corners are always below the
+  configured default, so every pony wall would have been textured for a wall
+  twice its height.
+
+Still open: the top of a half wall is drawn (commit `01f5fa9` gave every wall a
+top) but in the wall's own colour. A counter-height rail wants a cap in a counter
+material, which is a Phase 2 material question rather than a geometry one. And
+`build.py` still does not trace a pony wall — `--half-wall` remains on the old
+`extract.py`, so the decision is made in the editor.
+
+#### What it was, before
 
 1. Fix `Corner.elevation` (`model/corner.js:190`). The condition is
    `value - this._elevation < 1e-6`, so `_hasChanged` is set when a corner moves

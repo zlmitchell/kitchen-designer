@@ -7,7 +7,7 @@ import {EventDispatcher, Vector2} from 'three';
 import {Bezier} from 'bezier-js';
 import {WallTypes} from '../core/constants.js';
 import {EVENT_ACTION,EVENT_MOVED,EVENT_DELETED} from '../core/events.js';
-import {configurationOf,configWallThickness,configWallHeight} from '../core/configuration.js';
+import {configurationOf,configWallThickness} from '../core/configuration.js';
 import {Utils} from '../core/utils.js';
 
 
@@ -132,8 +132,11 @@ export class Wall extends EventDispatcher
 		/** Wall thickness. */
 		this.thickness = configuration.getNumericValue(configWallThickness);
 
-		/** Wall height. */
-		this.height = configuration.getNumericValue(configWallHeight);
+		// Wall height is DERIVED from the two corners now - see the `height`
+		// getter below. Assigning here would have shadowed the accessor with an own
+		// property on every wall, which is the one way to make a getter silently
+		// stop working. The corners carry the configured default themselves.
+
 
 		/** Actions to be applied after movement. */
 
@@ -403,6 +406,126 @@ export class Wall extends EventDispatcher
 			return this.end.elevation;
 		}
 		return 0.0;
+	}
+
+	/**
+	 * How tall this wall stands, in centimetres.
+	 *
+	 * The two ends can differ - that is what lets a wall slope - so this is the
+	 * taller of them, which is the height the wall reaches.
+	 *
+	 * ## Why this is derived and not stored
+	 *
+	 * `this.height` used to be a field of its own, set once from the configured
+	 * default and never serialized. Meanwhile the 3D view took the wall top from
+	 * the two CORNERS' elevations (`three/edge.js`), which are serialized. So
+	 * there were two heights: a real one that drew the wall and round-tripped, and
+	 * a phantom one that drove the wall's texture repeat and where a new wall item
+	 * was first placed. Drop a wall to half height and the phantom stayed at 250,
+	 * so the texture tiled for a wall twice the size and a window landed above the
+	 * wall it was on.
+	 *
+	 * Deriving it means they cannot disagree. Assignment is deliberately still
+	 * accepted, and sets both corners - some caller somewhere may still write it,
+	 * and silently discarding that would be worse than honouring it.
+	 *
+	 * @type {number}
+	 */
+	get height()
+	{
+		return Math.max(this.startElevation, this.endElevation);
+	}
+
+	set height(value)
+	{
+		this.setHeight(value);
+	}
+
+	/**
+	 * Stand this wall at `height`, splitting its corners off any neighbour that is
+	 * staying where it is.
+	 *
+	 * The splitting is the whole job. A wall takes its height from its corners and
+	 * a corner is shared with everything that meets there, so setting the corners
+	 * directly drops the neighbours too: making the pony wall by the sink 42in
+	 * pulled the end of the full-height wall it runs into down with it. What is
+	 * wanted is a corner each, at the same point, at two different heights - which
+	 * `tools/extract.py` has emitted since it first wrote a pony wall, and which
+	 * `Floorplan.newCorner` now preserves rather than fusing away.
+	 *
+	 * A corner is split only when it has to be: an end that carries nothing else,
+	 * or whose neighbours are all coming along, is simply set. So a run of walls
+	 * lowered together stays one connected run, and only the junction with
+	 * something staying tall gains a corner.
+	 *
+	 * @param {number} height Centimetres.
+	 * @param {Array<Wall>} [along] Other walls being set to the same height in the
+	 *        same gesture. A corner shared only with these needs no split.
+	 * @returns {Wall} this
+	 */
+	setHeight(height, along)
+	{
+		// Built rather than concatenated: `[this].concat(...)` infers `this[]`, and
+		// a Wall is not assignable to a possible subtype of itself.
+		/** @type {Array<Wall>} */
+		var group = [this];
+		(along || []).forEach(function (wall) {group.push(wall);});
+		var scope = this;
+		// A Wall holds no floorplan of its own and reaches one through its start
+		// corner - see the note in the constructor.
+		var floorplan = this.start && this.start.floorplan;
+		if (!floorplan)
+		{
+			return this;
+		}
+
+		floorplan.beginBatch();
+		try
+		{
+			['start', 'end'].forEach(function (which)
+			{
+				var corner = scope[which];
+				if (!corner)
+				{
+					return;
+				}
+
+				// Everything else meeting here that is NOT part of this gesture. If
+				// any of it is staying at a different height, this corner cannot
+				// also be ours.
+				var others = corner.wallStarts.concat(corner.wallEnds)
+					.filter(function (wall) {return group.indexOf(wall) === -1;});
+				var conflicts = others.some(function (wall)
+				{
+					return Math.abs(wall.height - height) > 0.5;
+				});
+
+				if (!conflicts)
+				{
+					corner.elevation = height;
+					return;
+				}
+
+				// A corner of our own at the same point. newCorner keys on position
+				// AND height, so this is a new corner rather than the one we are
+				// standing on.
+				var split = floorplan.newCorner(corner.x, corner.y, undefined, height);
+				if (which === 'start')
+				{
+					scope.setStart(split);
+				}
+				else
+				{
+					scope.setEnd(split);
+				}
+				split.elevation = height;
+			});
+		}
+		finally
+		{
+			floorplan.endBatch();
+		}
+		return this;
 	}
 
 	getStart()
