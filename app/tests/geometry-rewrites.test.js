@@ -420,9 +420,40 @@ describe('Floor', () =>
 		expectMatchesGolden('floor.buildFloor', floor.buildFloor().geometry);
 	});
 
-	it('builds the same varying-height roof fan', () =>
+	// No longer compared against the r98 golden, and deliberately so. That
+	// golden records a triangle FAN from vertex 0, which is correct only for a
+	// convex outline -- across a reflex corner a fan lays triangles outside the
+	// polygon, and on a real floor plan that is a flat wedge hanging across the
+	// room at ceiling height. ("roofs look weird" in floor.js was describing
+	// exactly this.) Matching r98 here would pin the bug.
+	//
+	// What is asserted instead is the property the fan failed: the triangles
+	// tile the polygon and nothing more. Area is the whole test -- a fan that
+	// spills covers more than the outline encloses.
+	it('triangulates the varying-height roof without spilling outside it', () =>
 	{
-		expectMatchesGolden('floor.buildRoofVaryingHeight', floor.buildRoofVaryingHeight().geometry, {checkUv: false});
+		const geometry = floor.buildRoofVaryingHeight().geometry;
+		const index = geometry.getIndex().array;
+		const position = geometry.getAttribute('position').array;
+
+		let covered = 0;
+		for (let i = 0; i < index.length; i += 3)
+		{
+			const [a, b, c] = [index[i], index[i + 1], index[i + 2]];
+			covered += Math.abs(
+				(position[b * 3] - position[a * 3]) * (position[c * 3 + 2] - position[a * 3 + 2])
+				- (position[c * 3] - position[a * 3]) * (position[b * 3 + 2] - position[a * 3 + 2])) / 2;
+		}
+
+		const outline = room.corners;
+		let enclosed = 0;
+		for (let i = 0; i < outline.length; i++)
+		{
+			const p = outline[i];
+			const q = outline[(i + 1) % outline.length];
+			enclosed += p.x * q.y - q.x * p.y;
+		}
+		expect(covered).toBeCloseTo(Math.abs(enclosed) / 2, 3);
 	});
 
 	it('builds the same uniform-height roof', () =>

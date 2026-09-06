@@ -385,7 +385,8 @@ describe('identity round-trips through a save file', () =>
 		file.walls.forEach((wall) =>
 		{
 			expect(Object.keys(wall).sort()).toEqual(
-				['a', 'b', 'backTexture', 'corner1', 'corner2', 'frontTexture', 'wallType']);
+				['a', 'b', 'backTexture', 'corner1', 'corner2', 'frontTexture',
+					'thickness', 'wallType']);
 		});
 	});
 });

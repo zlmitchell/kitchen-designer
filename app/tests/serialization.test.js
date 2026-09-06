@@ -171,11 +171,16 @@ describe('saveFloorplan - top level schema', () =>
 
 describe('saveFloorplan - wall entries', () =>
 {
-	it('writes exactly seven keys per wall, in a fixed order', () =>
+	it('writes exactly eight keys per wall, in a fixed order', () =>
 	{
+		// `thickness` joined the format when the plan extractor began measuring
+		// it per wall. It is per-wall in the model too -- a 2x4 partition and a
+		// 2x6 exterior wall are different thicknesses in one house -- and was
+		// the only such property the file did not carry.
 		const {floorplan} = buildSquareRoom();
 		expect(Object.keys(floorplan.saveFloorplan().walls[0])).toEqual([
-			'corner1', 'corner2', 'frontTexture', 'backTexture', 'wallType', 'a', 'b',
+			'corner1', 'corner2', 'thickness', 'frontTexture', 'backTexture',
+			'wallType', 'a', 'b',
 		]);
 	});
 

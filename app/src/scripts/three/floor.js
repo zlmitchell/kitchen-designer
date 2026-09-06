@@ -1,6 +1,6 @@
 // @ts-check
 import {EventDispatcher, RepeatWrapping, MeshBasicMaterial, MeshPhongMaterial, MeshStandardMaterial, FrontSide, DoubleSide, Vector2, Vector3, Shape, ShapeGeometry, Mesh, SRGBColorSpace} from 'three';
-import {triangleFanGeometry} from '../core/geometry_builders.js';
+import {polygonGeometry} from '../core/geometry_builders.js';
 import {EVENT_CHANGED} from '../core/events.js';
 import {acquireTexture, releaseTexture} from './texture_cache.js';
 import {disposeObject} from '../core/resource_registry.js';
@@ -180,7 +180,7 @@ export class Floor extends EventDispatcher
 		// setup texture
 		var roofMaterial = this.makeRoofMaterial();
 		var points = this.room.corners.map((corner) => new Vector3(corner.x, corner.elevation, corner.y));
-		var geometry = triangleFanGeometry(points);
+		var geometry = polygonGeometry(points);
 		var roof = new Mesh(geometry, roofMaterial);
 		return roof;
 	}

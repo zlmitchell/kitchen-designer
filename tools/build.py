@@ -90,10 +90,19 @@ def bridge_openings(boxes, openings):
                                                                    two["drawn_lo"])
                 if hi <= lo:
                     continue
+                # By how much of the gap the opening COVERS, not by whether it
+                # lines up with it. A wall's face stops short of its own jamb --
+                # the door on the y=10.14ft line starts 3.3in inside a 52.3in
+                # gap -- so requiring the two to coincide within a couple of
+                # inches never fired, the stretch beyond was left unbridged, and
+                # the length filter then dropped it. The door was placed on a
+                # wall that no longer existed, which the traced-plan suite
+                # caught as "Closed Door at (244.44, 297.17) is on no wall
+                # line".
                 spanned = any(
                     o["horizontal"] == one["horizontal"]
                     and abs(o["centre"] - one["centre"]) <= max(one["thickness"], 6.0)
-                    and o["lo"] <= lo + 2.0 and o["hi"] >= hi - 2.0
+                    and min(o["hi"], hi) - max(o["lo"], lo) >= (hi - lo) * 0.6
                     for o in openings)
                 if not spanned:
                     continue

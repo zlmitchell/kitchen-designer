@@ -1,5 +1,5 @@
 // @ts-check
-import {BufferAttribute, BufferGeometry} from 'three';
+import {BufferAttribute, BufferGeometry, ShapeUtils, Vector2} from 'three';
 
 /**
  * The hand-built meshes this app makes, as BufferGeometry.
@@ -53,6 +53,70 @@ export function triangleFanGeometry(points)
 
 	return geometry;
 }
+
+/**
+ * A polygon, triangulated properly, keeping each vertex's own height.
+ *
+ * triangleFanGeometry() fans from vertex 0, which is correct only for a CONVEX
+ * outline. A room in a real floor plan is rarely convex -- the kitchen and
+ * great room on the plan this was written against form one 421 sqft space with
+ * 14 corners, 8 of them reflex -- and a fan across a reflex corner lays
+ * triangles outside the polygon. On screen that is a large flat wedge hanging
+ * across the room at ceiling height, which is what "roofs look weird" in
+ * floor.js was describing.
+ *
+ * Earcut, via ShapeUtils, handles a concave outline. It is given the footprint
+ * in 2D and returns indices into that same vertex list, so the 3D points keep
+ * their individual Y and a ceiling that steps in height still works.
+ *
+ * @param {Array<{x: number, y: number, z: number}>} points outline, in order
+ * @returns {BufferGeometry}
+ */
+export function polygonGeometry(points)
+{
+	var geometry = new BufferGeometry();
+	var positions = new Float32Array(points.length * 3);
+
+	points.forEach(function (point, i)
+	{
+		positions[i * 3] = point.x;
+		positions[i * 3 + 1] = point.y;
+		positions[i * 3 + 2] = point.z;
+	});
+	geometry.setAttribute('position', new BufferAttribute(positions, 3));
+
+	// Triangulated on the FOOTPRINT: x and z, the two axes a plan is drawn in.
+	// Height is the axis being ignored on purpose, so a sloped or stepped
+	// ceiling triangulates the same way a flat one does.
+	var footprint = points.map(function (point)
+	{
+		return new Vector2(point.x, point.z);
+	});
+	var faces = ShapeUtils.triangulateShape(footprint, []);
+
+	var index = [];
+	faces.forEach(function (face)
+	{
+		index.push(face[0], face[1], face[2]);
+	});
+	// A degenerate outline triangulates to nothing. Falling back to the fan
+	// keeps the old behaviour rather than returning an empty mesh.
+	geometry.setIndex(index.length ? index : fanIndex(points.length));
+	geometry.computeVertexNormals();
+	return geometry;
+}
+
+
+function fanIndex(count)
+{
+	var index = [];
+	for (var i = 2; i < count; i++)
+	{
+		index.push(0, i - 1, i);
+	}
+	return index;
+}
+
 
 /**
  * The normal of a geometry's first triangle.
