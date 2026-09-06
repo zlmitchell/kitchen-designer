@@ -44,6 +44,7 @@ export default defineConfig({
 			{text: 'Architecture', link: '/architecture'},
 			{text: 'Reference', items: [
 				{text: 'Save file format', link: '/save-format'},
+				{text: 'Generated items', link: '/generated-items'},
 				{text: 'Events', link: '/events'},
 			]},
 			{text: 'Migration roadmap', link: '/roadmap.html', target: '_blank'},
@@ -61,6 +62,7 @@ export default defineConfig({
 				text: 'Reference',
 				items: [
 					{text: 'Save file format', link: '/save-format'},
+					{text: 'Generated items', link: '/generated-items'},
 					{text: 'Events', link: '/events'},
 				],
 			},

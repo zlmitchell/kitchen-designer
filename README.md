@@ -171,6 +171,21 @@ options (to-ceiling / open gap / soffit / stacked uppers).
 **4. Takeoff and pricing.** BOM out of the model, in stock cabinet nomenclature,
 against more than one cabinet system so layouts can be compared on price.
 
+## Adding parametric parts
+
+Cabinets, windows, sinks and appliances are **generated from a spec**, not placed
+as models -- a model can only be stretched to a size, and stretching a cabinet
+stretches its stiles and its hardware with it.
+
+`app/docs/generated-items.md` is how to build one and how to prove it works. Read
+it before adding any of them: it covers the builder contract, the five rules that
+keep a generated item honest (what belongs in its bounds and what must be a
+child, why plan axes are not item axes, why a hole that leaves the wall is
+discarded rather than clipped), and the four levels of testing including how to
+render the real scene headlessly, since the container has no GPU.
+
+`ROADMAP.md` is what to build and in what order.
+
 ## Notes
 
 Upstream's `classic` render profile draws walls as unlit `MeshBasicMaterial`.
