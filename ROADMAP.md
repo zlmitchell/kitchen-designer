@@ -23,7 +23,7 @@ meshes. Every "no" below comes back to the same two root causes.
 | Floor-to-ceiling windows | `fullHeight` — the item asks its wall how tall it is | **Done** |
 | Door width / height / style | Generated: `width`/`height` in the spec, and `leaf` — flush, two-panel, six-panel, glazed | **Done** |
 | Sliding patio door (glazed) | `operation: sliding` — bypass geometry at door scale, glazed, on a sill track | **Done** |
-| Bypass closet doors | `operation: bypass` — two leaves offset across the wall, clearing half the opening. **The tracer still discards them**; see below | App yes, tracer no |
+| Bypass closet doors | `operation: bypass` — two leaves offset across the wall, clearing half the opening, and `opening_truth.py` now separates one from a window by the leaves' offset | **Done** |
 | Pocket door | `operation: pocket`, and the wall is checked for thickness and run — it can refuse | **Done** |
 | Bifold closet doors | `operation: bifold`, 2 or 4 panels, folding along the head track | **Done** |
 | Barn door | `operation: barn`, as a type 9 `WallFloorItem` on the wall FACE — its track is its bounds | **Done** |

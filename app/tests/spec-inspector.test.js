@@ -13,6 +13,7 @@ import {describe, it, expect, beforeEach} from 'vitest';
 import {mount} from '@vue/test-utils';
 import SpecInspector from '../src/app/inspector/SpecInspector.vue';
 import {resetAll} from './helpers/harness.js';
+import {WINDOW_SCHEMA} from '../src/scripts/items/generated/window.js';
 
 /** A stand-in for a placed generated item, which is all the panel reads. */
 function fakeItem(spec)
@@ -149,5 +150,86 @@ describe('the drawer layouts a cabinet offers', () =>
 	{
 		const {wrapper} = panelFor({kind: 'cabinet', width: 91.44, layout: 'drawer-over-doors'});
 		expect(fieldNamed(wrapper, 'Doors')).toBeTruthy();
+	});
+});
+
+describe('a field that is hidden UNLESS something is true', () =>
+{
+	beforeEach(() => resetAll());
+
+	// `when` cannot tell "set to false" from "not mentioned", and an optional
+	// flag is routinely not mentioned. A window's height and sill were written
+	// `when: {fullHeight: false}` and every catalog window omits the flag, so
+	// `undefined === false` was false and the two size fields the panel exists to
+	// offer never rendered. Nothing failed; the panel just had fewer rows in it.
+
+	it('shows the field when the flag is absent', () =>
+	{
+		const {wrapper} = panelFor({kind: 'window', type: 'double-hung', width: 91.44,
+			height: 152.4, sillHeight: 81.28, wallThickness: 11.43});
+		expect(fieldNamed(wrapper, 'Opening height')).toBeTruthy();
+		expect(fieldNamed(wrapper, 'Sill height')).toBeTruthy();
+	});
+
+	it('shows it when the flag is explicitly false', () =>
+	{
+		const {wrapper} = panelFor({kind: 'window', type: 'double-hung', width: 91.44,
+			height: 152.4, sillHeight: 81.28, wallThickness: 11.43, fullHeight: false});
+		expect(fieldNamed(wrapper, 'Opening height')).toBeTruthy();
+		expect(fieldNamed(wrapper, 'Sill height')).toBeTruthy();
+	});
+
+	it('hides it only when the flag is actually true', () =>
+	{
+		// Floor to ceiling: both numbers belong to the wall, so neither is a choice.
+		const {wrapper} = panelFor({kind: 'window', type: 'fixed', width: 91.44,
+			height: 152.4, sillHeight: 81.28, wallThickness: 11.43, fullHeight: true});
+		expect(fieldNamed(wrapper, 'Opening height')).toBeFalsy();
+		expect(fieldNamed(wrapper, 'Sill height')).toBeFalsy();
+		// The flag's own control stays, or there is no way back.
+		expect(fieldNamed(wrapper, 'Floor to ceiling')).toBeTruthy();
+	});
+});
+
+describe('a window offers the same style controls as a door and a cabinet', () =>
+{
+	beforeEach(() => resetAll());
+
+	it('offers all three sizes, not just the width', () =>
+	{
+		const {wrapper} = panelFor({kind: 'window', type: 'double-hung', width: 91.44,
+			height: 152.4, sillHeight: 81.28, wallThickness: 11.43, fullHeight: false});
+		['Opening width', 'Opening height', 'Sill height'].forEach((label) =>
+		{
+			expect(fieldNamed(wrapper, label), label).toBeTruthy();
+		});
+	});
+
+	it('carries a scope control, because the grille is a style', () =>
+	{
+		// The scope row only appears when a schema has at least one `shared` field,
+		// and no window field had one - so the panel offered no way to put the same
+		// glazing bars in every window, which is the only way anybody would want
+		// them. A house with colonial bars in one window and none in the next is a
+		// mistake, not a design.
+		const {wrapper} = panelFor({kind: 'window', type: 'double-hung', width: 91.44,
+			height: 152.4, wallThickness: 11.43});
+		expect(wrapper.text()).toContain('This room');
+	});
+
+	it('marks the grille and every finish as shared, and the size as not', () =>
+	{
+		const shared = {};
+		WINDOW_SCHEMA.fields.forEach((field) => {shared[field.key] = Boolean(field.shared);});
+		expect(shared['grille.pattern']).toBe(true);
+		expect(shared['material.glass']).toBe(true);
+		expect(shared['material.sash']).toBe(true);
+		expect(shared['material.hardware']).toBe(true);
+		// A size belongs to the opening it was measured from. Only a LOOK travels.
+		expect(shared.width).toBe(false);
+		expect(shared.height).toBe(false);
+		expect(shared.sillHeight).toBe(false);
+		// And what the window IS stays local, the way a door's operation does.
+		expect(shared.type).toBe(false);
 	});
 });

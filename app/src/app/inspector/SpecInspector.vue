@@ -190,27 +190,51 @@ function write(key, next, field)
 }
 
 /**
- * Fields whose `when` is satisfied.
+ * Does the spec satisfy every clause of one condition?
+ *
+ * An array is a set of values the field is relevant for, which is what a
+ * cabinet's `doors` control needs: it belongs to three of the seven face layouts
+ * and to none of the drawer banks. A scalar is the older form and still the
+ * common one.
+ */
+function matches(condition)
+{
+	return Object.keys(condition).every((key) =>
+	{
+		var wanted = condition[key];
+		return Array.isArray(wanted) ? wanted.indexOf(valueAt(key)) !== -1 : valueAt(key) === wanted;
+	});
+}
+
+/**
+ * Fields whose `when` is satisfied and whose `unless` is not.
  *
  * A cased opening has no leaf, so asking which way it swings is noise. Written
  * as data on the field rather than as `v-if` here, so the condition lives beside
  * the option it governs.
+ *
+ * ## Why `unless` exists rather than `when` with the other value
+ *
+ * Because a spec is allowed to LEAVE OUT an optional flag, and `when` cannot
+ * tell "set to false" from "not mentioned". A window's height and sill were
+ * written `when: {fullHeight: false}`, meaning "unless it runs floor to
+ * ceiling" - and every catalog window omits `fullHeight`, so `valueAt` returned
+ * `undefined`, `undefined === false` was false, and the two size fields the
+ * panel exists to offer never rendered at all. The floor-to-ceiling control
+ * itself showed neither of its pills pressed, for the same reason.
+ *
+ * Nothing failed. The panel simply had fewer rows in it than anyone expected,
+ * which is a thing you find by looking at the panel and not by running the
+ * builder's tests.
  */
 const visibleFields = computed(() =>
 {
 	if (!schema.value) {return [];}
 	return schema.value.fields.filter((field) =>
 	{
-		if (!field.when) {return true;}
-		return Object.keys(field.when).every((key) =>
-		{
-			var wanted = field.when[key];
-			// An array is a set of values the field is relevant for, which is what a
-			// cabinet's `doors` control needs: it belongs to three of the seven face
-			// layouts and to none of the drawer banks. A scalar is the older form
-			// and still the common one.
-			return Array.isArray(wanted) ? wanted.indexOf(valueAt(key)) !== -1 : valueAt(key) === wanted;
-		});
+		if (field.when && !matches(field.when)) {return false;}
+		if (field.unless && matches(field.unless)) {return false;}
+		return true;
 	});
 });
 

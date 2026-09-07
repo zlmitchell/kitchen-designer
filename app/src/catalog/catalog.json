@@ -1247,6 +1247,7 @@
 				"width": 91.44,
 				"height": 152.4,
 				"sillHeight": 81.28,
+				"fullHeight": false,
 				"wallThickness": 11.43,
 				"grille": {
 					"pattern": "none",
@@ -1268,6 +1269,7 @@
 				"width": 60.96,
 				"height": 121.92,
 				"sillHeight": 91.44,
+				"fullHeight": false,
 				"wallThickness": 11.43,
 				"hand": "lo",
 				"swing": "negative",
@@ -1291,6 +1293,7 @@
 				"width": 182.88,
 				"height": 121.92,
 				"sillHeight": 76.2,
+				"fullHeight": false,
 				"wallThickness": 11.43,
 				"grille": {
 					"pattern": "prairie",

@@ -220,7 +220,23 @@ export const DOOR_SCHEMA = {
 - `type`: `length` (centimetres in the spec, shown in the user's unit),
   `fraction`, `choice`, `material`.
 - `when`: only show this field when another field has a given value. A cased
-  opening has no leaf, so asking which way it swings is noise.
+  opening has no leaf, so asking which way it swings is noise. A list of values
+  is a set the field is relevant for.
+- `unless`: the negation, and **use it for anything optional**. `when` cannot
+  tell "set to `false`" from "not mentioned", and a spec is allowed to leave an
+  optional flag out. A window's height and sill were written
+  `when: {fullHeight: false}`; every catalog window omits `fullHeight`, so
+  `undefined === false` was false and the two size fields the panel exists to
+  offer never rendered at all. Nothing failed — the panel simply had fewer rows
+  in it than anyone expected, which is found by looking at the panel and not by
+  running the builder's tests.
+- `shared`: this field is a LOOK, so a change to it can travel to the whole room
+  or to everything of its kind. A cabinet's door style, a door's leaf, a window's
+  grille. The scope control (*This one / This room / All*) only appears when a
+  schema has at least one `shared` field, so a schema with none offers no way to
+  put the same glazing bars in every window — which is the only way anybody would
+  want them. A **size** is never shared: it belongs to the opening it was
+  measured from.
 - `readOnly`: show the number, do not offer to set it. A door's wall thickness is
   the *wall's*; a door that disagrees with its wall is a bug, not a choice.
 - `key` may be dotted (`material.leaf`) to reach into a spec block.

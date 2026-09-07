@@ -525,10 +525,13 @@ export const WINDOW_SCHEMA = {
 		{key: 'width', label: 'Opening width', type: 'length', min: 30, max: 400, step: 1},
 		// Both are the wall's when the window runs floor to ceiling, so neither is
 		// a choice then.
+		// `unless`, not `when: {fullHeight: false}`. A spec is allowed to leave the
+		// flag out - every catalog window does - and `when` cannot tell "false"
+		// from "not mentioned", so both of these silently vanished from the panel.
 		{key: 'height', label: 'Opening height', type: 'length', min: 30, max: 300, step: 1,
-			when: {fullHeight: false}},
+			unless: {fullHeight: true}},
 		{key: 'sillHeight', label: 'Sill height', type: 'length', min: 0, max: 250, step: 1,
-			when: {fullHeight: false}},
+			unless: {fullHeight: true}},
 		{key: 'fullHeight', label: 'Floor to ceiling', type: 'choice', options: [
 			{value: false, label: 'No'},
 			{value: true, label: 'Yes'},
@@ -536,7 +539,13 @@ export const WINDOW_SCHEMA = {
 		// Not editable: it is the wall's, and a window that disagrees with its wall
 		// is a bug rather than a choice. Shown so the number is visible.
 		{key: 'wallThickness', label: 'Wall thickness', type: 'length', readOnly: true},
-		{key: 'grille.pattern', label: 'Grille', type: 'choice', options: [
+		// `shared`, like a cabinet's door style and a door's leaf. The grille IS a
+		// window's style - it is the thing you would change across a whole
+		// elevation and never on one window alone - and without the flag the panel
+		// showed no scope control at all, because it only appears when a schema has
+		// at least one shared field. A house with colonial glazing bars in one
+		// window and none in the next is a mistake, not a design.
+		{key: 'grille.pattern', label: 'Grille', type: 'choice', shared: true, options: [
 			{value: 'none', label: 'None'},
 			{value: 'colonial', label: 'Colonial'},
 			{value: 'prairie', label: 'Prairie'},
@@ -544,10 +553,10 @@ export const WINDOW_SCHEMA = {
 		]},
 		// Prairie is a border and craftsman divides only its top light, so neither
 		// has a row or column count to set.
-		{key: 'grille.rows', label: 'Lights high', type: 'fraction', min: 1, max: 6, step: 1,
-			when: {'grille.pattern': 'colonial'}},
-		{key: 'grille.cols', label: 'Lights wide', type: 'fraction', min: 1, max: 6, step: 1,
-			when: {'grille.pattern': 'colonial'}},
+		{key: 'grille.rows', label: 'Lights high', type: 'fraction', shared: true,
+			min: 1, max: 6, step: 1, when: {'grille.pattern': 'colonial'}},
+		{key: 'grille.cols', label: 'Lights wide', type: 'fraction', shared: true,
+			min: 1, max: 6, step: 1, when: {'grille.pattern': 'colonial'}},
 		{key: 'hand', label: 'Hinged at', type: 'choice', when: {type: 'casement'}, options: [
 			{value: 'lo', label: 'Start of wall'},
 			{value: 'hi', label: 'End of wall'},
@@ -557,11 +566,12 @@ export const WINDOW_SCHEMA = {
 			{value: 'positive', label: 'The other'},
 		]},
 		{key: 'openFraction', label: 'How far open', type: 'fraction', min: 0, max: 1, step: 0.05},
-		{key: 'material.glass', label: 'Glazing', type: 'material', group: 'glass'},
-		{key: 'material.sash', label: 'Sash', type: 'material'},
-		{key: 'material.frame', label: 'Frame', type: 'material'},
-		{key: 'material.casing', label: 'Casing', type: 'material'},
-		{key: 'material.hardware', label: 'Hardware', type: 'material', group: 'metal'},
+		// Finishes travel too, for the same reason they do on a door.
+		{key: 'material.glass', label: 'Glazing', type: 'material', shared: true, group: 'glass'},
+		{key: 'material.sash', label: 'Sash', type: 'material', shared: true},
+		{key: 'material.frame', label: 'Frame', type: 'material', shared: true},
+		{key: 'material.casing', label: 'Casing', type: 'material', shared: true},
+		{key: 'material.hardware', label: 'Hardware', type: 'material', shared: true, group: 'metal'},
 	],
 };
 

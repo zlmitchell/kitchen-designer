@@ -777,6 +777,10 @@ def window_item(index, kind, x, y, width, horizontal, thickness_cm, ox, oy):
         "width": round(width * CM_PER_INCH, 2),
         "height": height_cm,
         "sillHeight": sill_cm,
+        # Stated rather than left out. The panel's floor-to-ceiling control is a
+        # Yes/No pair, and an absent flag matches neither - it renders with
+        # nothing selected.
+        "fullHeight": False,
         "wallThickness": round(thickness_cm, 2) if thickness_cm else 11.43,
         "grille": {"pattern": "none", "rows": 2, "cols": 2},
         "openFraction": 0,
