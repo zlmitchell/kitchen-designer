@@ -6,6 +6,7 @@ import {buildCabinet, CABINET_SCHEMA} from './cabinet.js';
 import {buildCounter, COUNTER_SCHEMA} from './counter.js';
 import {buildSink, SINK_SCHEMA} from './sink.js';
 import {buildAppliance, APPLIANCE_SCHEMA} from './appliance.js';
+import {buildFixture, FIXTURE_ITEM_SCHEMA} from './fixture.js';
 
 /**
  * Items whose geometry is generated from a spec instead of fetched.
@@ -68,6 +69,7 @@ export const GENERATED_BUILDERS = {
 	counter: buildCounter,
 	sink: buildSink,
 	appliance: buildAppliance,
+	fixture: buildFixture,
 };
 
 /**
@@ -92,6 +94,7 @@ export const GENERATED_SCHEMAS = {
 	counter: COUNTER_SCHEMA,
 	sink: SINK_SCHEMA,
 	appliance: APPLIANCE_SCHEMA,
+	fixture: FIXTURE_ITEM_SCHEMA,
 };
 
 /**

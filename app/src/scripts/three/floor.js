@@ -182,7 +182,38 @@ export class Floor extends EventDispatcher
 		var points = this.room.corners.map((corner) => new Vector3(corner.x, corner.elevation, corner.y));
 		var geometry = polygonGeometry(points);
 		var roof = new Mesh(geometry, roofMaterial);
+		// Off by default, and switched on only under daylight. See `setSkyOpen`.
+		roof.castShadow = false;
 		return roof;
+	}
+
+	/**
+	 * Whether the ceiling stops light from above.
+	 *
+	 * It has never cast a shadow, and under the fixed studio key it must not: that
+	 * key is parked ABOVE the room by design - `Lights.updateShadowCamera` puts it
+	 * at `keyHeight` over the plan - because an overhead light is the cheapest way
+	 * to make every room legible. A ceiling that blocked it would black out the
+	 * whole house, and the parity grid would show every studio frame changing.
+	 *
+	 * Under daylight it must. The sun is a real direction from outside, and with
+	 * the ceiling open it rains straight down into every room - measured on the
+	 * traced plan, 498 of 875 floor samples saw the sun through a solid roof, and
+	 * a window opening made no difference to any of them. That reads as "daylight
+	 * does nothing" rather than as "the ceiling is missing", which is why it took
+	 * a raycast to find rather than a render.
+	 *
+	 * So it is a mode, not a property: the ceiling is opaque exactly when the
+	 * light is supposed to be coming in through the walls.
+	 *
+	 * @param {boolean} open Whether light may come through the ceiling.
+	 */
+	setSkyOpen(open)
+	{
+		if (this.roofPlane)
+		{
+			this.roofPlane.castShadow = !open;
+		}
 	}
 
 

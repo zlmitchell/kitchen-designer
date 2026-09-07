@@ -56,6 +56,23 @@ SINK_DEPTH = 24.1
 # over becomes a filler rather than a cabinet of impossible width.
 STOCK_WIDTHS_IN = [36, 33, 30, 27, 24, 21, 18, 15, 12, 9]
 
+# Ceiling cans over the run.
+#
+# How far OUT from the wall face they sit is the number that matters, and it is
+# not "over the middle of the counter". A can directly above the worktop is
+# behind whoever is standing at it, so the person casts a shadow on their own
+# work. The trade puts them over the FRONT edge of the counter or a little
+# beyond, which lights the work surface past the body -- about 60cm out from a
+# 61cm cabinet.
+CAN_OFFSET = 60.0
+# Roughly a can every 4ft along the run. Closer than the spacing rule of thumb
+# (half the ceiling height) because a kitchen is a work surface, not a lounge.
+CAN_SPACING = 110.0
+# How far the fitting sits below the ceiling plane. A can whose position IS the
+# ceiling is a light source inside the ceiling slab, and the slab is what it
+# lights.
+CAN_DROP = 6.0
+
 
 def item(name, kind_url, item_type, x, y, z, rotation, spec):
     return {
@@ -122,6 +139,8 @@ def main():
                          "ceiling. `gap` is what stock cabinets leave and "
                          "nobody wants; the other three are the ways of not "
                          "having it")
+    ap.add_argument("--no-lights", action="store_true",
+                    help="skip the ceiling cans over the run")
     ap.add_argument("--list", action="store_true", help="print the walls and stop")
     args = ap.parse_args()
 
@@ -333,6 +352,41 @@ def main():
                      "width": SINK_WIDTH - 4, "depth": SINK_FRONT_TO_BACK - 4}],
         "material": {"counter": "stone-quartz-white", "splash": "stone-quartz-white"},
     }))
+
+    # Ceiling cans over the run.
+    #
+    # Placed as ITEMS, not as entries in the document's top-level `lights` block.
+    # A bare `lights` entry is a position and a temperature with no geometry, so
+    # it lights the room and cannot be seen, clicked or edited - it works and is
+    # invisible to the interface, which is worse than not working. A
+    # `generated:fixture` item is a real object: selected, dragged, duplicated and
+    # inspected by machinery that already exists, and it carries its own light
+    # because for a light fitting the spec IS the fixture. See
+    # `app/src/scripts/items/generated/fixture.js`.
+    #
+    # Type 4 is `RoofItem`, which snaps itself to the ceiling plane - so the
+    # height below is what it wants rather than what it must be given.
+    #
+    # The plan's own axes again, so the row follows the wall rather than the world:
+    # `place` is what maps (along, across) to (x, y, z), and it already knows
+    # which way this wall runs.
+    if not args.no_lights:
+        run_start = along_lo
+        run_length = sum(widths)
+        count = max(2, int(round(run_length / CAN_SPACING)))
+        can_across = face + inward * CAN_OFFSET
+        for i in range(count):
+            # Centres of `count` equal shares, so the end cans are half a space in
+            # from the ends of the run rather than sitting on them.
+            along = run_start + run_length * (i + 0.5) / count
+            x, y, z = place(along, can_across, ceiling - CAN_DROP)
+            items.append(item(f"Recessed Can", "generated:fixture", 4, x, y, z, 0.0, {
+                "kind": "fixture", "mount": "recessed", "throw": "down",
+                "kelvin": 3000, "lumens": 800, "beamAngle": 60, "on": True,
+                "diameter": 10.16, "castShadow": True,
+            }))
+        print(f"  lights: {count} cans at {ceiling - CAN_DROP:.0f}cm, "
+              f"{CAN_OFFSET:.0f}cm out from the wall face")
 
     # Undermount, so its rim is at the slab's underside and the cut edge shows.
     sink_height = SINK_DEPTH + 0.3

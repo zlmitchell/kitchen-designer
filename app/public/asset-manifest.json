@@ -1739,6 +1739,21 @@
 			"hash": "sha256-yeHBCj2u/brnp67zgmXh/bxhTWZ+1bQOd5iE8iPuUVw=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/light-can.png": {
+			"bytes": 3090,
+			"hash": "sha256-mkRFgFqGVQ60Z45MI4EXk+WvoB8cINSfC3h41gzoHhg=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/light-pendant.png": {
+			"bytes": 2007,
+			"hash": "sha256-ds70mDYLUWeFZTtZxSQL1KuOPMLvBvkVR9QSdrsSmsk=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/light-surface.png": {
+			"bytes": 3397,
+			"hash": "sha256-dzL9lnMzDx0RxM1uRcFwGFIoyvejdbsCSWVBtXOeDOc=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/loungeChair.png": {
 			"bytes": 5359,
 			"hash": "sha256-WGGb6opoLLlsn5jWmbWdDi9hkQ85V0M1QoJJvURxC/o=",

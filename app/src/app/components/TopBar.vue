@@ -7,6 +7,7 @@ import {
 } from '@lucide/vue';
 
 import AppTip from './AppTip.vue';
+import LightingMenu from './LightingMenu.vue';
 import {LAYOUTS} from '../composables/useLayout.js';
 import {THEME_DARK} from '../composables/useTheme.js';
 
@@ -51,6 +52,23 @@ const props = defineProps({
 	canRedo: {type: Boolean, default: false},
 	exporting: {type: Boolean, default: false},
 	inspectorOpen: {type: Boolean, default: true},
+	lighting: {
+		/**
+		 * The scene's lighting controls, passed straight through to `LightingMenu`.
+		 *
+		 * One object rather than six props, because they are one control panel and
+		 * TopBar does nothing with them but hand them on - six names here would
+		 * mean nothing to this file.
+		 *
+		 * The annotation goes on `type`, not on the prop object: a bare
+		 * `type: Object` infers `object`, and every property read off it in the
+		 * template is then an error. Same shape as `units` above.
+		 *
+		 * @type {import('vue').PropType<?Record<string, *>>}
+		 */
+		type: Object,
+		default: null,
+	},
 	savedAt: {
 		/**
 		 * `type: X` with `default: null` still infers `X | undefined` - the default
@@ -68,6 +86,7 @@ const emit = defineEmits([
 	'new-design', 'open-design', 'import-drawing', 'save-design', 'save-mesh',
 	'save-gltf', 'undo', 'redo', 'set-layout', 'set-unit', 'toggle-theme',
 	'toggle-inspector', 'show-shortcuts',
+	'set-ambient', 'set-daylight', 'set-hour', 'set-heading', 'set-exposure', 'reset-lighting',
 ]);
 
 function onFile(event)
@@ -210,6 +229,24 @@ function onUnitChange(event)
 				:value="props.unit" @change="onUnitChange">
 				<option v-for="entry in props.units" :key="entry.value" :value="entry.value">{{ entry.label }}</option>
 			</select>
+
+			<LightingMenu
+				v-if="props.lighting"
+				:ambient="props.lighting.ambient"
+				:daylight="props.lighting.daylight"
+				:hour="props.lighting.hour"
+				:heading="props.lighting.heading"
+				:exposure="props.lighting.exposure"
+				:clock="props.lighting.clock"
+				:dark="props.lighting.dark"
+				:studio="props.lighting.studio"
+				:times="props.lighting.times"
+				@set-ambient="emit('set-ambient', $event)"
+				@set-daylight="emit('set-daylight', $event)"
+				@set-hour="emit('set-hour', $event)"
+				@set-heading="emit('set-heading', $event)"
+				@set-exposure="emit('set-exposure', $event)"
+				@reset="emit('reset-lighting')" />
 
 			<AppTip :label="props.theme === THEME_DARK ? 'Light theme' : 'Dark theme'">
 				<button type="button" class="btn btn-icon" title="Toggle theme" @click="emit('toggle-theme')">

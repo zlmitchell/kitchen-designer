@@ -2,6 +2,8 @@
 import {EventDispatcher, HemisphereLight, DirectionalLight, Vector3} from 'three';
 import {EVENT_UPDATED} from '../core/events.js';
 import {renderProfile, isStudio} from '../core/render_profile.js';
+import {sunAt} from '../core/daylight.js';
+import {kelvinToColor} from '../core/color_temperature.js';
 
 export class Lights extends EventDispatcher
 {
@@ -33,6 +35,35 @@ export class Lights extends EventDispatcher
 		 * relationship rather than repeating a number.
 		 */
 		this.height = 300;
+		/**
+		 * How much of the ambient fill to keep, 0..1.
+		 *
+		 * A control rather than a constant because it is what decides whether a
+		 * PLACED fixture is worth anything. The studio globals put a white floor at
+		 * or over 1.0 before a single lamp is switched on, so a 4in can adds a lift
+		 * you have to look for; turned down, the same can is the light in the room.
+		 * That is the whole payoff of phase 6 and it was hidden behind this number.
+		 *
+		 * Reaches the hemisphere and the fill, not the key: the key is the sun, and
+		 * "no ambient" means no bounce, not no sun.
+		 */
+		this.ambient = 1;
+		/**
+		 * The sun, or null for the fixed studio key.
+		 *
+		 * `{hour, heading}`. Null is the default and reproduces exactly what this
+		 * class did before daylight existed, which is what keeps the parity grid
+		 * meaningful - a profile switch and a golden capture must not depend on
+		 * what time somebody left a slider at.
+		 *
+		 * @type {?{hour: number, heading: number}}
+		 */
+		this.daylight = null;
+		// What `init()` built, so `applyMood` can scale rather than accumulate.
+		// Re-read on every init because a profile switch changes all three.
+		this._baseHemisphere = 0;
+		this._baseFill = 0;
+		this._baseKey = 0;
 		/** @type {?import('three').HemisphereLight} */
 		this.hemiLight = null;
 		/** @type {?import('three').DirectionalLight} */
@@ -114,6 +145,7 @@ export class Lights extends EventDispatcher
 		light.position.set(0, this.height, 0);
 		this.hemiLight = light;
 		this.scene.add(light);
+		this._baseHemisphere = light.intensity;
 
 		this.dirLight = new DirectionalLight(0xffffff, this.renderProfile.keyIntensity * Math.PI);
 		// setHSL(1, 1, 0.1) is a fully saturated red at 10% lightness - hue 1 wraps
@@ -164,10 +196,102 @@ export class Lights extends EventDispatcher
 			this.fillLight.position.set(-0.6, 0.5, -0.8);
 			this.fillLight.castShadow = false;
 			this.scene.add(this.fillLight);
+			this._baseFill = this.fillLight.intensity;
 		}
+		this._baseKey = this.dirLight.intensity;
 
 		this.floorplan.addEventListener(EVENT_UPDATED, this.updatedroomsevent);
+		// Whatever the controls were left at, applied to the lights just built.
+		// `init()` runs again on a profile switch, so re-applying here is what
+		// stops a switch quietly restoring full daylight-off ambient.
+		this.applyMood();
 
+	}
+
+	/**
+	 * How much ambient fill to keep, 0..1.
+	 *
+	 * @param {number} level
+	 */
+	setAmbient(level)
+	{
+		this.ambient = Math.max(0, Math.min(1, Number(level) || 0));
+		this.applyMood();
+	}
+
+	/**
+	 * Light the room from the sun instead of from the fixed studio key.
+	 *
+	 * @param {?{hour: number, heading?: number}} state Null for the fixed key.
+	 */
+	setDaylight(state)
+	{
+		this.daylight = state ? {
+			hour: Number(state.hour) || 0,
+			heading: Number(state.heading) || 0,
+		} : null;
+		this.applyMood();
+		// The key has moved, so the frustum it casts through has to be rebuilt
+		// around the new direction - which is the whole of `updateShadowCamera`.
+		this.updateShadowCamera();
+	}
+
+	/**
+	 * Push `ambient` and `daylight` onto the three lights.
+	 *
+	 * One place, called from `init` as well as from the two setters, because a
+	 * profile switch throws the lights away and builds new ones - and a control
+	 * the user has moved must survive that.
+	 *
+	 * Everything here is a no-op at the defaults (`ambient: 1`, `daylight: null`),
+	 * which is what keeps the parity grid measuring the same scene it always did.
+	 */
+	applyMood()
+	{
+		var sun = this.daylight ? sunAt(this.daylight.hour, this.daylight.heading) : null;
+
+		if (this.hemiLight)
+		{
+			// Under daylight the sky term is the sky: bright at noon, and a floor
+			// rather than nothing at night, because a black room has told nobody
+			// anything. The ambient control scales whatever that comes to.
+			var sky = sun ? sun.sky : 1;
+			this.hemiLight.intensity = this._baseHemisphere * this.ambient * sky;
+		}
+		if (this.fillLight)
+		{
+			this.fillLight.intensity = this._baseFill * this.ambient * (sun ? sun.sky : 1);
+		}
+		if (!this.dirLight)
+		{
+			return;
+		}
+
+		if (!sun)
+		{
+			this.dirLight.intensity = this._baseKey;
+			if (isStudio(this.renderProfile))
+			{
+				this.dirLight.color.setHex(0xffffff);
+			}
+			return;
+		}
+
+		// The key IS the sun now: its colour is the sun's temperature and its
+		// strength is the sine of the altitude, so dusk is dim AND orange from one
+		// number rather than two that have to be kept in step.
+		//
+		// Classic keeps its own broken red key (see `init`) - it is load-bearing
+		// for the parity grid - so the colour is only touched under studio.
+		if (isStudio(this.renderProfile))
+		{
+			kelvinToColor(sun.kelvin, this.dirLight.color);
+		}
+		// Below the horizon it is off entirely. A directional light at a negative
+		// altitude comes up through the floor and lights every ceiling in the
+		// house, which reads as a bug rather than as night.
+		this.dirLight.intensity = this._baseKey * sun.intensity;
+		this.dirLight.visible = sun.intensity > 0.001;
 	}
 
 	updateShadowCamera()
@@ -202,6 +326,29 @@ export class Lights extends EventDispatcher
 		var offset = d * this.renderProfile.keyOffset;
 		var pos = new Vector3(center.x + offset, height, center.z + offset * 0.8);
 
+		// Under daylight the direction is the sun's, and it is the direction that
+		// makes a window mean anything: the wall meshes already cast and receive
+		// shadows under studio (`edge.js`), and a window's opening is a real hole
+		// in that geometry, so a low sun throws a real patch across the floor with
+		// no new code. A light directly overhead - which is what classic parks
+		// here - puts that patch on the sill and nowhere else.
+		//
+		// Far enough out that the whole plan is between the light and its target,
+		// or the near plane clips the wall the light is coming through.
+		if (this.daylight)
+		{
+			var sun = sunAt(this.daylight.hour, this.daylight.heading);
+			var reach = (d * 2) + this.height;
+			// A sun on the horizon is a direction with almost no y in it, and a
+			// shadow camera looking along the ground plane resolves nothing. Held
+			// a few degrees up so dusk still casts something.
+			var lift = Math.max(sun.direction.y, 0.12);
+			pos.set(
+				center.x + sun.direction.x * reach,
+				center.y + lift * reach,
+				center.z + sun.direction.z * reach);
+		}
+
 		this.dirLight.position.copy(pos);
 		this.dirLight.target.position.copy(center);
 
@@ -216,7 +363,14 @@ export class Lights extends EventDispatcher
 		// light being overhead and slightly off-centre - falls outside the map and
 		// is clipped to a straight edge along the boundary. A quarter more room
 		// costs nothing but map resolution, and there is twice as much of that now.
+		// A low sun throws a long shadow, and a frustum sized for an overhead key
+		// clips it to a straight line across the floor - which reads as a wall that
+		// is not there. Twice the room at dusk, and it costs only map resolution.
 		var pad = isStudio(this.renderProfile) ? 1.25 : 1.0;
+		if (this.daylight)
+		{
+			pad = 2.0;
+		}
 		this.dirLight.shadow.camera.left = -d * pad;
 		this.dirLight.shadow.camera.right = d * pad;
 		this.dirLight.shadow.camera.top = d * pad;

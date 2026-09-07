@@ -108,6 +108,21 @@ export class DesignDocument
 		this.floorplan = data.floorplan;
 		/** The item records, as the file carried them. */
 		this.items = data.items;
+		/**
+		 * The top-level fixture records, or an empty list.
+		 *
+		 * Optional, so no file written before phase 6 changes shape and no reader
+		 * of an older one has to know about it - the same contract `spec` and
+		 * `material_colors` have per item. A light is not a mesh and is
+		 * deliberately not dragged through the item list to pretend it is:
+		 * `items` is things the GLB loader can open, and a fixture is a position
+		 * and a temperature.
+		 *
+		 * A fixture carried by a placed object is NOT here. It lives on that
+		 * item, in the item's own frame - see `model/light.js` for why that is the
+		 * load-bearing half of the decision.
+		 */
+		this.lights = Array.isArray(data.lights) ? data.lights : [];
 		/** The `version` stamp, or null on a pre-2.0.0 file. */
 		this.version = (typeof data.floorplan.version === 'string') ? data.floorplan.version : null;
 		/**
@@ -126,6 +141,7 @@ export class DesignDocument
 			corners: Object.keys(this.floorplan.corners).length,
 			walls: this.floorplan.walls.length,
 			items: this.items.length,
+			lights: this.lights.length,
 			version: this.version,
 			units: this.units,
 		};
@@ -179,6 +195,7 @@ export class DesignDocument
 
 		validateFloorplan(data.floorplan, errors, warnings);
 		validateItems(data.items, errors);
+		validateLights(data.lights, errors);
 
 		if (errors.length)
 		{
@@ -316,5 +333,38 @@ function validateItems(items, errors)
 				errors.push({path: `items[${index}].${axis}`, message: `must be a finite number, not ${JSON.stringify(item[axis])}`});
 			}
 		});
+	});
+}
+
+/**
+ * The top-level `lights` block, which a file need not carry at all.
+ *
+ * Deliberately shallow. `normaliseFixture` fills in and clamps every field, and
+ * tolerates an unknown mount rather than refusing the file - a design outlives
+ * the build that wrote it, and a light in roughly the right place beats an
+ * unopenable document. So the only things worth failing on are the ones that
+ * would make the block unreadable rather than merely odd: it must be a list, and
+ * each entry must be an object.
+ *
+ * @param {*} lights
+ * @param {Array<DocumentProblem>} errors
+ */
+function validateLights(lights, errors)
+{
+	if (lights === undefined || lights === null)
+	{
+		return;
+	}
+	if (!Array.isArray(lights))
+	{
+		errors.push({path: 'lights', message: 'must be an array of fixtures when present'});
+		return;
+	}
+	lights.forEach(function (light, index)
+	{
+		if (!isPlainObject(light))
+		{
+			errors.push({path: `lights[${index}]`, message: 'is not an object'});
+		}
 	});
 }

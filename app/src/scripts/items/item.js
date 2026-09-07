@@ -1312,6 +1312,16 @@ export class Item extends Mesh
 			data.spec = this.metadata.spec;
 		}
 
+		// A fixture this object carries - a fan's light kit, an in-cabinet puck, a
+		// range hood's work light. Sparse and optional like `spec` above, and in
+		// the item rather than in the document's top-level `lights` because its
+		// position is in THIS item's frame: moving the object moves its light, and
+		// nothing has to keep two positions in step. See `model/light.js`.
+		if(this.metadata.fixtures && this.metadata.fixtures.length)
+		{
+			data.fixtures = this.metadata.fixtures;
+		}
+
 		if(matattribs)
 		{
 			data.material_colors = matattribs;

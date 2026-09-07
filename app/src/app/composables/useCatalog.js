@@ -110,6 +110,18 @@ export function useCatalog(store, placementContext)
 			metadata.spec = JSON.parse(JSON.stringify(entry.spec));
 		}
 
+		// A lamp carries its own light. Copied for the same reason as the spec, and
+		// more sharply: two sconces from one catalog row would otherwise share one
+		// fixture record, so switching one off would switch off the other.
+		//
+		// This is what closes the audit's "placement yes, light no" rows -
+		// `Lampwall`, `Chandelier` and the rest have always placed correctly and
+		// emitted nothing, because there was nowhere for a lumen to live.
+		if (entry.fixtures)
+		{
+			metadata.fixtures = JSON.parse(JSON.stringify(entry.fixtures));
+		}
+
 		if (WALL_BOUND_TYPES.indexOf(entry.type) !== -1 && context.wall)
 		{
 			scene.addItem(entry.type, entry.model, metadata, null, null, null, false,

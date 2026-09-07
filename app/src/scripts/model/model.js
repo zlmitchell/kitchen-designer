@@ -76,6 +76,21 @@ export class Model extends EventDispatcher
 		// the way of the answer to "which runtime is this document on".
 		this.floorplan = new Floorplan(runtime);
 		this.scene = new Scene(this, textureDir);
+		/**
+		 * The design's top-level light fixtures, as records.
+		 *
+		 * Not meshes and not in `scene.items`: a fixture is a position, a
+		 * temperature and an output, and dragging it through the GLB loader to
+		 * pretend it is an object would mean inventing a model file for something
+		 * that has no geometry. `three/fixtures.js` turns these into emitters.
+		 *
+		 * A fixture carried BY a placed object - a fan's light kit, an in-cabinet
+		 * puck - is not here. It lives on that item's metadata in the item's own
+		 * frame, so the item's transform moves it. See `model/light.js`.
+		 *
+		 * @type {Array<Object>}
+		 */
+		this.lights = [];
 	}
 
 	/** This design's services (RM-003 A4). @returns {import('../core/design_runtime.js').DesignRuntime} */
@@ -185,6 +200,9 @@ export class Model extends EventDispatcher
 		this.scene.loadSession.begin();
 		this.scene.abortPendingLoads();
 
+		// Before `newRoom`, so anything rebuilding off the load sees the fixtures
+		// this document carries rather than the previous document's.
+		this.lights = result.document.lights;
 		this.newRoom(result.document.floorplan, result.document.items, options && options.reason);
 
 		this.dispatchEvent({type: EVENT_LOADED, item: this});
@@ -264,6 +282,13 @@ export class Model extends EventDispatcher
 			.sort(function (a, b) {return String(a.id).localeCompare(String(b.id));});
 
 		var room = {floorplan: (this.floorplan.saveFloorplan()),items: items_arr};
+		// Absent when there are none, so a design with no fixtures is byte for byte
+		// the file it was before phase 6 - which matters because `useHistory`
+		// decides whether anything changed by comparing this string to the last.
+		if (this.lights && this.lights.length)
+		{
+			room.lights = this.lights;
+		}
 		return JSON.stringify(room);
 	}
 
@@ -414,7 +439,7 @@ export class Model extends EventDispatcher
 				return;
 			}
 			var matColors = (item.material_colors) ? item.material_colors : [];
-			var metadata = {itemName: item.item_name,resizable: item.resizable,format: item.format, itemType: item.item_type, modelUrl: item.model_url, materialColors: matColors, designId: item.id, spec: item.spec};
+			var metadata = {itemName: item.item_name,resizable: item.resizable,format: item.format, itemType: item.item_type, modelUrl: item.model_url, materialColors: matColors, designId: item.id, spec: item.spec, fixtures: item.fixtures};
 			this.scene.addItem(item.item_type,item.model_url,metadata,position,item.rotation,scale,item.fixed);
 		});
 	}

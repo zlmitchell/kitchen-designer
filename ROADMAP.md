@@ -28,11 +28,11 @@ meshes. Every "no" below comes back to the same two root causes.
 | Bifold closet doors | `operation: bifold`, 2 or 4 panels, folding along the head track | **Done** |
 | Barn door | `operation: barn`, as a type 9 `WallFloorItem` on the wall FACE — its track is its bounds | **Done** |
 | Door open / closed state | Generated: `openFraction` 0..1, hinged leaf on a pivot. `open_door.glb` held no open leaf — 7.62cm deep | **Done** |
-| Ceiling lights | `RoofItem` already snaps to the ceiling plane; `Chandelier`, `Ceilingfan`, `Lampsquareceiling` exist **as meshes that emit no light** | Placement yes, light no |
-| Any placeable light | `three/lights.js` is 3 global lights, total | No |
-| Colour temperature | — | No |
-| Wall sconces | `Lampwall` is already type 2 and already binds to a wall edge — and emits nothing | Placement yes, light no |
-| Sconce uplight / downlight | — | No |
+| Ceiling lights | `Chandelier`, `Ceilingfan` and `Lampsquareceiling` now carry a fixture and emit | **Done** |
+| Any placeable light | `model/light.js` — mount x throw, kelvin, lumens, beam; `three/fixtures.js` builds the emitters | **Done** |
+| Colour temperature | `kelvin` on every fixture, through `core/color_temperature.js` | **Done** |
+| Wall sconces | `Lampwall` carries a `wall`-mount fixture and lights its shade | **Done** |
+| Sconce uplight / downlight | `throw: up \| down \| both \| diffuse`, and `both` is two emitters sharing the output | **Done** |
 | Ceiling fans | `Ceilingfan` is type 4 (`ceilingFan.gltf`) — emits nothing, and does not turn | No |
 | Fan: hugger vs downrod, light kit | — | No |
 | Anything animated | The render loop is continuous (`three/main.js:513`) but there is **no clock** — no `AnimationMixer`, no `Clock`, no `getDelta` in `src/` | No |
@@ -794,6 +794,146 @@ count will not show a slider that moved to the wrong wall.
 ### Phase 6 — lighting
 
 The biggest single visual win, because three lights is all there is today.
+
+#### What landed first, and what it cost
+
+**The fixture model and the emitters are built.** `model/light.js` is the record
+and every piece of arithmetic on it, and imports no three; `three/fixtures.js` is
+the only file that knows what a `SpotLight` is. Persistence is a top-level
+`lights: []` block plus a per-item `fixtures` array, and the four catalog lamps
+the audit called "placement yes, light no" now carry one and emit.
+
+**Nesting was decided on day one, as this section demanded**, and the shape it
+took is worth stating because it is what made it cheap: a fixture's `position` is
+in **its host's frame** when an item carries it, and in world centimetres when
+the document does. So the emitter is added as a *child of the host object* and
+the host's transform carries it — dragging a fan moves its light kit, and a
+spot's target moves with it because the target is a child of the same group. The
+alternative, a world position kept in step with its host by hand, is a class of
+bug this shape cannot have. `collectFixtures` is the single reader both paths go
+through.
+
+**The unit trap is the one that would have cost a day.** three's point and spot
+intensities are candela and its `decay: 2` falloff computes `I / d²` with `d` in
+**world units** — and ours are centimetres. Feeding a real candela value into a
+scene measured in centimetres makes a room 10,000 times too dark, which does not
+read as a unit error: a fixture 10,000x too dim is indistinguishable from one
+that is switched off. `SCENE_UNITS_PER_METRE` is the single place that converts.
+
+**And three's 1.0 is not a photometric quantity**, so something has to say what
+it means before a real lamp can be added without whiting out the frame.
+`PHOTOMETRIC_SCALE` is derived from one stated reference — a 4in can, 800lm at
+60°, in a 250cm ceiling, on a white floor — rather than dialled in, and there is
+a test that re-derives it. **It is what 8c's composer replaces**: when tone
+mapping moves off the renderer and onto a pass that takes the profile's knob,
+this constant stops being a constant and becomes the exposure.
+
+Three things came out of rendering it rather than measuring it:
+
+- **`both` has to SPLIT the output between its two emitters.** Given the full
+  lumens twice, `throw` silently doubles as a brightness control and an uplight
+  cannot be compared with a downlight — they are two different bulbs.
+- **A strip is a row of emitters and it matters.** One point source under a 60cm
+  under-cabinet strip puts a single hard scallop on the splashback where there
+  should be an even wash. Five segments over 200cm reads correctly: an even
+  worktop and just-visible scallops on the wall above.
+- **A fixture reads as an addition, not as the light in the room** — because the
+  studio globals are already a hemisphere at `0.38π` and a key at `0.8π`, which
+  puts a white floor at or over 1.0 before a single lamp is placed. A can adds a
+  visible lift and cannot do more than that. **This is the argument for the
+  day/night work below**, and it is why that item is worth doing sooner rather
+  than last: the fixtures cannot pay off fully until the globals come down.
+
+Also decided, and cheap because it was decided as data: `castShadow` is **per
+mount**, not global. Most of these should never cast — a strip 40cm from the
+worktop it lights buys nothing from a shadow map and costs a whole render of the
+scene. So is `normalBias`: a sconce is nearly coplanar with the wall it is fixed
+to, the worst case for a shadow map, and the one global 1.5 is tuned for a key
+light three metres out. On top of that the caster set is **capped and picked
+nearest the camera** (`shadowCasters`, default 4), re-chosen only on a frame that
+is actually drawn — putting it above `shouldRender` would undo what that check is
+for.
+
+#### Daylight, and the control that makes the rest of it visible
+
+Built, and pulled forward from the end of the phase for the reason the note
+above gives: with the studio globals at full, a placed fixture adds a lift you
+have to look for, so the phase could not pay off until the ambient came down.
+`core/daylight.js` is the sun as a pure function, and a **Lighting menu** in the
+top bar carries the three controls — ambient fill, daylight with a time of day,
+and exposure.
+
+**The sun is a day arc, not an ephemeris.** Sunrise at 06:00, sunset at 18:00,
+the equinox everywhere, and a `heading` that turns the *building* under it. That
+is deliberate: the question it answers is "which side of the house is the light
+coming in, and how warm is it", and a real solar position model is a lot of
+arithmetic to move a shadow a few degrees. Normalised so that **noon is the
+scene as it was before daylight existed** — every other hour is a departure from
+a state the parity grid already captures — and so `NOON_KELVIN` means what it is
+named, which it did not until the peak altitude was divided out.
+
+**And a raycast found the thing a render would not have.** The claim the whole
+feature rests on is that a window's opening is a real hole in a wall that already
+casts shadows, so a low sun throws a patch of floor. Measured on the traced plan:
+with the roof as it was, **498 of 875 floor samples saw the sun — through the
+ceiling**, and the window made no difference to any of them. `Floor` builds its
+roof plane and has never set `castShadow`, so light rained straight down into
+every room. That renders as "daylight does nothing", not as "the ceiling is
+missing", which is exactly why it needed a yes/no ray rather than a picture.
+
+The fix is a **mode, not a property**: `setSkyOpen` closes the ceilings only when
+daylight is on. It cannot be unconditional — `updateShadowCamera` parks the fixed
+studio key *above* the plan on purpose, because an overhead light is the cheapest
+way to make every room legible, so an opaque ceiling under that key would black
+out the house and change every studio frame the parity grid captures. Closed, the
+same measurement gives **81 lit samples in a bounded patch**, and turning the
+building 90° takes it to zero — which is a north-facing room, correctly.
+
+#### What blocks light, and what does not
+
+Daylight turned "which things cast shadows" from a detail into the feature, and
+three separate answers were wrong in three different ways. All three read as
+"the sun does nothing".
+
+- **An in-wall item must not cast.** `Item` casts by default, which is right for
+  furniture and wrong for anything filling an opening: a window that shadows its
+  own hole is, to every light in the scene, bricked-up wall. The traced plan's
+  nine windows are legacy `whitewindow.glb`, and `mergeMeshes` flattens frame,
+  sash and glazing into ONE mesh — so there is no per-part way to let the glass
+  through and every one of them sealed itself. `InWallItem.castShadow = false`.
+- **`castShadow` is not inherited, so the leaf had to be told separately.** A
+  door's leaf is a CHILD — that is what lets it swing — so turning the item off
+  left the leaf casting nothing and a shut exterior door passed daylight straight
+  through. The leaf's meshes cast; `sash-glass` does not, which is decided per
+  mesh rather than per group precisely so a shut french door still admits light
+  through its panes.
+- **A pair of leaves needs an astragal.** Two french leaves meet on a 3mm reveal
+  and daylight came through it as a vertical line on the floor. Every real pair
+  carries a moulding lapping that joint, proud of one face so it does not foul
+  its neighbour when the door opens. Found by measuring, not by looking.
+
+One thing that is NOT a defect and cost time before being recognised: where two
+leaves BUTT — a bifold's panels are hinged edge to edge — an analytic ray aimed
+exactly at the seam passes between the two boxes. A shadow map does not, because
+it rasterises depth and two triangles sharing an edge fill adjacent texels. The
+sample grid is offset off the centreline rather than the millwork moved, because
+moving real geometry to satisfy an artefact of the measurement is how a model
+ends up shaped like its test.
+
+#### Still to do in this phase
+
+- **Ceiling fans**, which is the whole of the animation story and the only thing
+  that needs 0d. The clock is built and idle (`three/frame_clock.js`); nothing
+  turns yet. The two clearances, the blade-beat frequencies, the
+  no-shadow-casting rule and the parametric blades are all still ahead.
+- **A panel.** `FIXTURE_SCHEMA` is exported in the shape `SpecInspector` already
+  renders, and nothing mounts it yet — a fixture can only arrive from a file or
+  from a catalog lamp that carries one, and there is no way to place a bare can.
+- **Windows do not admit light as glass**, only as a hole. A closed casement is
+  an opening in the shadow map exactly like an open one, because the sash is a
+  child and children do not cast. Right for now, wrong once 8b's `transmission`
+  lands.
+
 
 - `model/light.js` — a fixture is data: `{mount, throw, position, target, kelvin,
   lumens, beamAngle, on, group}`.

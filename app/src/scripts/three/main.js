@@ -7,7 +7,7 @@ import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {PointerLockControls} from './pointerlockcontrols.js';
 import {describeFrom} from '../core/texture_formats.js';
 
-import {EVENT_CHANGESET, EVENT_WALL_CLICKED, EVENT_NOTHING_CLICKED, EVENT_FLOOR_CLICKED, EVENT_ITEM_SELECTED, EVENT_ITEM_UNSELECTED, EVENT_GLTF_READY} from '../core/events.js';
+import {EVENT_CHANGESET, EVENT_WALL_CLICKED, EVENT_NOTHING_CLICKED, EVENT_FLOOR_CLICKED, EVENT_ITEM_SELECTED, EVENT_ITEM_UNSELECTED, EVENT_GLTF_READY, EVENT_LOADED, EVENT_ITEM_LOADED, EVENT_ITEM_REMOVED} from '../core/events.js';
 import {CHANGE_TOPOLOGY} from '../core/change_set.js';
 import {EVENT_FPS_EXIT, EVENT_CAMERA_VIEW_CHANGE} from '../core/events.js';
 import {VIEW_TOP, VIEW_FRONT, VIEW_RIGHT, VIEW_LEFT, VIEW_ISOMETRY} from '../core/constants.js';
@@ -22,6 +22,7 @@ import {Lights} from './lights.js';
 import {Skybox} from './skybox.js';
 import {isStudio, setRenderProfile} from '../core/render_profile.js';
 import {FrameClock} from './frame_clock.js';
+import {Fixtures} from './fixtures.js';
 import {runtimeOf} from '../core/design_runtime.js';
 
 
@@ -185,6 +186,24 @@ export class Main extends EventDispatcher
 		this.hud = null;
 		/** @type {?Lights} */
 		this.lights = null;
+		/**
+		 * The design's own fixtures, as emitters (ROADMAP.md phase 6).
+		 *
+		 * Separate from `lights`, which is the three global sources every scene
+		 * has - a hemisphere, a key and a fill. These are the lamps a person
+		 * placed, and there may be none.
+		 *
+		 * @type {?Fixtures}
+		 */
+		this.fixtures = null;
+		/**
+		 * The lighting controls, held here because `Lights` is thrown away and
+		 * rebuilt on a profile switch and a control the user moved has to survive
+		 * that. Defaults reproduce exactly what the scene did before phase 6.
+		 *
+		 * @type {{ambient: number, daylight: ?{hour: number, heading: number}, exposure: number}}
+		 */
+		this.mood = {ambient: 1, daylight: null, exposure: 1};
 		/** @type {?Skybox} */
 		this.skybox = null;
 		this.environmentTexture = null;
@@ -309,7 +328,12 @@ export class Main extends EventDispatcher
 	applyToneMapping(renderer)
 	{
 		renderer.toneMapping = isStudio(this.renderProfile) ? ACESFilmicToneMapping : NoToneMapping;
-		renderer.toneMappingExposure = this.renderProfile.toneMappingExposure;
+		// The profile's exposure is the look; `mood.exposure` is the user's stop on
+		// top of it. A multiplier rather than a replacement, so the classic and
+		// studio looks stay distinguishable at any setting - and so a value of 1
+		// is exactly the frame the parity grid captures.
+		renderer.toneMappingExposure = this.renderProfile.toneMappingExposure
+			* ((this.mood && this.mood.exposure) || 1);
 	}
 
 	/**
@@ -396,7 +420,19 @@ export class Main extends EventDispatcher
 		{
 			this.lights.dispose();
 			this.lights = new Lights(this.scene, this.model.floorplan, this.renderProfile);
+			this.applyMood();
 			this.lights.updateShadowCamera();
+		}
+
+		if (this.fixtures)
+		{
+			// Rebuilt rather than left alone: `Fixtures` builds nothing under
+			// classic, so switching to studio has to make them appear and switching
+			// back has to take them away - and `dispose` is also what hands the lit
+			// shades their materials back.
+			this.fixtures.dispose();
+			this.fixtures = new Fixtures(this.scene, this.renderProfile);
+			this.fixtures.sync(this.model);
 		}
 
 		if (this.floorplan)
@@ -518,7 +554,17 @@ export class Main extends EventDispatcher
 
 		scope.frameClock.reset();
 		scope.lights = new Lights(scope.scene, scope.model.floorplan, scope.renderProfile);
+		scope.fixtures = new Fixtures(scope.scene, scope.renderProfile);
+		scope.fixtures.sync(scope.model);
 		scope.floorplan = new Floorplan3D(scope.scene, scope.model.floorplan, scope.controls, scope.renderProfile);
+
+		// Rebuilt whenever the set of placed objects changes, because a fixture can
+		// be carried by one - so an item arriving or leaving is a lighting change
+		// as well as a geometry one.
+		this._fixturesEvent = function () {scope.syncFixtures();};
+		scope.model.addEventListener(EVENT_LOADED, this._fixturesEvent);
+		scope.model.scene.addEventListener(EVENT_ITEM_LOADED, this._fixturesEvent);
+		scope.model.scene.addEventListener(EVENT_ITEM_REMOVED, this._fixturesEvent);
 
 		function animate()
 		{
@@ -629,6 +675,20 @@ export class Main extends EventDispatcher
 		if (this.lights)
 		{
 			this.lights.dispose();
+		}
+		if (this.fixtures)
+		{
+			this.fixtures.dispose();
+			this.fixtures = null;
+		}
+		if (this._fixturesEvent && this.model)
+		{
+			// Taken off all three, or a disposed viewer keeps rebuilding emitters for
+			// a scene it no longer owns - the leak `WallItem`'s wall listener had.
+			this.model.removeEventListener(EVENT_LOADED, this._fixturesEvent);
+			this.model.scene.removeEventListener(EVENT_ITEM_LOADED, this._fixturesEvent);
+			this.model.scene.removeEventListener(EVENT_ITEM_REMOVED, this._fixturesEvent);
+			this._fixturesEvent = null;
 		}
 		if (this.environmentTexture)
 		{
@@ -1227,6 +1287,113 @@ export class Main extends EventDispatcher
 
 	}
 
+	/**
+	 * How much ambient fill to keep, 0..1.
+	 *
+	 * The control that makes placed fixtures worth anything: with the studio
+	 * globals at full, a white floor is at or over 1.0 before a lamp is switched
+	 * on, so a can adds a lift you have to look for.
+	 *
+	 * @param {number} level
+	 */
+	setAmbient(level)
+	{
+		this.mood.ambient = Math.max(0, Math.min(1, Number(level) || 0));
+		this.applyMood();
+	}
+
+	/**
+	 * Light the room from the sun, or go back to the fixed studio key.
+	 *
+	 * @param {?{hour: number, heading?: number}} state
+	 */
+	setDaylight(state)
+	{
+		this.mood.daylight = state
+			? {hour: Number(state.hour) || 0, heading: Number(state.heading) || 0}
+			: null;
+		this.applyMood();
+	}
+
+	/**
+	 * The user's stop on top of the profile's exposure.
+	 *
+	 * ROADMAP.md phase 6 asks for this by name, "so comparing two fixtures is not
+	 * confounded by tone mapping" - and it is what makes the ambient control
+	 * usable, because a room with the fill turned off needs the exposure opened up
+	 * rather than the lamps made dishonestly bright.
+	 *
+	 * @param {number} stops A multiplier, not f-stops. 1 is the profile's own.
+	 */
+	setExposure(stops)
+	{
+		this.mood.exposure = Math.max(0.05, Math.min(8, Number(stops) || 1));
+		if (this.renderer)
+		{
+			this.applyToneMapping(this.renderer);
+		}
+		this.needsUpdate = true;
+		this.render(true);
+	}
+
+	/** Push the held controls onto whatever lights exist now. */
+	applyMood()
+	{
+		if (this.lights)
+		{
+			this.lights.setAmbient(this.mood.ambient);
+			this.lights.setDaylight(this.mood.daylight);
+		}
+		if (this.floorplan)
+		{
+			// The ceilings stop the light exactly when it is supposed to be coming
+			// in through the walls. Under the fixed studio key - which is parked
+			// above the room on purpose - an opaque ceiling would black out the
+			// house. See `Floor.setSkyOpen`.
+			this.floorplan.setSkyOpen(!this.mood.daylight);
+		}
+
+		// The environment map is ambient light too, and it is most of it.
+		//
+		// `buildEnvironment` renders a `RoomEnvironment` into a PMREM cube and
+		// hangs it on `scene.environment`, which every physically based material
+		// samples for its ambient AND its specular response - independently of any
+		// light in the scene. So turning the hemisphere and the fill down did
+		// nothing visible: the white cabinets and walls were being lit by the
+		// image, not by the lights, and the control looked broken.
+		//
+		// Scaling it is what makes "no ambient" mean no ambient. It also takes the
+		// reflections with it, which is correct rather than a side effect: an
+		// unlit room has nothing to reflect.
+		if (this.scene && typeof this.scene.getScene === 'function')
+		{
+			this.scene.getScene().environmentIntensity = this.mood.ambient;
+		}
+		this.needsUpdate = true;
+		this.render(true);
+	}
+
+	/**
+	 * Rebuild the emitters from whatever the design now carries.
+	 *
+	 * Called when a document loads and whenever an item arrives or leaves, because
+	 * a fixture can be carried BY an item - so the set of lights changes when the
+	 * set of objects does, and nothing else would notice.
+	 */
+	syncFixtures()
+	{
+		if (!this.fixtures || !this.model)
+		{
+			return;
+		}
+		this.fixtures.sync(this.model);
+		if (this.camera)
+		{
+			this.fixtures.updateCasters(this.camera.position);
+		}
+		this.needsUpdate = true;
+	}
+
 	render(forced)
 	{
 		var scope = this;
@@ -1256,6 +1423,14 @@ export class Main extends EventDispatcher
 		{
 			if(this.shouldRender() || forced)
 			{
+				// Which fixtures cast, chosen from where the camera actually is. Inside
+				// the branch that draws, not above it: `shouldRender` is what stops a
+				// still frame costing anything, and re-picking shadow casters on a
+				// frame nobody draws would put that cost back.
+				if (scope.fixtures)
+				{
+					scope.fixtures.updateCasters(scope.camera.position);
+				}
 				scope.renderer.render(scope.scene.getScene(), scope.camera);
 			}
 		}

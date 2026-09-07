@@ -435,7 +435,21 @@
 			"image": "models/thumbnails_new/ceilingFan.png",
 			"model": "models/gltf/ceilingFan.gltf",
 			"type": 4,
-			"format": "gltf"
+			"format": "gltf",
+			"fixtures": [
+				{
+					"mount": "rod",
+					"throw": "down",
+					"kelvin": 3000,
+					"lumens": 800,
+					"beamAngle": 120,
+					"position": {
+						"x": 0,
+						"y": -14,
+						"z": 0
+					}
+				}
+			]
 		},
 		{
 			"name": "Chair",
@@ -484,7 +498,20 @@
 			"image": "models/thumbnails_new/nopreview.png",
 			"model": "models/gltf/chandelier.gltf",
 			"type": 4,
-			"format": "gltf"
+			"format": "gltf",
+			"fixtures": [
+				{
+					"mount": "rod",
+					"throw": "diffuse",
+					"kelvin": 2700,
+					"lumens": 1200,
+					"position": {
+						"x": 0,
+						"y": -12,
+						"z": 0
+					}
+				}
+			]
 		},
 		{
 			"name": "Coatrack",
@@ -764,7 +791,20 @@
 			"image": "models/thumbnails_new/lampSquareCeiling.png",
 			"model": "models/gltf/lampSquareCeiling.glb",
 			"type": 4,
-			"format": "gltf"
+			"format": "gltf",
+			"fixtures": [
+				{
+					"mount": "surface",
+					"throw": "diffuse",
+					"kelvin": 3000,
+					"lumens": 1200,
+					"position": {
+						"x": 0,
+						"y": -6,
+						"z": 0
+					}
+				}
+			]
 		},
 		{
 			"name": "Lampsquarefloor",
@@ -785,7 +825,20 @@
 			"image": "models/thumbnails_new/lampWall.png",
 			"model": "models/gltf/lampWall.glb",
 			"type": 2,
-			"format": "gltf"
+			"format": "gltf",
+			"fixtures": [
+				{
+					"mount": "wall",
+					"throw": "both",
+					"kelvin": 2700,
+					"lumens": 400,
+					"position": {
+						"x": 0,
+						"y": 0,
+						"z": 6
+					}
+				}
+			]
 		},
 		{
 			"name": "Laptop",
@@ -1444,6 +1497,60 @@
 				"wallThickness": 11.43,
 				"hand": "lo",
 				"swing": "negative"
+			}
+		},
+		{
+			"name": "Recessed Can",
+			"image": "models/thumbnails_new/light-can.png",
+			"model": "generated:fixture",
+			"type": 4,
+			"format": "generated",
+			"spec": {
+				"kind": "fixture",
+				"mount": "recessed",
+				"throw": "down",
+				"kelvin": 3000,
+				"lumens": 800,
+				"beamAngle": 60,
+				"on": true,
+				"diameter": 10.16,
+				"castShadow": true
+			}
+		},
+		{
+			"name": "Pendant",
+			"image": "models/thumbnails_new/light-pendant.png",
+			"model": "generated:fixture",
+			"type": 4,
+			"format": "generated",
+			"spec": {
+				"kind": "fixture",
+				"mount": "pendant",
+				"throw": "down",
+				"kelvin": 2700,
+				"lumens": 600,
+				"beamAngle": 90,
+				"on": true,
+				"diameter": 22,
+				"drop": 60,
+				"castShadow": true
+			}
+		},
+		{
+			"name": "Ceiling Light",
+			"image": "models/thumbnails_new/light-surface.png",
+			"model": "generated:fixture",
+			"type": 4,
+			"format": "generated",
+			"spec": {
+				"kind": "fixture",
+				"mount": "surface",
+				"throw": "diffuse",
+				"kelvin": 3000,
+				"lumens": 1200,
+				"beamAngle": 150,
+				"on": true,
+				"diameter": 30
 			}
 		},
 		{

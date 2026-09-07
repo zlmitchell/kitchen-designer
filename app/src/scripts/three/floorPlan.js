@@ -74,6 +74,14 @@ export class Floorplan3D extends EventDispatcher
 		this.floorplan = floorPlan;
 		this.controls = controls;
 		this.floors = [];
+		/**
+		 * Whether light may come through the ceilings. See `setSkyOpen`.
+		 *
+		 * Open by default, which is what the ceilings have always been: the fixed
+		 * studio key is parked above the room and an opaque ceiling would black
+		 * out the house. Only daylight closes them.
+		 */
+		this._skyOpen = true;
 		this.edges = [];
 		/**
 		 * Project incrementally, or fall back to a full redraw on every change.
@@ -211,6 +219,9 @@ export class Floorplan3D extends EventDispatcher
 			}
 			return floor;
 		});
+		// A freshly built roof plane does not know the mode, and a redraw builds
+		// them - so the mode is pushed back on rather than assumed to have survived.
+		this.setSkyOpen(this._skyOpen);
 
 		this.edges = halfEdges.map(function (halfEdge, index)
 		{
@@ -227,6 +238,21 @@ export class Floorplan3D extends EventDispatcher
 			edge.name = 'edge_' + index;
 			return edge;
 		});
+	}
+
+	/**
+	 * Whether light may come through the ceilings.
+	 *
+	 * Forwarded to every `Floor`, and re-applied after a redraw, because a redraw
+	 * builds new roof planes and a new plane is opaque-to-nothing by default. See
+	 * `Floor.setSkyOpen` for why this is a mode rather than a property.
+	 *
+	 * @param {boolean} open
+	 */
+	setSkyOpen(open)
+	{
+		this._skyOpen = open;
+		this.floors.forEach(function (floor) {floor.setSkyOpen(open);});
 	}
 
 	/**
@@ -335,6 +361,10 @@ export class Floorplan3D extends EventDispatcher
 			this.floorsByRoom.set(room, threeFloor);
 			threeFloor.addToScene();
 		});
+		// A fresh roof plane does not know the mode. Both rebuild paths have to
+		// push it back on, and this is the one that throws every Floor away - which
+		// is why doing it in `rebuildFrom` alone was not enough.
+		this.setSkyOpen(this._skyOpen);
 
 		var eindex = 0;
 		// draw edges

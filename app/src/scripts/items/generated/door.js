@@ -365,7 +365,9 @@ export function leafLayout(s, hingeSign)
 		[-1, 1].forEach(function (side)
 		{
 			out.push({name: 'door-leaf-pivot', x: side * (half + s.reveal) / 2, y: one.y, z: 0,
-				width: half, height: one.height, moves: 'swing', travel: 0, hinge: side});
+				width: half, height: one.height, moves: 'swing', travel: 0, hinge: side,
+				// One leaf laps the joint. See `leafOf`.
+				astragal: side > 0});
 		});
 		return out;
 	}
@@ -631,6 +633,49 @@ function buildLeaves(s, hingeSign, dirSign, mats)
 		{
 			fitHardware(group, s, place, mats);
 		}
+
+		if (place.astragal)
+		{
+			// The astragal: the moulding that laps the joint between two leaves.
+			//
+			// Not decoration. A pair of french doors meets on a reveal - 3mm of air
+			// down the full height - and daylight comes straight through it: a shut
+			// solid french door put a vertical line of sun on the floor, which is
+			// how this was found. Every real pair carries an astragal on the passive
+			// leaf for exactly that reason, plus draught and privacy.
+			//
+			// Proud of ONE face rather than centred in the joint, which is both what
+			// a real one does and what keeps it from fouling the other leaf: the two
+			// leaves are 3mm apart, and a moulding centred on that gap would pass
+			// through its neighbour every time the door opened.
+			var edge = -place.hinge * place.width / 2;
+			var az = s.leafThickness / 2;
+			group.add(box(mats.leaf, edge, edge + place.hinge * -2.5,
+				-place.height / 2, place.height / 2, az, az + 1.2));
+		}
+
+		// A leaf blocks light, and nothing else here does.
+		//
+		// `InWallItem` turns `castShadow` off for the item, because the item's own
+		// geometry is the LINING - a frame around the opening - and a frame that
+		// shadows the hole it was cut into is a bricked-up window. But `castShadow`
+		// is per object and is not inherited, so a leaf added as a child inherited
+		// nothing and a closed exterior door passed daylight straight through.
+		//
+		// The glazing is the exception, and it is the whole reason this is decided
+		// per mesh rather than on the group: a french door's panes are the part
+		// light is supposed to come through. `buildSash` names them, which is what
+		// makes them findable here.
+		group.traverse(function (part)
+		{
+			// `traverse` hands back `Object3D`, which has no `isMesh` - the cast is
+			// what lets the check be written at all.
+			var mesh = /** @type {import('three').Mesh} */ (part);
+			if (mesh.isMesh)
+			{
+				mesh.castShadow = mesh.name !== 'sash-glass';
+			}
+		});
 		return group;
 	};
 

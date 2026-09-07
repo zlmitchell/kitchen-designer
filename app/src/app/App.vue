@@ -22,6 +22,7 @@ import {useSelection} from './composables/useSelection.js';
 import {useCameraViews, MODE_WALKTHROUGH} from './composables/useCameraViews.js';
 import {useFloorplannerMode} from './composables/useFloorplannerMode.js';
 import {useDesignIO} from './composables/useDesignIO.js';
+import {useLighting} from './composables/useLighting.js';
 import {useImport} from './composables/useImport.js';
 import {useCatalog} from './composables/useCatalog.js';
 import {useDisplayUnit, syncDisplayUnit} from './composables/useDisplayUnit.js';
@@ -37,7 +38,7 @@ import {useToasts} from './composables/useToasts.js';
 import {useShortcuts} from './composables/useShortcuts.js';
 
 import {floorplannerModes, Configuration, configSystemUI, configDimUnit, dimFeetAndInch, Dimensioning} from '../scripts/blueprint.js';
-import {renderProfile} from '../scripts/blueprint.js';
+import {renderProfile, RENDER_STUDIO} from '../scripts/blueprint.js';
 
 /**
  * The application shell.
@@ -96,6 +97,26 @@ const shortcutsOpen = ref(false);
 const importOpen = ref(false);
 const inspectorTab = ref('settings');
 const renderMode = ref(renderProfile.mode);
+const lighting = useLighting(store);
+
+/**
+ * What `TopBar` hands to `LightingMenu`.
+ *
+ * Unwrapped here rather than in the menu, because a component should be handed
+ * values and not refs - and `studio` is App's to answer, since the render mode
+ * lives here and the menu has no business importing the profile.
+ */
+const lightingState = computed(() => ({
+	ambient: lighting.ambient.value,
+	daylight: lighting.daylightOn.value,
+	hour: lighting.hour.value,
+	heading: lighting.heading.value,
+	exposure: lighting.exposure.value,
+	clock: lighting.clock.value,
+	dark: lighting.dark.value,
+	studio: renderMode.value === RENDER_STUDIO,
+	times: lighting.times,
+}));
 
 const walkthrough = computed(() => camera.mode.value === MODE_WALKTHROUGH);
 
@@ -326,12 +347,33 @@ function openBackdropSettings()
 	inspectorTab.value = 'settings';
 }
 
+/**
+ * An edit in the inspector.
+ *
+ * Two things follow from one change, and the second is easy to miss: a light
+ * FITTING carries its light in its own spec, so editing its colour temperature
+ * or its output has to rebuild the emitter as well as the geometry. `setSpec`
+ * does the geometry; nothing was listening for the rest.
+ */
+function onInspectorChanged()
+{
+	history.commit();
+	if (store.three.value)
+	{
+		store.three.value.syncFixtures();
+	}
+}
+
 function setRenderMode(mode)
 {
 	renderMode.value = mode;
 	if (store.three.value)
 	{
 		store.three.value.applyRenderProfile(mode);
+		// The switch throws `Lights` away and builds new ones, and `Main` re-applies
+		// what it holds - but the exposure lives on the renderer, so push the lot
+		// back rather than reasoning about which half survived.
+		lighting.apply();
 	}
 }
 
@@ -575,6 +617,13 @@ useShortcuts(() => bindings.value);
 				:exporting="io.busy.value"
 				:inspector-open="workspace.inspectorOpen.value"
 				:saved-at="autosave.savedAt.value"
+				:lighting="lightingState"
+				@set-ambient="lighting.setAmbient"
+				@set-daylight="lighting.setDaylight"
+				@set-hour="lighting.setHour"
+				@set-heading="lighting.setHeading"
+				@set-exposure="lighting.setExposure"
+				@reset-lighting="lighting.reset"
 				@new-design="onNewDesign"
 				@open-design="onOpenDesign"
 				@import-drawing="toggleImport(true)"
@@ -663,7 +712,7 @@ useShortcuts(() => bindings.value);
 					v-model:tab="inspectorTab"
 					:selection="selection.selection.value"
 					:camera="camera"
-					@changed="history.commit" />
+					@changed="onInspectorChanged" />
 			</div>
 
 			<StatusBar
