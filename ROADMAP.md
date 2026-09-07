@@ -1172,6 +1172,98 @@ which is thin enough that the pass list is a budget decision, not a taste one.
   nothing, for exactly this reason — copy that shape rather than discovering the
   breakage in a render.
 
+### Phase 9 — walking the house
+
+Not a fourth root cause either. Phases 2–6 build a room that is right and Phase
+8 makes it look right; this is about a room you can only look AT. Walk mode
+exists — pointer lock, WASD, jump, and now Ctrl to crouch — and once you are
+inside it the house is a photograph: no door opens, no switch works, nothing can
+be moved. Everything below is already expressible in a spec. **None of this
+needs a new model; it needs a way to reach the model from inside it.**
+
+Which is the argument for doing it at all. `openFraction` has been on a door
+since Phase 5 and `on` has been on a fixture since Phase 6, and neither has ever
+been touched by a person standing in the room they belong to.
+
+**9a. Look at a thing and know what it is.** Everything else here is this plus a
+verb, so it is built once and first.
+
+- **The controller raycasts with the wrong camera, and nothing has noticed
+  because nothing has asked.** `Controller.camera` is the orbit camera and
+  `Main` never points it at `fpscamera` — there is a setter (`controller.js:742`)
+  and no caller in walk mode. So the first interaction to ship will pick whatever
+  was under the ORBIT camera's crosshair, which is a fault that reads as "the
+  reticle is aimed wrong" rather than as "the wrong camera".
+- **A reticle, and a prompt.** Pointer lock hides the cursor, so the centre of
+  the screen IS the pointer and there has to be something drawn there. The prompt
+  ("E to open") is what makes an interaction discoverable, and without it every
+  verb below is a keypress nobody guesses.
+- **Reach, not just aim.** A door across the room should not open. One distance,
+  in centimetres, shared by every verb.
+
+**9b. Doors, which are already animated and simply cannot be touched.** A
+generated door hangs its leaf on a pivot and takes `openFraction` 0..1, and the
+inspector has driven that slider since Phase 5. So this is a keypress, a target,
+and a tween — the geometry is done. What it needs beyond 9a:
+
+- **The frame clock, finally consumed.** `three/frame_clock.js` is built, wired
+  into the render loop and ticking, and nothing reads its delta. A swinging door
+  is its first consumer and a turning fan blade is the second; whichever lands
+  first should not invent a second clock.
+- **Which way it swings relative to YOU.** A door opens away from the person who
+  pushes it. `swing` is a property of the door, so a walker on the wrong side
+  either pulls it through themselves or the door refuses — decide which, and say
+  so, before there are two behaviours in the tree.
+
+**9c. Switches, where the model is furthest ahead of the interface.** A fixture
+carries `on`, and circuits are already switched as VIEW state from the lighting
+menu — so the walkthrough version is the same call from a different place, and
+the only new question is what you point at.
+
+- **Point at the lamp, or point at a switch plate?** Pointing at the lamp is
+  free and is what every other verb here does. A switch plate is what a house
+  actually has, and it is also the honest home for a circuit: one plate by the
+  door that owns `group: 'ceiling'`. That is a new placeable item and it is the
+  more useful answer, but it is a Phase 2-shaped piece of work and not a
+  Phase 9 one — so point at the lamp first and let the plate arrive later
+  without changing the verb.
+- **Design state or view state?** The lighting menu's switches are deliberately
+  not saved: what time of day you last looked at a kitchen is not a property of
+  the kitchen. A switch thrown while walking is the same thing and should reach
+  the same place, or the two controls will disagree about what "off" means.
+
+**9d. Move and rotate what you are standing next to.** The one that is not
+nearly free, because the orbit view's answer does not transfer.
+
+- **Dragging is a plane intersection, and there is no plane here.** `Controller`
+  moves an item by intersecting the ground or a wall with a ray through the
+  mouse. In walk mode the mouse is locked and the eye is inside the room, so the
+  same arithmetic gives a point that races off to the horizon at glancing
+  angles. The workable shape is **carry**: pick up, and the item holds a fixed
+  offset from the eye until it is put down. That is a different mechanism, not a
+  reused one.
+- **It writes to the design, unlike everything else in this phase.** Opening a
+  door and flicking a switch are ways of looking; moving a cabinet is an edit,
+  and it has to reach the undo stack through the same `changed` path the
+  inspector uses. Worth being deliberate about the moment the two kinds of
+  interaction sit under one key.
+
+**9e. Walls you cannot walk through.** Listed last because it is the biggest and
+the least like the rest: there is **no collision of any kind** in
+`pointerlockcontrols.js` — not one raycast in the file — and the only thing the
+walker cannot pass through is the floor. You walk through walls, cabinets and
+the range.
+
+- The geometry to test against already exists and is already indexed for
+  picking: `floorplan.wallEdgePlanes()` is what a wall item drags along.
+- **A capsule, not a point.** A point squeezes through the 3mm reveal between two
+  french leaves — the same gap that let daylight through in Phase 6, found by the
+  same kind of measurement.
+- **Doors are holes only when they are open**, which couples this to 9b: a shut
+  door has to stop you and an open one must not, and `openFraction` is already
+  the number that says which.
+
+
 ---
 
 ## Done, out of band — the drawing importer
@@ -1268,7 +1360,8 @@ three, each with its own frame.
           ├── 5 windows + doors
           │      └── 6 lighting     daylight needs windows
           │            └── 8 shaders  AO needs a lit room; bloom needs fixtures
-          └── 7 takeoff             reads the specs from 2-4
+          ├── 7 takeoff             reads the specs from 2-4
+          └── 9 walkthrough         reaches specs 5 and 6 already have
 ```
 
 Phase 5's **windows** were pulled ahead of phase 3 for exactly the reason this
@@ -1324,6 +1417,14 @@ so it can be deferred to Phase 6 without holding anything up. It is listed in
 Phase 0 only because it is shared infrastructure rather than fan code, and it is
 the kind of thing that grows into an animation system if it is written in a hurry
 inside a feature.
+
+**Phase 9 hangs off nothing, which is why it is last and could be first.** It
+adds no model: a door has taken `openFraction` since Phase 5 and a fixture has
+taken `on` since Phase 6, and neither has ever been touched by somebody standing
+in the room. So it is not blocked by phase 3 and does not block it -- it is the
+phase to reach for when the answer wanted is "what is this like to be in"
+rather than "what is in it". Its one real dependency is 0d, the frame clock,
+which is built and idle and which a swinging door and a turning fan both want.
 
 The extractor's unbuilt stages 5 (FIXTURES) and 6 (CABINETS) come **after** the
 app side, not before: they need a spec to emit into, and `AGENTS.md`'s first rule
