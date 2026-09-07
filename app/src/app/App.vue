@@ -13,6 +13,7 @@ import PlanOverlay from './components/PlanOverlay.vue';
 import SceneOverlay from './components/SceneOverlay.vue';
 import CatalogDrawer from './components/CatalogDrawer.vue';
 import ShortcutsDialog from './components/ShortcutsDialog.vue';
+import ImportDialog from './components/ImportDialog.vue';
 import ToastStack from './components/ToastStack.vue';
 import InspectorPanel from './inspector/InspectorPanel.vue';
 
@@ -21,6 +22,7 @@ import {useSelection} from './composables/useSelection.js';
 import {useCameraViews, MODE_WALKTHROUGH} from './composables/useCameraViews.js';
 import {useFloorplannerMode} from './composables/useFloorplannerMode.js';
 import {useDesignIO} from './composables/useDesignIO.js';
+import {useImport} from './composables/useImport.js';
 import {useCatalog} from './composables/useCatalog.js';
 import {useDisplayUnit, syncDisplayUnit} from './composables/useDisplayUnit.js';
 import {useTheme, applyTheme} from './composables/useTheme.js';
@@ -69,6 +71,7 @@ const selection = useSelection(store);
 const camera = useCameraViews(store);
 const editor = useFloorplannerMode(store);
 const io = useDesignIO(store);
+const importer = useImport();
 const catalog = useCatalog(store, selection.placementContext);
 const display = useDisplayUnit(store);
 const theme = useTheme(store);
@@ -90,6 +93,7 @@ const floorplanRef = ref(null);
 const viewportRef = ref(null);
 const catalogOpen = ref(false);
 const shortcutsOpen = ref(false);
+const importOpen = ref(false);
 const inspectorTab = ref('settings');
 const renderMode = ref(renderProfile.mode);
 
@@ -395,6 +399,54 @@ async function onOpenDesign(file)
 	frameDesign();
 }
 
+/**
+ * Open the importer, or close it and let go of the parsed drawing.
+ *
+ * The reset on close matters: a sheet holds a whole parsed document, and for a
+ * PDF that is a live pdf.js worker as well. Leaving it attached to a dialog
+ * nobody has open keeps both alive for the life of the page.
+ */
+function toggleImport(open)
+{
+	importOpen.value = open;
+	if (open)
+	{
+		// Start fetching the parsers now rather than when a file is picked.
+		// They are ~2.6MB of lazily loaded JavaScript - pdf.js and its worker -
+		// and this overlaps the download with choosing a file, which is
+		// otherwise dead time spent staring at a file dialog.
+		importer.warm();
+		return;
+	}
+	importer.reset();
+}
+
+/**
+ * Take a traced plan as the design.
+ *
+ * The same three steps as opening a file - load, reset the history, frame it -
+ * plus clearing the draft, because the imported plan is a new document and a
+ * recovered draft of the previous one would be offered over the top of it on
+ * the next reload.
+ *
+ * @param {?{design: object, stats: object}} traced
+ */
+function onImportDrawing(traced)
+{
+	if (!traced || !io.loadTraced(traced.design, `${importer.filename.value || 'the drawing'}`))
+	{
+		return;
+	}
+	history.reset();
+	frameDesign();
+	clearDraft();
+	toggleImport(false);
+	const stats = traced.stats;
+	toasts.success(
+		`Imported ${stats.walls} walls and ${stats.openingCount} openings`,
+		{detail: `${stats.widthFt.toFixed(1)} x ${stats.heightFt.toFixed(1)} ft, traced from pen ${stats.layer}`});
+}
+
 function undo()
 {
 	if (history.undo())
@@ -429,6 +481,7 @@ const bindings = computed(() => /** @type {Array<import('./composables/useShortc
 	// --- document ---
 	{group: 'Document', keys: 'mod+n', label: 'New layout', run: onNewDesign},
 	{group: 'Document', keys: 'mod+s', label: 'Save layout', run: io.saveDesign},
+	{group: 'Document', keys: 'mod+i', label: 'Import a drawing', run: () => toggleImport(true)},
 	{group: 'Document', keys: 'mod+z', label: 'Undo', run: undo, enabled: () => history.canUndo.value},
 	{group: 'Document', keys: 'mod+shift+z', label: 'Redo', run: redo, enabled: () => history.canRedo.value},
 	// Windows and Linux editors also bind Ctrl+Y. Harmless on Apple platforms,
@@ -484,6 +537,11 @@ const bindings = computed(() => /** @type {Array<import('./composables/useShortc
 				shortcutsOpen.value = false;
 				return;
 			}
+			if (importOpen.value)
+			{
+				toggleImport(false);
+				return;
+			}
 			// The library binds Esc itself to stop drawing walls, so the fall-through
 			// is deliberately nothing: preventing the default here would take that
 			// away, and the mode reset is the behaviour people expect from Esc on a
@@ -519,6 +577,7 @@ useShortcuts(() => bindings.value);
 				:saved-at="autosave.savedAt.value"
 				@new-design="onNewDesign"
 				@open-design="onOpenDesign"
+				@import-drawing="toggleImport(true)"
 				@save-design="io.saveDesign"
 				@save-mesh="io.saveMesh"
 				@save-gltf="io.saveGLTF"
@@ -626,6 +685,12 @@ useShortcuts(() => bindings.value);
 			@prefetch-item="assets.prefetchItem" />
 
 		<ShortcutsDialog v-model:open="shortcutsOpen" :bindings="bindings" />
+
+		<ImportDialog
+			:open="importOpen"
+			:state="importer"
+			@update:open="toggleImport"
+			@apply="onImportDrawing" />
 
 		<ToastStack />
 	</TooltipProvider>
