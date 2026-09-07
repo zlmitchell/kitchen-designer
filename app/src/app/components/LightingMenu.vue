@@ -44,20 +44,41 @@ const props = defineProps({
 		type: Array,
 		default: () => [],
 	},
+	/** The banks this design has, which is derived from what is placed in it. */
+	circuits: {
+		/** @type {import('vue').PropType<Array<{id: string, label: string, count: number}>>} */
+		type: Array,
+		default: () => [],
+	},
+	/** Which of them are off. */
+	switchedOff: {
+		/** @type {import('vue').PropType<Array<string>>} */
+		type: Array,
+		default: () => [],
+	},
 });
 
 const emit = defineEmits([
 	'set-ambient', 'set-daylight', 'set-hour', 'set-heading', 'set-exposure', 'reset',
+	'toggle-circuit', 'opened',
 ]);
 
+const isOff = (id) => props.switchedOff.indexOf(id) !== -1;
+
 /** Anything moved off its default, which is what the trigger dot reports. */
-const touched = computed(() => props.ambient !== 1 || props.daylight || props.exposure !== 1);
+const touched = computed(() => props.ambient !== 1 || props.daylight
+	|| props.exposure !== 1 || props.switchedOff.length > 0);
 
 const number = (event) => Number(/** @type {HTMLInputElement} */ (event.target).value);
 </script>
 
 <template>
-	<PopoverRoot>
+	<!--
+		The circuit list is derived from what is placed, and items come and go
+		without the model being reactive - so the panel asks for it as it opens,
+		which is the only moment anybody looks at it.
+	-->
+	<PopoverRoot @update:open="(open) => open && emit('opened')">
 		<!--
 			No `AppTip` around this trigger, and that is not an oversight. `AppTip`
 			is a `TooltipTrigger as-child`, so wrapping a `PopoverTrigger as-child`
@@ -154,6 +175,25 @@ const number = (event) => Number(/** @type {HTMLInputElement} */ (event.target).
 							Turns the building under the sun, so the light comes in through a
 							different wall's windows.
 						</p>
+					</template>
+
+					<!--
+						Switches, above the exposure because this is the control somebody
+						walking the house reaches for. One row per bank the design actually
+						has: no lights, no switches, rather than four dead toggles.
+					-->
+					<template v-if="props.circuits.length">
+						<p class="eyebrow px-1 pt-2">Switches</p>
+						<div v-for="circuit in props.circuits" :key="circuit.id" class="field px-1">
+							<span class="field-label">{{ circuit.label }}</span>
+							<button
+								type="button" class="btn w-full justify-between"
+								:aria-pressed="!isOff(circuit.id)"
+								@click="emit('toggle-circuit', circuit.id)">
+								<span>{{ isOff(circuit.id) ? 'Off' : 'On' }}</span>
+								<span class="num text-ink-faint">{{ circuit.count }}</span>
+							</button>
+						</div>
 					</template>
 
 					<div class="field px-1">

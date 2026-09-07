@@ -43,6 +43,11 @@ import {buildFixture, FIXTURE_ITEM_SCHEMA} from './fixture.js';
  *           moved and come to rest. The other direction of `onBound`, for a spec
  *           field that is also a position - a window's sill height. See
  *           `Item.onPlaced`.
+ * @property {Array<Object>} [fixtures] Lights the built thing CARRIES, as
+ *           fixture records positioned in its own frame - an under-cabinet
+ *           strip belongs to the cabinet the way a light kit belongs to a fan.
+ *           `Item` puts these on `metadata.fixtures`, which `collectFixtures`
+ *           already reads.
  * @property {{y: number}} [datum] Where the builder's own origin ended up after
  *           it centred itself. Only a builder that reasons in a frame worth
  *           keeping reports one - `buildSink` works with y = 0 at the top of the

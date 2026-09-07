@@ -63,6 +63,113 @@ export const MOUNTS = ['recessed', 'surface', 'pendant', 'rod', 'wall',
 export const THROWS = ['down', 'up', 'both', 'diffuse'];
 
 /**
+ * Which switch a fixture is on, when its record does not say.
+ *
+ * A real house is not wired one lamp at a time -- it is wired in banks, and the
+ * question anybody walking through a room asks is "overheads off, under-cabinet
+ * on", never "this particular can off". The record has always had a free-text
+ * `group` for exactly this ("a switch bank, so a design can name its own
+ * circuits") and nothing ever read it, so every fixture was its own switch and
+ * there was no way to reach any of them without selecting the object.
+ *
+ * The default comes off the MOUNT because that is what the banks follow in
+ * practice: the cans go on one switch, the sconces on another, the worktop
+ * strips on a third by the door. A design that wants different banks says so in
+ * `group` and this stops applying.
+ */
+export const CIRCUIT_FOR_MOUNT = {
+	'recessed': 'ceiling',
+	'surface': 'ceiling',
+	'pendant': 'ceiling',
+	'rod': 'ceiling',
+	'wall': 'wall',
+	'under-cabinet': 'task',
+	'in-cabinet': 'task',
+	'toe-kick': 'accent',
+};
+
+/** What each default circuit is called, in the order a panel should list them. */
+export const CIRCUIT_LABELS = [
+	{id: 'ceiling', label: 'Overheads'},
+	{id: 'wall', label: 'Wall lights'},
+	{id: 'task', label: 'Under cabinet'},
+	{id: 'accent', label: 'Accent'},
+];
+
+/**
+ * Which switch this fixture answers to.
+ *
+ * @param {Object} fixture A normalised fixture.
+ * @returns {string}
+ */
+export function circuitOf(fixture)
+{
+	if (fixture && typeof fixture.group === 'string' && fixture.group)
+	{
+		return fixture.group;
+	}
+	return (fixture && CIRCUIT_FOR_MOUNT[fixture.mount]) || 'other';
+}
+
+/**
+ * The circuits a design actually has, in a stable order, with their counts.
+ *
+ * Derived rather than declared, so a switch appears when the first fixture on it
+ * is placed and goes away with the last -- a panel listing every circuit the
+ * code knows about would offer four switches in a design with one lamp.
+ *
+ * The known ones come first in the order above and any named `group` follows
+ * alphabetically, because a stable order is what stops a switch moving under
+ * somebody's finger when a light is added.
+ *
+ * @param {Array<{fixture: Object}>} entries What `collectFixtures` returned.
+ * @returns {Array<{id: string, label: string, count: number}>}
+ */
+export function circuitsIn(entries)
+{
+	/** @type {Map<string, number>} */
+	var counts = new Map();
+	(entries || []).forEach(function (entry)
+	{
+		var id = circuitOf(entry.fixture);
+		counts.set(id, (counts.get(id) || 0) + 1);
+	});
+
+	var out = [];
+	CIRCUIT_LABELS.forEach(function (known)
+	{
+		if (counts.has(known.id))
+		{
+			out.push({id: known.id, label: known.label, count: counts.get(known.id)});
+			counts.delete(known.id);
+		}
+	});
+	Array.from(counts.keys()).sort().forEach(function (id)
+	{
+		out.push({id: id, label: id, count: counts.get(id)});
+	});
+	return out;
+}
+
+/**
+ * The colour temperatures a panel offers, as a `choice` field's options.
+ *
+ * A list rather than a slider because that is how lamps are bought: 2700K or
+ * 3000K under a cabinet is a decision between two products on a shelf, not a
+ * continuum to dial. Exported so the fitting's schema and any item that CARRIES
+ * a fixture ask it the same way -- a second copy is a second list to keep in
+ * step, and the first thing that would drift is which of them offers 3500K.
+ */
+export const KELVIN_OPTIONS = [
+	{value: 2200, label: 'Candle 2200K'},
+	{value: 2700, label: 'Warm 2700K'},
+	{value: 3000, label: 'Soft 3000K'},
+	{value: 3500, label: 'Neutral 3500K'},
+	{value: 4000, label: 'Cool 4000K'},
+	{value: 5000, label: 'Daylight 5000K'},
+];
+
+/**
  * The scene is in centimetres, and physical lights are not.
  *
  * three's point and spot intensities are **candela**, and its `decay: 2` falloff

@@ -87,6 +87,7 @@ const emit = defineEmits([
 	'save-gltf', 'undo', 'redo', 'set-layout', 'set-unit', 'toggle-theme',
 	'toggle-inspector', 'show-shortcuts',
 	'set-ambient', 'set-daylight', 'set-hour', 'set-heading', 'set-exposure', 'reset-lighting',
+	'toggle-circuit', 'lighting-opened',
 ]);
 
 function onFile(event)
@@ -241,6 +242,10 @@ function onUnitChange(event)
 				:dark="props.lighting.dark"
 				:studio="props.lighting.studio"
 				:times="props.lighting.times"
+				:circuits="props.lighting.circuits"
+				:switched-off="props.lighting.switchedOff"
+				@toggle-circuit="emit('toggle-circuit', $event)"
+				@opened="emit('lighting-opened')"
 				@set-ambient="emit('set-ambient', $event)"
 				@set-daylight="emit('set-daylight', $event)"
 				@set-hour="emit('set-hour', $event)"

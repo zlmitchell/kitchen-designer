@@ -46,6 +46,22 @@ export function useLighting(store)
 	/** Degrees. Which way the building faces under the sun. */
 	const heading = ref(0);
 	const exposure = ref(1);
+	/**
+	 * Circuits the viewer has switched OFF, by id.
+	 *
+	 * The walkthrough control, and view state for the same reason the other four
+	 * are: walking a house with the overheads off and the worktop strips on is a
+	 * way of looking at the design, not a change to it. A lamp that is off in the
+	 * design still says so in its own record.
+	 * @type {import('vue').Ref<Array<string>>}
+	 */
+	const switchedOff = ref([]);
+	/**
+	 * The circuits this design actually has, so the panel offers a switch when the
+	 * first fixture on one is placed and none when there are no lights at all.
+	 * @type {import('vue').Ref<Array<{id: string, label: string, count: number}>>}
+	 */
+	const circuits = ref([]);
 
 	const viewer = () => store.three.value;
 
@@ -59,12 +75,48 @@ export function useLighting(store)
 		three.setAmbient(ambient.value);
 		three.setDaylight(daylightOn.value ? {hour: hour.value, heading: heading.value} : null);
 		three.setExposure(exposure.value);
+		three.setLightCircuits(switchedOff.value);
+		refreshCircuits();
+	}
+
+	/**
+	 * Re-read which circuits exist.
+	 *
+	 * Pulled rather than watched, because the set changes when an ITEM is added or
+	 * removed and the model is not reactive - so the panel asks when it opens,
+	 * which is the only moment the answer is looked at.
+	 */
+	function refreshCircuits()
+	{
+		const three = viewer();
+		circuits.value = three ? three.lightCircuits() : [];
+	}
+
+	/** Flip one bank. */
+	function toggleCircuit(id)
+	{
+		const off = switchedOff.value;
+		switchedOff.value = off.indexOf(id) === -1
+			? off.concat([id])
+			: off.filter((one) => one !== id);
 	}
 
 	// One watcher over all of them rather than four: every change ends in the
 	// same three calls, and the viewer holds the state anyway, so there is
 	// nothing a per-field watcher could do more cheaply.
 	watch([ambient, daylightOn, hour, heading, exposure], apply);
+	// Its own watcher, and not folded into the four above: switching a circuit
+	// rebuilds every emitter in the scene, which is the right cost once for a
+	// switch and the wrong cost on every frame of an exposure slider.
+	watch(switchedOff, () =>
+	{
+		const three = viewer();
+		if (three)
+		{
+			three.setLightCircuits(switchedOff.value);
+			refreshCircuits();
+		}
+	});
 	// And once when the viewer arrives, because it is constructed after this.
 	watch(() => store.three.value, apply);
 
@@ -96,11 +148,13 @@ export function useLighting(store)
 		hour.value = 16;
 		heading.value = 0;
 		exposure.value = 1;
+		switchedOff.value = [];
 	}
 
 	return {
-		ambient, daylightOn, hour, heading, exposure,
+		ambient, daylightOn, hour, heading, exposure, switchedOff, circuits,
 		sun, clock, dark, times: TIMES_OF_DAY,
-		setAmbient, setDaylight, setHour, setHeading, setExposure, reset, apply,
+		setAmbient, setDaylight, setHour, setHeading, setExposure,
+		toggleCircuit, refreshCircuits, reset, apply,
 	};
 }

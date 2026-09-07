@@ -3,7 +3,7 @@ import {Group, Mesh} from 'three';
 import {CylinderGeometry} from 'three';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
-import {MOUNTS, MOUNT_DEFAULTS, THROWS} from '../../model/light.js';
+import {KELVIN_OPTIONS, MOUNTS, MOUNT_DEFAULTS, THROWS} from '../../model/light.js';
 
 /**
  * A light fitting you can see, click and drag.
@@ -206,14 +206,7 @@ export const FIXTURE_ITEM_SCHEMA = {
 			return {value: way, label: way === 'diffuse' ? 'All round'
 				: way.replace(/^./, function (c) {return c.toUpperCase();})};
 		})},
-		{key: 'kelvin', label: 'Colour', type: 'choice', shared: true, options: [
-			{value: 2200, label: 'Candle 2200K'},
-			{value: 2700, label: 'Warm 2700K'},
-			{value: 3000, label: 'Soft 3000K'},
-			{value: 3500, label: 'Neutral 3500K'},
-			{value: 4000, label: 'Cool 4000K'},
-			{value: 5000, label: 'Daylight 5000K'},
-		]},
+		{key: 'kelvin', label: 'Colour', type: 'choice', shared: true, options: KELVIN_OPTIONS},
 		{key: 'lumens', label: 'Output', type: 'fraction', shared: true,
 			min: 0, max: 3000, step: 50},
 		{key: 'beamAngle', label: 'Beam', type: 'fraction', min: 10, max: 179, step: 5,

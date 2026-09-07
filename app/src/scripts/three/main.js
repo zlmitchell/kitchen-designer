@@ -506,7 +506,10 @@ export class Main extends EventDispatcher
 		// defaulted it to document.body and the addon requires it explicitly;
 		// the viewer is the better target and is what the user is looking at.
 		scope.fpscontrols = new PointerLockControls(scope.fpscamera, scope.domElement);
-		scope.fpscontrols.characterHeight = 160;
+		// No height override here any more. It said 160, which is an eye about
+		// 5ft 5in off the floor, and it silently beat the controls' own answer -
+		// see `EYE_HEIGHT`, which is where the number and the reasoning now live
+		// together.
 
 		this.scene.add(scope.fpscontrols.getObject());
 		scope.fpscontrols.getObject().position.set(0, 200, 0);
@@ -1313,6 +1316,43 @@ export class Main extends EventDispatcher
 			? {hour: Number(state.hour) || 0, heading: Number(state.heading) || 0}
 			: null;
 		this.applyMood();
+	}
+
+	/**
+	 * Switch a bank of lights off, without touching the design.
+	 *
+	 * The walkthrough control: overheads off and the under-cabinet strips on is a
+	 * way of LOOKING at a kitchen, not a change to it - the same call `setAmbient`
+	 * and `setDaylight` already make. A lamp that is off in the record still says
+	 * so in its own `on`, and nothing here is written back.
+	 *
+	 * @param {Array<string>} circuits Ids to switch OFF; everything else is on.
+	 */
+	setLightCircuits(circuits)
+	{
+		if (!this.fixtures)
+		{
+			return;
+		}
+		this.fixtures.switchedOff = new Set(circuits || []);
+		// A full resync rather than a visibility flag, because `build` returns
+		// nothing at all for a fixture that is off - an unlit lamp should not cost
+		// a uniform slot and a shadow-map decision every frame.
+		this.syncFixtures();
+		this.render(true);
+	}
+
+	/**
+	 * The circuits this design has, for a panel to draw switches for.
+	 *
+	 * Read off the last sync rather than recomputed, so the list a switch panel
+	 * shows is the list the scene was actually built from.
+	 *
+	 * @returns {Array<{id: string, label: string, count: number}>}
+	 */
+	lightCircuits()
+	{
+		return (this.fixtures && this.fixtures.circuits) || [];
 	}
 
 	/**

@@ -12,8 +12,9 @@
 import {describe, it, expect, beforeEach} from 'vitest';
 import {Group, Mesh, MeshStandardMaterial, BoxGeometry, Scene, Vector3} from 'three';
 import {
-	MAX_STRIP_SEGMENTS, MOUNTS, MOUNT_DEFAULTS, SCENE_UNITS_PER_METRE, collectFixtures,
-	emittersFor, intensityFor, normaliseFixture, shadowCasters,
+	MAX_STRIP_SEGMENTS, MOUNTS, MOUNT_DEFAULTS, SCENE_UNITS_PER_METRE, circuitOf,
+	circuitsIn, collectFixtures, emittersFor, intensityFor, normaliseFixture,
+	shadowCasters,
 } from '../src/scripts/model/light.js';
 import {
 	Fixtures, PHOTOMETRIC_REFERENCE, PHOTOMETRIC_SCALE, shadeSlots,
@@ -954,5 +955,126 @@ describe('a strip is one length, not two', () =>
 			length, lumens: 300})).reduce((sum, e) => sum + e.lumens, 0);
 		expect(total(60)).toBeCloseTo(300, 6);
 		expect(total(300)).toBeCloseTo(300, 6);
+	});
+});
+
+describe('lights are switched in banks, the way a house is wired', () =>
+{
+	it('puts a fixture on the bank its mount implies', () =>
+	{
+		// Nobody wires a kitchen one lamp at a time. The cans go on one switch, the
+		// sconces on another, the worktop strips on a third by the door - so the
+		// mount is the default answer to "which switch".
+		expect(circuitOf(normaliseFixture({mount: 'recessed'}))).toBe('ceiling');
+		expect(circuitOf(normaliseFixture({mount: 'pendant'}))).toBe('ceiling');
+		expect(circuitOf(normaliseFixture({mount: 'wall'}))).toBe('wall');
+		expect(circuitOf(normaliseFixture({mount: 'under-cabinet'}))).toBe('task');
+		expect(circuitOf(normaliseFixture({mount: 'toe-kick'}))).toBe('accent');
+	});
+
+	it('lets a design name its own circuits instead', () =>
+	{
+		// `group` has been on the record since it was written - "a switch bank, so
+		// a design can name its own circuits" - and nothing read it until now.
+		expect(circuitOf(normaliseFixture({mount: 'recessed', group: 'island'})))
+			.toBe('island');
+	});
+
+	it('offers a switch only for the banks the design has', () =>
+	{
+		// Four dead toggles in a design with one lamp is worse than no panel. The
+		// list is derived from what is placed, so a switch appears with the first
+		// fixture on it.
+		expect(circuitsIn([])).toEqual([]);
+
+		const found = circuitsIn([
+			{fixture: normaliseFixture({mount: 'recessed'})},
+			{fixture: normaliseFixture({mount: 'recessed'})},
+			{fixture: normaliseFixture({mount: 'under-cabinet'})},
+		]);
+		expect(found.map((one) => one.id)).toEqual(['ceiling', 'task']);
+		expect(found[0].count).toBe(2);
+		expect(found[0].label).toBe('Overheads');
+	});
+
+	it('keeps the order stable, so a switch does not move under a finger', () =>
+	{
+		// Added in one order, listed in another: the known banks in their own
+		// order, then anything a design named, alphabetically.
+		const found = circuitsIn([
+			{fixture: normaliseFixture({mount: 'recessed', group: 'zone-b'})},
+			{fixture: normaliseFixture({mount: 'toe-kick'})},
+			{fixture: normaliseFixture({mount: 'recessed'})},
+			{fixture: normaliseFixture({mount: 'recessed', group: 'island'})},
+			{fixture: normaliseFixture({mount: 'wall'})},
+		]);
+		expect(found.map((one) => one.id)).toEqual(
+			['ceiling', 'wall', 'accent', 'island', 'zone-b']);
+	});
+});
+
+describe('a switched-off bank is not in the scene at all', () =>
+{
+	let scene;
+	let fixtures;
+
+	beforeEach(() =>
+	{
+		scene = new Scene();
+		fixtures = new Fixtures(scene, STUDIO);
+	});
+
+	const TWO_BANKS = [
+		{id: 'can', mount: 'recessed', position: {x: 0, y: 240, z: 0}},
+		{id: 'strip', mount: 'under-cabinet', position: {x: 0, y: 140, z: 0}},
+	];
+
+	it('drops the emitters of a bank that is off and keeps the rest', () =>
+	{
+		fixtures.sync(modelWith(TWO_BANKS));
+		expect(fixtures.groups).toHaveLength(2);
+
+		fixtures.switchedOff = new Set(['ceiling']);
+		fixtures.sync(modelWith(TWO_BANKS));
+		expect(fixtures.groups).toHaveLength(1);
+		expect(fixtures._byId.has('strip')).toBe(true);
+		expect(fixtures._byId.has('can')).toBe(false);
+	});
+
+	it('still lists a bank it has switched off', () =>
+	{
+		// A switch that vanished when you used it would be a switch you could not
+		// turn back on.
+		fixtures.switchedOff = new Set(['ceiling', 'task']);
+		fixtures.sync(modelWith(TWO_BANKS));
+		expect(fixtures.groups).toHaveLength(0);
+		expect(fixtures.circuits.map((one) => one.id)).toEqual(['ceiling', 'task']);
+	});
+
+	it('comes back exactly as it was when the bank is switched on again', () =>
+	{
+		// The switch is a way of LOOKING at the design and not a change to it, so
+		// there is nothing to restore and nothing that can be lost.
+		fixtures.sync(modelWith(TWO_BANKS));
+		const before = fixtures.groups.length;
+
+		fixtures.switchedOff = new Set(['ceiling']);
+		fixtures.sync(modelWith(TWO_BANKS));
+		fixtures.switchedOff = new Set();
+		fixtures.sync(modelWith(TWO_BANKS));
+
+		expect(fixtures.groups).toHaveLength(before);
+	});
+
+	it('does not switch on a lamp the DESIGN says is off', () =>
+	{
+		// Two different questions with one answer each: `on` is what the record
+		// says, and the circuit is what the viewer is doing. Neither overrides the
+		// other, so an off lamp on a live bank stays off.
+		fixtures.switchedOff = new Set();
+		fixtures.sync(modelWith([
+			{id: 'dead', mount: 'recessed', on: false, position: {x: 0, y: 240, z: 0}},
+		]));
+		expect(fixtures.groups).toHaveLength(0);
 	});
 });

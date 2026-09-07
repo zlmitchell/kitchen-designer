@@ -3,6 +3,7 @@ import {Box3, Group, Mesh, Vector3} from 'three';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
 import {boxGeometryFor} from '../../core/geometry_builders.js';
+import {KELVIN_OPTIONS} from '../../model/light.js';
 
 /**
  * A cabinet, built from panels.
@@ -154,6 +155,24 @@ const DEFAULTS = {
 	 */
 	glazing: 'none',
 	/**
+	 * Whether a strip is fixed under this cabinet.
+	 *
+	 * A property OF the cabinet and not a light somebody put near one, which is
+	 * the whole reason it lives here: an under-cabinet strip is the cabinet's
+	 * width, it is screwed to its underside, and it moves when the cabinet moves.
+	 * Placing it as a separate object would mean keeping two things in step by
+	 * hand for the entire life of the design, which is the class of bug the
+	 * nesting in `model/light.js` was shaped to make impossible.
+	 *
+	 * The variant picks the mount, because "under" means two different fittings:
+	 * under a WALL cabinet is the strip over a worktop, and under a base or tall
+	 * cabinet is the toe kick, which is an accent wash on the floor. Same field,
+	 * because it is the same question -- is there a light under this box.
+	 */
+	underLight: false,
+	/** What colour that strip is. 3000K is what a worktop is normally lit at. */
+	underLightKelvin: 3000,
+	/**
 	 * How much of the front the sink above has taken, in centimetres.
 	 *
 	 * A farmhouse sink's apron IS the top of this cabinet's face - you buy a sink
@@ -213,6 +232,8 @@ const DEFAULTS = {
  * @property {('face'|'frameless')} [frame]
  * @property {('slab'|'shaker'|'raised')} [front]
  * @property {('none'|'glass'|'mullion')} [glazing]
+ * @property {boolean} [underLight]
+ * @property {number} [underLightKelvin]
  * @property {number} [doors] @property {Array<number>} [drawers]
  * @property {string} [layout] One of `CABINET_LAYOUTS`, or `custom`.
  * @property {number} [apronCut]
@@ -289,6 +310,9 @@ function fitDrawers(drawers, available, doors)
  * right only while the whole assembly is the geometry.
  *
  * @param {Group} group
+ * @returns {Vector3} How far everything moved, so anything positioned in the
+ *          builder's own frame can be brought into the centred one. A carried
+ *          fixture is not a mesh, so `centre` cannot move it for us.
  */
 function centre(group)
 {
@@ -303,6 +327,54 @@ function centre(group)
 	// which came out as a cabinet 71.5cm deep instead of 68 and a centre still
 	// 1.75 off.
 	group.updateMatrixWorld(true);
+	return middle;
+}
+
+/**
+ * The strip under the cabinet, as a fixture record in the cabinet's own frame.
+ *
+ * Returns a record and not geometry. The bar you can see is `fixture.js`'s job
+ * when somebody places a fitting by hand; here the strip is a channel tucked up
+ * behind the face, which is invisible from every angle a kitchen is looked at --
+ * so drawing it would be geometry nobody sees, and what matters is the light.
+ *
+ * Where it goes is the number worth getting right, and it is the same rule for
+ * both mounts: **at the front, not the middle**. A strip over the centre of a
+ * 61cm worktop lights the splashback and throws the shadow of the cabinet's own
+ * face across the front half of the counter, which is where the work happens. At
+ * the front edge it washes the whole depth. Everybody who has fitted one knows
+ * this and no render will tell you.
+ *
+ * @param {Object} s The resolved spec.
+ * @param {Object} f The shell.
+ * @param {Vector3} middle What `centre` moved everything by.
+ * @returns {?Object} A fixture record, or null.
+ */
+function underLight(s, f, middle)
+{
+	if (!s.underLight)
+	{
+		return null;
+	}
+	var wall = (s.variant === 'wall');
+	// Under a wall cabinet: just below the carcass bottom, near the front edge.
+	// Under a base or tall one: inside the toe recess, just above the floor and
+	// tucked behind the kick board so the fitting itself is never in view.
+	var y = wall ? f.floor - 1.2 : f.floor + 2.4;
+	var z = wall ? f.face - 8.0 : f.face - s.toeRecess + 1.0;
+	// The clear width between the cabinet sides, less an end margin. A strip cut
+	// to the full width would light the gap between two cabinets as brightly as
+	// the worktop, and the join is the one place a strip must not be visible.
+	var length = Math.max(10, s.width - 2 * s.panel - 4);
+	return {
+		mount: wall ? 'under-cabinet' : 'toe-kick',
+		kelvin: s.underLightKelvin,
+		length: length,
+		// Into the frame `centre` just established. `Item` recentres a generated
+		// build on its bounds again, but that is a no-op after `centre` - the
+		// invariant every builder here keeps.
+		position: {x: -middle.x, y: y - middle.y, z: z - middle.z},
+	};
 }
 
 /**
@@ -590,6 +662,15 @@ export const CABINET_SCHEMA = {
 			{value: true, label: 'Recessed'},
 			{value: false, label: 'None'},
 		]},
+		// Shared, unlike glazing: under-cabinet lighting is run along a whole row
+		// of uppers and looks wrong done to one of them, which is the opposite of
+		// what glass is for.
+		{shared: true, key: 'underLight', label: 'Light underneath', type: 'choice', options: [
+			{value: false, label: 'None'},
+			{value: true, label: 'Strip'},
+		]},
+		{shared: true, key: 'underLightKelvin', label: 'Strip colour', type: 'choice',
+			when: {underLight: true}, options: KELVIN_OPTIONS},
 		{shared: true, key: 'material.front', label: 'Fronts', type: 'material'},
 		// `when` and not `unless`, deliberately: a spec written before glazing
 		// existed has no `glazing` key at all, and `unless: {glazing: 'none'}` would
@@ -780,7 +861,13 @@ export function buildCabinet(spec)
 		}
 	}
 
-	centre(group);
+	var middle = centre(group);
 	var merged = mergeMeshes(group);
-	return {geometry: merged.geometry, materials: merged.materials, parts: []};
+	var built = {geometry: merged.geometry, materials: merged.materials, parts: []};
+	var strip = underLight(s, f, middle);
+	if (strip)
+	{
+		built.fixtures = [strip];
+	}
+	return built;
 }

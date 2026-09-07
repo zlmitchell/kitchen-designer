@@ -9,6 +9,9 @@
 import {describe, it, expect} from 'vitest';
 import {Box3, Vector3} from 'three';
 import {buildCabinet, CABINET_LAYOUTS} from '../src/scripts/items/generated/cabinet.js';
+import {
+	MOUNT_DEFAULTS, emittersFor, normaliseFixture,
+} from '../src/scripts/model/light.js';
 
 const size = (built) =>
 {
@@ -601,5 +604,122 @@ describe('a glass front is a pane in the door own frame', () =>
 			material: Object.assign({}, DISTINCT, {glass: 'glass-frosted'})}));
 		expect(uses(frosted, 'glass-frosted')).toBe(true);
 		expect(uses(frosted, 'glass-clear')).toBe(false);
+	});
+});
+
+describe('a cabinet carries the strip fixed under it', () =>
+{
+	/** The built geometry's own box, which is the frame a carried fixture is in. */
+	const boxOf = (built) =>
+	{
+		built.geometry.computeBoundingBox();
+		return built.geometry.boundingBox;
+	};
+
+	const WALL = {variant: 'wall', width: 76.2, mountHeight: 137.16, ceilingHeight: 243.84};
+
+	it('declares nothing at all unless somebody asks for it', () =>
+	{
+		// Which is also what keeps every design saved before this opening as it
+		// did: no field, no fixture, and the same geometry.
+		const off = buildCabinet(Object.assign({}, WALL));
+		expect(off.fixtures).toBeUndefined();
+		expect(buildCabinet(Object.assign({}, WALL, {underLight: false})).fixtures)
+			.toBeUndefined();
+	});
+
+	it('picks the mount from what kind of cabinet it is', () =>
+	{
+		// "Under" means two different fittings. Under a wall cabinet is the strip
+		// over a worktop; under a base one is the toe kick, washing the floor.
+		expect(buildCabinet(Object.assign({}, WALL, {underLight: true}))
+			.fixtures[0].mount).toBe('under-cabinet');
+		expect(buildCabinet({variant: 'base', width: 76.2, underLight: true})
+			.fixtures[0].mount).toBe('toe-kick');
+		expect(buildCabinet({variant: 'tall', width: 76.2, underLight: true})
+			.fixtures[0].mount).toBe('toe-kick');
+	});
+
+	it('puts the strip under the cabinet and at its front', () =>
+	{
+		// The arithmetic worth testing, because `centre` moves every mesh in the
+		// group and a carried fixture is not a mesh - so it has to be brought into
+		// the centred frame by hand, and getting that wrong puts the light in the
+		// middle of the carcass where nothing can see it.
+		const built = buildCabinet(Object.assign({}, WALL, {underLight: true}));
+		const strip = built.fixtures[0];
+		const box = boxOf(built);
+
+		// Below the box, and only just - it is screwed to the underside.
+		expect(strip.position.y).toBeLessThan(box.min.y);
+		expect(strip.position.y).toBeGreaterThan(box.min.y - 4);
+		// Centred across the width.
+		expect(strip.position.x).toBeCloseTo(0, 1);
+		// And at the FRONT. A strip over the middle of a 61cm worktop lights the
+		// splashback and throws the cabinet's own face across the front half of
+		// the counter, which is exactly where the work happens.
+		expect(strip.position.z).toBeGreaterThan(0);
+		expect(strip.position.z).toBeLessThan(box.max.z);
+	});
+
+	it('tucks a toe-kick strip into the recess rather than under the floor', () =>
+	{
+		// A base cabinet stands ON the floor, so "underneath" is a recess and not
+		// open air. Below the box here would be below the floor.
+		const built = buildCabinet({variant: 'base', width: 76.2, underLight: true});
+		const strip = built.fixtures[0];
+		const box = boxOf(built);
+
+		expect(strip.position.y).toBeGreaterThan(box.min.y);
+		expect(strip.position.y).toBeLessThan(box.min.y + 6);
+		// Set back behind the face, which is what a toe kick is.
+		expect(strip.position.z).toBeLessThan(box.max.z - 5);
+	});
+
+	it('cuts the strip to the cabinet, and stops short of the join', () =>
+	{
+		// A strip run to the full width lights the gap between two cabinets as
+		// brightly as the worktop, and the join is the one place it must not show.
+		const narrow = buildCabinet(Object.assign({}, WALL,
+			{width: 45.72, underLight: true})).fixtures[0];
+		const wide = buildCabinet(Object.assign({}, WALL,
+			{width: 121.92, underLight: true})).fixtures[0];
+
+		expect(narrow.length).toBeLessThan(45.72);
+		expect(wide.length).toBeLessThan(121.92);
+		expect(wide.length).toBeGreaterThan(narrow.length);
+		// Most of the cabinet, not a token bar in the middle of it.
+		expect(wide.length).toBeGreaterThan(121.92 * 0.85);
+	});
+
+	it('becomes a real row of emitters, sharing one output', () =>
+	{
+		// The end of the path: what the cabinet declares is a record, and the
+		// record has to survive `normaliseFixture` as a STRIP - a single point
+		// source under a metre of cabinet is the hard scallop the row exists to
+		// avoid.
+		const strip = buildCabinet(Object.assign({}, WALL,
+			{width: 121.92, underLight: true, underLightKelvin: 2700})).fixtures[0];
+		const fixture = normaliseFixture(strip);
+
+		expect(fixture.strip).toBe(true);
+		expect(fixture.kelvin).toBe(2700);
+		expect(fixture.length).toBeCloseTo(strip.length, 3);
+		const emitters = emittersFor(fixture);
+		expect(emitters.length).toBeGreaterThan(1);
+		// Spread along the cabinet's own x, which is its width - the host's
+		// transform is what turns that into the room's axes.
+		expect(Math.max(...emitters.map((e) => e.dx)))
+			.toBeGreaterThan(strip.length * 0.25);
+		// One lamp cut into pieces, not one lamp per piece.
+		expect(emitters.reduce((sum, e) => sum + e.lumens, 0))
+			.toBeCloseTo(MOUNT_DEFAULTS['under-cabinet'].lumens, 6);
+	});
+
+	it('throws down, because that is what a strip under a cabinet does', () =>
+	{
+		const strip = buildCabinet(Object.assign({}, WALL, {underLight: true})).fixtures[0];
+		expect(normaliseFixture(strip).throw).toBe('down');
+		expect(emittersFor(normaliseFixture(strip)).every((e) => e.aim === -1)).toBe(true);
 	});
 });

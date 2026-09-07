@@ -1,7 +1,9 @@
 // @ts-check
 import {Object3D, PointLight, SpotLight, Vector3} from 'three';
 import {kelvinToColor} from '../core/color_temperature.js';
-import {collectFixtures, emittersFor, intensityFor, shadowCasters} from '../model/light.js';
+import {
+	circuitOf, circuitsIn, collectFixtures, emittersFor, intensityFor, shadowCasters,
+} from '../model/light.js';
 import {isStudio, renderProfile} from '../core/render_profile.js';
 
 /**
@@ -140,6 +142,22 @@ export class Fixtures
 		 */
 		this._shades = [];
 		this.shadowCap = DEFAULT_SHADOW_CAP;
+		/**
+		 * Circuits the viewer has switched off, by id.
+		 *
+		 * VIEW state and not design state, which is the same call `useLighting`
+		 * makes about the ambient fill and the time of day: walking through a
+		 * house with the overheads off is a way of LOOKING at the design, not a
+		 * change to it. Two people opening the same file should get the same
+		 * kitchen, and a lamp that is off in the record still says so in `on`.
+		 *
+		 * So an emitter is built when the fixture is on AND its circuit is not
+		 * switched off, and nothing here is ever written back.
+		 * @type {Set<string>}
+		 */
+		this.switchedOff = new Set();
+		/** @type {Array<{id: string, label: string, count: number}>} */
+		this.circuits = [];
 		this._disposed = false;
 	}
 
@@ -166,8 +184,18 @@ export class Fixtures
 		var items = (model && model.scene && model.scene.getItems) ? model.scene.getItems() : [];
 		var lights = (model && model.lights) || [];
 
-		collectFixtures(lights, items).forEach(function (entry)
+		var entries = collectFixtures(lights, items);
+		// Every circuit the design has, including the ones currently switched off -
+		// a switch that vanished when you used it would be a switch you could not
+		// turn back on.
+		this.circuits = circuitsIn(entries);
+
+		entries.forEach(function (entry)
 		{
+			if (scope.switchedOff.has(circuitOf(entry.fixture)))
+			{
+				return;
+			}
 			var group = scope.build(entry.fixture, entry.host);
 			if (!group)
 			{
