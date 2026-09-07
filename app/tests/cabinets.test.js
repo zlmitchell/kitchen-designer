@@ -398,3 +398,208 @@ describe('face layouts', () =>
 			.toBe(verts({doors: 0, drawers: [15, 20, 25]}));
 	});
 });
+
+/**
+ * How many vertices one material draws.
+ *
+ * `partBounds` answers where; a divided light needs how many as well, because
+ * the muntins are made of the SAME material as the rails that hold them - they
+ * are painted with the door, and a slot of their own would be a control nobody
+ * would ever set differently. So bars show up as more of the front material
+ * rather than as a new one, and counting is the only way to see them.
+ */
+function partVerts(built, materialId)
+{
+	const index = built.materials.findIndex((m) => m.userData.materialId === materialId);
+	if (index < 0) {return 0;}
+	return built.geometry.groups
+		.filter((group) => group.materialIndex === index)
+		.reduce((sum, group) => sum + group.count, 0);
+}
+
+/** Whether this cabinet is finished with a material at all. */
+const uses = (built, materialId) =>
+	built.materials.some((m) => m.userData.materialId === materialId);
+
+/**
+ * How far the front material reaches, over the glass only.
+ *
+ * The muntin trap, measured: a bar flush with the pane is a bar nobody can see,
+ * which is the fault `opening.js` documents from the window's side and the one
+ * that made a vent hood's filter render as nothing while its triangles were
+ * present and correct. Rails are outside the glass rectangle, so anything of the
+ * door's own material INSIDE it is a muntin, and how far proud of the pane it
+ * stands is the whole question.
+ */
+function frontOverGlass(built, frontId, glassId)
+{
+	const pane = partBounds(built, glassId);
+	const index = built.materials.findIndex((m) => m.userData.materialId === frontId);
+	const position = built.geometry.getAttribute('position');
+	let frontmost = -Infinity;
+	for (const group of built.geometry.groups)
+	{
+		if (group.materialIndex !== index) {continue;}
+		for (let i = group.start; i < group.start + group.count; i++)
+		{
+			const v = new Vector3().fromBufferAttribute(position, i);
+			// Well inside the pane, so a rail's own edge cannot be read as a bar.
+			if (v.x < pane.min.x + 2 || v.x > pane.max.x - 2) {continue;}
+			if (v.y < pane.min.y + 2 || v.y > pane.max.y - 2) {continue;}
+			frontmost = Math.max(frontmost, v.z);
+		}
+	}
+	return frontmost;
+}
+
+describe('a glass front is a pane in the door own frame', () =>
+{
+	/** A wall cabinet, which is what anybody actually glazes. */
+	const GLAZED = {variant: 'wall', width: 60.96, doors: 2, material: DISTINCT};
+
+	it('spends the glass slot only when something is glazed', () =>
+	{
+		// The material is built either way - `materialsForSlots` fills every slot -
+		// but `mergeMeshes` pools from the meshes that exist, so a solid cabinet
+		// carries no glass in what it hands back.
+		expect(uses(buildCabinet(Object.assign({}, GLAZED, {glazing: 'none'})), 'glass-clear'))
+			.toBe(false);
+		expect(uses(buildCabinet(Object.assign({}, GLAZED, {glazing: 'glass'})), 'glass-clear'))
+			.toBe(true);
+	});
+
+	it('leaves a spec that never heard of glazing exactly as it was', () =>
+	{
+		// Every design saved before this existed omits the key. Solid is the
+		// default for exactly that reason.
+		const before = buildCabinet(GLAZED);
+		const after = buildCabinet(Object.assign({}, GLAZED, {glazing: 'none'}));
+		expect(before.geometry.getAttribute('position').count)
+			.toBe(after.geometry.getAttribute('position').count);
+		expect(uses(before, 'glass-clear')).toBe(false);
+	});
+
+	it('holds the pane inside the rails rather than replacing the door', () =>
+	{
+		// The point of glazing being a property of the CENTRE: what changes between
+		// a shaker door and the glass one beside it is the panel, not the door.
+		const built = buildCabinet(Object.assign({}, GLAZED, {glazing: 'glass'}));
+		const pane = partBounds(built, 'glass-clear');
+		const fronts = partBounds(built, 'wood-walnut');
+		expect(pane.min.x).toBeGreaterThan(fronts.min.x);
+		expect(pane.max.x).toBeLessThan(fronts.max.x);
+		expect(pane.min.y).toBeGreaterThan(fronts.min.y);
+		expect(pane.max.y).toBeLessThan(fronts.max.y);
+	});
+
+	it('keeps the glass clear of both faces of the door', () =>
+	{
+		// Two coplanar faces z-fight and it reads as geometry, not as glass. The
+		// pane is thinner than the door and centred in it, so no face of it shares
+		// a plane with a rail - the rule `buildSash` follows in a window.
+		const built = buildCabinet(Object.assign({}, GLAZED, {glazing: 'glass'}));
+		const pane = partBounds(built, 'glass-clear');
+		const fronts = partBounds(built, 'wood-walnut');
+		expect(pane.min.z).toBeGreaterThan(fronts.min.z + 0.1);
+		expect(pane.max.z).toBeLessThan(fronts.max.z - 0.1);
+	});
+
+	it('gives a glazed slab the rails glass has to be held in', () =>
+	{
+		// A slab is one box and a glazed slab cannot be: glass with nothing round
+		// it is not a door. So the style names what the centre does, and asking for
+		// glass overrides the slab shortcut rather than losing the glass.
+		const solid = buildCabinet(Object.assign({}, GLAZED, {front: 'slab'}));
+		const glazed = buildCabinet(Object.assign({}, GLAZED, {front: 'slab', glazing: 'glass'}));
+		expect(uses(glazed, 'glass-clear')).toBe(true);
+		expect(partVerts(glazed, 'wood-walnut'))
+			.toBeGreaterThan(partVerts(solid, 'wood-walnut'));
+	});
+
+	it('drops the glazing rather than the door when a front is too small', () =>
+	{
+		// A 4in pane in a filler is worse than no glass, and a door with no centre
+		// panel has nowhere to put one. Coming out solid is the only failure here
+		// that still leaves something buildable.
+		const filler = buildCabinet({variant: 'wall', width: 22.86, doors: 2,
+			glazing: 'glass', material: DISTINCT});
+		expect(uses(filler, 'glass-clear')).toBe(false);
+	});
+
+	it('leaves drawer fronts solid, because a glass drawer is not a thing', () =>
+	{
+		// Which is why glazing is its own field and not a fourth door style: a run
+		// with one glass cabinet in it still has solid drawers under the counter.
+		const bank = buildCabinet({variant: 'base', layout: 'four-drawers',
+			glazing: 'glass', material: DISTINCT});
+		expect(uses(bank, 'glass-clear')).toBe(false);
+
+		// And a face that is both keeps the two apart: the doors glaze, the drawer
+		// over them does not.
+		const mixed = buildCabinet({variant: 'base', layout: 'drawer-over-doors',
+			glazing: 'glass', material: DISTINCT});
+		const pane = partBounds(mixed, 'glass-clear');
+		const fronts = partBounds(mixed, 'wood-walnut');
+		expect(pane.max.y).toBeLessThan(fronts.max.y - 15.24);
+	});
+
+	it('divides the light with bars that stand off the glass', () =>
+	{
+		const plain = buildCabinet(Object.assign({}, GLAZED, {glazing: 'glass'}));
+		const divided = buildCabinet(Object.assign({}, GLAZED, {glazing: 'mullion'}));
+
+		// Same pane, more door: the bars are muntins laid over the glass, not a
+		// smaller piece of glass with the frame grown into it.
+		expect(partVerts(divided, 'glass-clear')).toBe(partVerts(plain, 'glass-clear'));
+		expect(partVerts(divided, 'wood-walnut'))
+			.toBeGreaterThan(partVerts(plain, 'wood-walnut'));
+
+		// Proud on the face you look at, and by enough to catch a shadow.
+		const pane = partBounds(divided, 'glass-clear');
+		expect(frontOverGlass(divided, 'wood-walnut', 'glass-clear'))
+			.toBeGreaterThan(pane.max.z + 0.2);
+		// A plain pane has nothing of the door over it at all.
+		expect(frontOverGlass(plain, 'wood-walnut', 'glass-clear')).toBe(-Infinity);
+	});
+
+	/**
+	 * Muntins per door, by what the door gains over a plain pane.
+	 *
+	 * A box is 36 vertices once `mergeMeshes` de-indexes it, and the bars are the
+	 * only thing a divided door has that a glazed one does not.
+	 */
+	function bars(spec, doors)
+	{
+		const plain = buildCabinet(Object.assign({}, spec, {glazing: 'glass'}));
+		const divided = buildCabinet(Object.assign({}, spec, {glazing: 'mullion'}));
+		return (partVerts(divided, 'wood-walnut') - partVerts(plain, 'wood-walnut')) / 36 / doors;
+	}
+
+	it('sizes the grid off the door, not off a fixed count', () =>
+	{
+		// A light is about 9in, which is what a divided cabinet door is made with -
+		// so the grid follows the door rather than the door being forced into a
+		// grid. A standard pair comes out tall narrow lights divided across, which
+		// is exactly what a glass wall cabinet looks like; a 4ft single door is
+		// wide enough to want dividing both ways as well.
+		const pair = bars({variant: 'wall', width: 60.96, doors: 2, material: DISTINCT}, 2);
+		const wide = bars({variant: 'wall', width: 121.92, doors: 1, material: DISTINCT}, 1);
+		const pantry = bars({variant: 'tall', width: 76.2, doors: 2, material: DISTINCT}, 2);
+
+		expect(pair).toBeGreaterThan(0);
+		expect(wide).toBeGreaterThan(pair);
+		// Taller door, more lights up it.
+		expect(pantry).toBeGreaterThan(pair);
+		// And never a mesh screen: the count is capped, so a wall of glass does
+		// not turn into a hundred bars nobody can see.
+		expect(wide).toBeLessThan(10);
+	});
+
+	it('takes a glazing material like any other slot', () =>
+	{
+		const frosted = buildCabinet(Object.assign({}, GLAZED, {glazing: 'glass',
+			material: Object.assign({}, DISTINCT, {glass: 'glass-frosted'})}));
+		expect(uses(frosted, 'glass-frosted')).toBe(true);
+		expect(uses(frosted, 'glass-clear')).toBe(false);
+	});
+});

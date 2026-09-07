@@ -38,6 +38,13 @@ import {boxGeometryFor} from '../../core/geometry_builders.js';
  * `raised` adds a proud centre panel to the same frame. No CSG, no bevels, no
  * imported geometry.
  *
+ * `glazing` is the same idea one step further: the centre panel is the only
+ * thing that changes between a shaker door and the glass door beside it in the
+ * same run, so it is a property of the CENTRE and not a fourth style. Asking it
+ * as its own question is also what stops "glass" fighting "shaker" for one
+ * dropdown, and it is why a glazed slab still gets rails - glass needs something
+ * to be held in, and a frameless sheet of glass on hinges is not a cabinet door.
+ *
  * ## What is not here yet
  *
  * Doors do not open. When they do they will move into `parts` on a pivot, the
@@ -56,6 +63,14 @@ const SLOTS = {
 	frame: 'paint-white',
 	front: 'paint-white',
 	hardware: 'metal-brushed-nickel',
+	/**
+	 * What goes in a glazed door, and separate from `front` because it is the one
+	 * surface here that is not a solid - the same reason `door.js` gives its own
+	 * glass slot. Only spent when `glazing` asks for it; a solid cabinet builds
+	 * the material and never draws with it, which is what `door.js` does for a
+	 * flush leaf.
+	 */
+	glass: 'glass-clear',
 };
 
 /**
@@ -123,6 +138,22 @@ const DEFAULTS = {
 	frame: 'face',
 	front: 'shaker',
 	/**
+	 * What fills the DOOR panels: nothing, glass, or glass divided by muntins.
+	 *
+	 * Doors only. A glass drawer front is not a thing you buy, and a bank of them
+	 * would be a view of the inside of a drawer box - so `carcassAt` glazes the
+	 * door area and leaves the drawers solid, which is also what a run with one
+	 * glass cabinet in it actually looks like.
+	 *
+	 * `none` is the default so that every design saved before this existed opens
+	 * exactly as it did.
+	 *
+	 * Not yet expressible: glass in the STACKED upper only, which is the commonest
+	 * way a kitchen is glazed. This reaches every door on the cabinet, stack
+	 * included, because that is what a control labelled "Glazing" says it does.
+	 */
+	glazing: 'none',
+	/**
 	 * How much of the front the sink above has taken, in centimetres.
 	 *
 	 * A farmhouse sink's apron IS the top of this cabinet's face - you buy a sink
@@ -181,6 +212,7 @@ const DEFAULTS = {
  * @property {number} [width] @property {number} [depth] @property {number} [height]
  * @property {('face'|'frameless')} [frame]
  * @property {('slab'|'shaker'|'raised')} [front]
+ * @property {('none'|'glass'|'mullion')} [glazing]
  * @property {number} [doors] @property {Array<number>} [drawers]
  * @property {string} [layout] One of `CABINET_LAYOUTS`, or `custom`.
  * @property {number} [apronCut]
@@ -320,6 +352,79 @@ function shell(s)
 	};
 }
 
+/** Glazing stock: 4mm, and thin enough to sit clear of both faces of the door. */
+const GLASS_THICKNESS = 0.4;
+
+/** Muntin bar width, and how far it stands off the glass on each face. */
+const MUNTIN = 1.9;
+const MUNTIN_PROUD = 0.3;
+
+/**
+ * How big one light wants to be, in centimetres. About 9in, which is what a
+ * divided cabinet door is actually made with - a 15in wide door comes out two
+ * lights across and a 30in tall one three lights up, and that is the grid
+ * anybody picturing a glass cabinet has in mind.
+ */
+const LIGHT = 22.0;
+
+/** How many lights fit across a span, at least one and never a mesh screen. */
+function lights(span)
+{
+	return Math.max(1, Math.min(4, Math.round(span / LIGHT)));
+}
+
+/**
+ * The pane that fills a glazed door, and whatever muntins divide it.
+ *
+ * Two of the traps in `docs/generated-items.md` decide the numbers here, and
+ * `opening.js`'s `buildSash` documents both from the window's side:
+ *
+ *   - **A solid swallows anything put inside it.** A muntin flush with the pane
+ *     is a muntin nobody can see. The bars stand proud of the glass on both
+ *     faces, which is also what they do in life.
+ *   - **Two coplanar faces z-fight, and it reads as geometry.** The pane is
+ *     thinner than the door and centred in it, so no face of the glass shares a
+ *     plane with the rails, and the bars stay inside the door's own thickness.
+ *
+ * The bars are `front` and not `glass` on purpose: a muntin is a piece of the
+ * door, painted with it, and giving it its own slot would be a control nobody
+ * would ever set differently.
+ *
+ * @param {Object} mats Needs `glass` as well as `front`.
+ * @param {number} zc The middle of the door's thickness.
+ * @param {boolean} muntins Whether to divide the pane.
+ * @returns {Array<Mesh>}
+ */
+function glazedCentre(mats, x0, x1, y0, y1, zc, muntins)
+{
+	var gz = GLASS_THICKNESS / 2;
+	// A shade larger than the opening, so the pane is rebated behind the rails
+	// rather than butting them edge to edge - a butt joint there leaves a hairline
+	// of whatever is behind the cabinet showing at glancing angles.
+	var out = [box(mats.glass, x0 - 0.2, x1 + 0.2, y0 - 0.2, y1 + 0.2, zc - gz, zc + gz)];
+	if (!muntins)
+	{
+		return out;
+	}
+
+	var bz = gz + MUNTIN_PROUD;
+	var half = MUNTIN / 2;
+	var cols = lights(x1 - x0);
+	var rows = lights(y1 - y0);
+	var i;
+	for (i = 1; i < cols; i++)
+	{
+		var cx = x0 + (x1 - x0) * i / cols;
+		out.push(box(mats.front, cx - half, cx + half, y0, y1, zc - bz, zc + bz));
+	}
+	for (i = 1; i < rows; i++)
+	{
+		var cy = y0 + (y1 - y0) * i / rows;
+		out.push(box(mats.front, x0, x1, cy - half, cy + half, zc - bz, zc + bz));
+	}
+	return out;
+}
+
 /**
  * One front panel, in the chosen style.
  *
@@ -328,20 +433,33 @@ function shell(s)
  * than approximating one, and a panel-ready fridge standing in a shaker run gets
  * shaker doors with the run's reveals without anybody keeping the two in step.
  *
- * @returns {Array<Mesh>} One box for a slab, five for a shaker, six for raised.
+ * @param {Object} mats `front` and `hardware`, plus `glass` when glazed.
+ *        `appliance.js` passes `front` alone and never glazes, which is why the
+ *        glass slot is read only down the glazed branch.
+ * @param {string} [glazing] `glass` or `mullion` puts a pane in the centre
+ *        instead of a panel. Anything else, `undefined` included, is solid.
+ * @returns {Array<Mesh>} One box for a slab, five for a shaker, six for raised,
+ *          and one per muntin on top of that for a divided light.
  */
-export function frontPanel(mats, style, x0, x1, y0, y1, z0, thickness)
+export function frontPanel(mats, style, x0, x1, y0, y1, z0, thickness, glazing)
 {
 	var mat = mats.front;
 	var z1 = z0 + thickness;
 	// The frame: 2.25in rails and stiles, which is what a shaker door uses.
 	var rail = 5.7;
+	var glazed = (glazing === 'glass' || glazing === 'mullion');
 	// Fall back on whether a CENTRE PANEL is viable, not on the door's own width.
 	// A 6in door is 6in minus two 2.25in rails, so its panel is an inch and a half
 	// - nothing is made that way, and drawn that way it is three slivers. Judging
 	// the door instead of the panel got this wrong for exactly the sizes it was
 	// meant to catch.
-	if (style === 'slab' || (x1 - x0) - 2 * rail < 5 || (y1 - y0) - 2 * rail < 5)
+	//
+	// A glazed SLAB does not fall back, it gains rails: the style names what the
+	// centre does, and glass with nothing round it is not a door. A glazed door
+	// too small for a centre still does, and comes out solid - a 4in pane in a
+	// filler is worse than no glass, and dropping the glazing is the only failure
+	// here that leaves something buildable.
+	if ((x1 - x0) - 2 * rail < 5 || (y1 - y0) - 2 * rail < 5 || (style === 'slab' && !glazed))
 	{
 		return [box(mat, x0, x1, y0, y1, z0, z1)];
 	}
@@ -352,6 +470,16 @@ export function frontPanel(mats, style, x0, x1, y0, y1, z0, thickness)
 		box(mat, x0 + rail, x1 - rail, y0, y0 + rail, z0, z1),
 		box(mat, x0 + rail, x1 - rail, y1 - rail, y1, z0, z1),
 	];
+	// Glass replaces the centre outright, which is why it comes before the two
+	// solid cases rather than beside them: a raised panel is by definition solid,
+	// so "raised, glazed" is a glazed door in a raised door's frame and not a
+	// proud sheet of glass.
+	if (glazed)
+	{
+		return out.concat(glazedCentre(mats, x0 + rail, x1 - rail, y0 + rail, y1 - rail,
+			z0 + thickness / 2, glazing === 'mullion'));
+	}
+
 	// The centre. Recessed for a shaker, proud for a raised panel - and that IS
 	// the difference between the two styles.
 	//
@@ -416,6 +544,15 @@ export const CABINET_SCHEMA = {
 			{value: 'shaker', label: 'Shaker'},
 			{value: 'raised', label: 'Raised'},
 		]},
+		// NOT shared, alone among the look controls. A kitchen is glazed in one or
+		// two cabinets and not in a run - that is the whole effect of glass, that it
+		// breaks a wall of doors - so applying this to everything selected would
+		// undo the reason for reaching for it.
+		{key: 'glazing', label: 'Glazing', type: 'choice', options: [
+			{value: 'none', label: 'Solid'},
+			{value: 'glass', label: 'Glass'},
+			{value: 'mullion', label: 'Divided'},
+		]},
 		{key: 'layout', label: 'Face', type: 'choice', options: [
 			{value: 'doors', label: 'Doors'},
 			{value: 'drawer-over-doors', label: 'Drawer over doors'},
@@ -454,6 +591,12 @@ export const CABINET_SCHEMA = {
 			{value: false, label: 'None'},
 		]},
 		{shared: true, key: 'material.front', label: 'Fronts', type: 'material'},
+		// `when` and not `unless`, deliberately: a spec written before glazing
+		// existed has no `glazing` key at all, and `unless: {glazing: 'none'}` would
+		// read `undefined !== 'none'` and offer a glass picker on every solid
+		// cabinet in every saved design. See the note on `unless` in SpecInspector.
+		{shared: true, key: 'material.glass', label: 'Glass', type: 'material', group: 'glass',
+			when: {glazing: ['glass', 'mullion']}},
 		{shared: true, key: 'material.frame', label: 'Frame', type: 'material', when: {frame: 'face'}},
 		{shared: true, key: 'material.carcass', label: 'Carcass', type: 'material'},
 		{shared: true, key: 'material.hardware', label: 'Hardware', type: 'material', group: 'metal'},
@@ -550,6 +693,8 @@ function carcassAt(group, s, mats, f, yLo, yHi, doors, drawers, apronCut)
 		{
 			return;
 		}
+		// No glazing argument, and that is the point of glazing being its own
+		// field: a drawer front is solid whatever the doors below it are doing.
 		frontPanel(mats, s.front, openX0 + r, openX1 - r, lo + r, cursor - r, frontZ, s.frontThickness)
 			.forEach((mesh) => fronts.add(mesh));
 		hardwareFor(mats, s.hardware, (openX0 + openX1) / 2, (lo + cursor) / 2,
@@ -565,8 +710,8 @@ function carcassAt(group, s, mats, f, yLo, yHi, doors, drawers, apronCut)
 		{
 			var x0 = openX0 + r + i * (each + r);
 			var x1 = x0 + each;
-			frontPanel(mats, s.front, x0, x1, openLo + r, cursor - r, frontZ, s.frontThickness)
-				.forEach((mesh) => fronts.add(mesh));
+			frontPanel(mats, s.front, x0, x1, openLo + r, cursor - r, frontZ, s.frontThickness,
+				s.glazing).forEach((mesh) => fronts.add(mesh));
 			// On the opening edge - the side away from the hinge, which for a pair
 			// is the middle. That is where a hand actually goes.
 			var handX = (doorCount === 1) ? x1 - 5 : ((i === 0) ? x1 - 5 : x0 + 5);
