@@ -63,8 +63,9 @@ describe('the unified catalog', () =>
 	{
 		// 27 legacy entries + 142 glTF entries, less the one that pointed at a
 		// cabinet.json that has never existed in this repository. Plus the
-		// generated Post, which names a builder rather than a file - see below.
-		expect(CATALOG.items.length).toBe(169);
+		// generated Post and the three cabinets, which name a builder rather than a
+		// file - see below.
+		expect(CATALOG.items.length).toBe(172);
 	});
 
 	it('has dropped the entry whose model file was never in the repository', () =>

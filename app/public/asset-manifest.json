@@ -1359,6 +1359,21 @@
 			"hash": "sha256-RnbRDAUCW+2DmAdI+BzADtvMHacbagAvvpJpMk+KESc=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/cabinet-base.png": {
+			"bytes": 3072,
+			"hash": "sha256-80+UoNaoSib4xpJRivSQfpO7+csVpLPAsrs0EqdaQEU=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/cabinet-drawers.png": {
+			"bytes": 3281,
+			"hash": "sha256-793fMSPPL0Mt4O3l90QAsdXCUXURr5+kKrpyadSRtrI=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/cabinet-wall.png": {
+			"bytes": 2492,
+			"hash": "sha256-/VZL4y9HsDwjWcCEOI8cUZ6sem3Z1b58f98rB/cIfxA=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/cabinetBed.png": {
 			"bytes": 2829,
 			"hash": "sha256-bXWowk1i0dvcDvsyz64xfZpuhfAla2jbzz6iLeIyQkg=",

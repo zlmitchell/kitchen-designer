@@ -1249,6 +1249,59 @@
 				"profile": "square",
 				"trim": "none"
 			}
+		},
+		{
+			"name": "Base Cabinet",
+			"image": "models/thumbnails_new/cabinet-base.png",
+			"model": "generated:cabinet",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"variant": "base",
+				"width": 60.96,
+				"doors": 2,
+				"drawers": [],
+				"kind": "cabinet",
+				"front": "shaker",
+				"frame": "face"
+			}
+		},
+		{
+			"name": "Base Cabinet - Drawers",
+			"image": "models/thumbnails_new/cabinet-drawers.png",
+			"model": "generated:cabinet",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"variant": "base",
+				"width": 45.72,
+				"doors": 0,
+				"drawers": [
+					15.24,
+					22.86,
+					22.86,
+					22.86
+				],
+				"kind": "cabinet",
+				"front": "shaker",
+				"frame": "face"
+			}
+		},
+		{
+			"name": "Wall Cabinet",
+			"image": "models/thumbnails_new/cabinet-wall.png",
+			"model": "generated:cabinet",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"variant": "wall",
+				"width": 60.96,
+				"doors": 2,
+				"drawers": [],
+				"kind": "cabinet",
+				"front": "shaker",
+				"frame": "face"
+			}
 		}
 	]
 }

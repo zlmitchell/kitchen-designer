@@ -1,6 +1,7 @@
 // @ts-check
 import {buildDoor, DOOR_SCHEMA} from './door.js';
 import {buildPost, POST_SCHEMA} from './post.js';
+import {buildCabinet, CABINET_SCHEMA} from './cabinet.js';
 
 /**
  * Items whose geometry is generated from a spec instead of fetched.
@@ -49,6 +50,7 @@ import {buildPost, POST_SCHEMA} from './post.js';
 export const GENERATED_BUILDERS = {
 	door: buildDoor,
 	post: buildPost,
+	cabinet: buildCabinet,
 };
 
 /**
@@ -63,6 +65,7 @@ export const GENERATED_BUILDERS = {
 export const GENERATED_SCHEMAS = {
 	door: DOOR_SCHEMA,
 	post: POST_SCHEMA,
+	cabinet: CABINET_SCHEMA,
 };
 
 /**
