@@ -37,6 +37,7 @@ import {LAYOUT_PLAN, LAYOUT_SPLIT, LAYOUT_VIEW} from '../src/app/composables/use
 import {resetAll} from './helpers/harness.js';
 import {installCanvas2D, installListenerCounter, installPointerApis, installResizeObserver} from './helpers/dom.js';
 import {createRendererStub} from './helpers/renderer.js';
+import CATALOG from '../src/catalog/catalog.json';
 
 const VIEWPORT_WIDTH = 1024;
 const VIEWPORT_HEIGHT = 768;
@@ -275,7 +276,7 @@ describe('the tool rail highlight', () =>
 		// They act on a canvas that is not visible; the demo hid its camera
 		// controls in the 2D pane for the same reason.
 		expect(railButton(wrapper, 'Draw walls')).toBeUndefined();
-		expect(railButton(wrapper, 'Furniture catalog')).toBeTruthy();
+		expect(railButton(wrapper, 'Furniture')).toBeTruthy();
 
 		wrapper.unmount();
 	});
@@ -331,12 +332,12 @@ describe('the catalog drawer', () =>
 	async function openCatalog(wrapper)
 	{
 		await layoutButton(wrapper, '3D').trigger('click');
-		await railButton(wrapper, 'Furniture catalog').trigger('click');
+		await railButton(wrapper, 'Furniture').trigger('click');
 		await nextTick();
 		await nextTick();
 	}
 
-	it('opens with every model from the catalog file, and a chip per section', async () =>
+	it('opens one palette rather than the whole catalog', async () =>
 	{
 		const wrapper = await mountApp();
 		expect(drawer()).toBeNull();
@@ -345,14 +346,61 @@ describe('the catalog drawer', () =>
 		const panel = drawer();
 		expect(panel).not.toBeNull();
 
-		// One flat list rather than eight accordions, so the count is the catalog -
-		// generated entries included, since the drawer places those the same way.
-		expect(panel.querySelectorAll('li').length).toBe(196);
+		// One flat list rather than eight accordions, and the four palettes
+		// partition the catalog file - so furniture is what is left once the
+		// cabinets, the openings and the lights have been taken out of the 196.
+		const furniture = CATALOG.items.filter((item) => !item.category).length;
+		expect(furniture).toBeGreaterThan(0);
+		expect(panel.querySelectorAll('li').length).toBe(furniture);
 
+		// The type sections stay, as a filter WITHIN the palette - the type is
+		// still what decides where a thing can land. Only the ones this palette
+		// has anything in, though: a chip that empties the grid says the wrong
+		// thing about what is here.
 		const chips = [...panel.querySelectorAll('button')]
 			.map((button) => button.textContent.trim());
 		expect(chips).toContain('Floor Items');
-		expect(chips).toContain('Anywhere Items');
+
+		wrapper.unmount();
+	});
+
+	it('gives each palette its own share, and they add up to the catalog', async () =>
+	{
+		// The split has to be a partition. An item in no palette is an item that
+		// can never be placed again, and one in two is a duplicate in the grid.
+		const wrapper = await mountApp();
+		const counts = {};
+		for (const name of ['Cabinets', 'Windows & doors', 'Lighting', 'Furniture'])
+		{
+			await layoutButton(wrapper, '3D').trigger('click');
+			await railButton(wrapper, name).trigger('click');
+			await nextTick();
+			await nextTick();
+			counts[name] = drawer().querySelectorAll('li').length;
+		}
+
+		expect(counts['Cabinets']).toBeGreaterThan(0);
+		expect(counts['Windows & doors']).toBeGreaterThan(0);
+		expect(counts['Lighting']).toBeGreaterThan(0);
+		expect(Object.values(counts).reduce((sum, one) => sum + one, 0))
+			.toBe(CATALOG.items.length);
+
+		wrapper.unmount();
+	});
+
+	it('shows a light in the lighting palette and not in the furniture one', async () =>
+	{
+		// The claim the categories make, checked on one model that used to be
+		// filed under "Ceiling Items" beside a fan and a smoke alarm.
+		const wrapper = await mountApp();
+		await layoutButton(wrapper, '3D').trigger('click');
+		await railButton(wrapper, 'Lighting').trigger('click');
+		await nextTick();
+		await nextTick();
+
+		const names = [...drawer().querySelectorAll('li')].map((li) => li.textContent);
+		expect(names.some((name) => name.includes('Pendant'))).toBe(true);
+		expect(names.some((name) => name.includes('Sofa'))).toBe(false);
 
 		wrapper.unmount();
 	});

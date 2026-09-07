@@ -19,6 +19,49 @@ import catalog from '../../catalog/catalog.json';
 const WALL_BOUND_TYPES = [2, 3, 7, 9];
 
 /**
+ * What the catalog is divided into for a person, as opposed to for the code.
+ *
+ * `itemTypes` is the OTHER division and it is the wrong one to open a palette
+ * with: "Floor Items", "Wall Items" and "In Wall Items" name the class that
+ * PLACES a thing, so a door and a window share a bucket with a wall-mounted
+ * television and a base cabinet is filed beside a bed. That is a fact about
+ * `items/factory.js` and not about kitchens, which is why 196 models behind one
+ * Furniture button were easier to search than to browse.
+ *
+ * These four are what somebody is actually shopping for. They stay a filter
+ * ACROSS the type sections rather than replacing them, because the type still
+ * decides where a thing can land and the drawer still has to say so.
+ *
+ * The id lives on the catalog row as `category`; absent means `furniture`, so
+ * the common case is silent in the data and a new model is furniture until
+ * somebody says otherwise.
+ */
+export const CATALOG_CATEGORIES = [
+	{id: 'cabinets', label: 'Cabinets'},
+	{id: 'openings', label: 'Windows & doors'},
+	{id: 'lighting', label: 'Lighting'},
+	{id: 'furniture', label: 'Furniture'},
+];
+
+/**
+ * Which of the four a row belongs to.
+ *
+ * @param {Object} item A catalog row.
+ * @returns {string}
+ */
+export function categoryOf(item)
+{
+	return (item && item.category) || 'furniture';
+}
+
+/** The label for a category id, or "Catalog" for everything at once. */
+export function categoryLabel(id)
+{
+	var found = CATALOG_CATEGORIES.find(function (one) {return one.id === id;});
+	return found ? found.label : 'Catalog';
+}
+
+/**
  * @returns {Array<{id: number, heading: string, items: Array<Object>}>}
  */
 /**
@@ -29,6 +72,7 @@ const WALL_BOUND_TYPES = [2, 3, 7, 9];
  * data the first time the data changes (RM-004 B3).
  *
  * @typedef {Object} CatalogItem
+ * @property {string} [category] One of `CATALOG_CATEGORIES`. Absent is furniture.
  * @property {string} name Shown under the thumbnail, and used as the item name.
  * @property {string} image Thumbnail URL, a logical asset name.
  * @property {string} model The model's logical asset name.

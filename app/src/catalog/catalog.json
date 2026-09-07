@@ -64,21 +64,24 @@
 			"image": "models/thumbnails/thumbnail_Screen_Shot_2014-10-27_at_8.04.12_PM.jpg",
 			"model": "models/js-glb/closed-door28x80_baked.glb",
 			"type": 7,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Open Door",
 			"image": "models/thumbnails/thumbnail_Screen_Shot_2014-10-27_at_8.22.46_PM.jpg",
 			"model": "models/js-glb/open_door.glb",
 			"type": 7,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Window",
 			"image": "models/thumbnails/thumbnail_window.png",
 			"model": "models/js-glb/whitewindow.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Chair",
@@ -190,7 +193,8 @@
 			"image": "models/thumbnails/thumbnail_ore-white.jpg",
 			"model": "models/js-glb/ore-3legged-white_baked.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "lighting"
 		},
 		{
 			"name": "Coffee Table - Wood",
@@ -246,21 +250,24 @@
 			"image": "models/thumbnails_new/SimpleCabinet.png",
 			"model": "models/gltf/SimpleCabinet.glb",
 			"type": 9,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Bathroomcabinet",
 			"image": "models/thumbnails_new/bathroomCabinet.png",
 			"model": "models/gltf/bathroomCabinet.glb",
 			"type": 2,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Bathroomcabinetdrawer",
 			"image": "models/thumbnails_new/bathroomCabinetDrawer.png",
 			"model": "models/gltf/bathroomCabinetDrawer.glb",
 			"type": 9,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Bathroommirror",
@@ -274,14 +281,16 @@
 			"image": "models/thumbnails_new/bathroomSink.png",
 			"model": "models/gltf/bathroomSink.glb",
 			"type": 9,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Bathroomsinksquare",
 			"image": "models/thumbnails_new/bathroomSinkSquare.png",
 			"model": "models/gltf/bathroomSinkSquare.glb",
 			"type": 9,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Bathtub",
@@ -449,7 +458,8 @@
 						"z": 0
 					}
 				}
-			]
+			],
+			"category": "lighting"
 		},
 		{
 			"name": "Chair",
@@ -511,7 +521,8 @@
 						"z": 0
 					}
 				}
-			]
+			],
+			"category": "lighting"
 		},
 		{
 			"name": "Coatrack",
@@ -567,21 +578,24 @@
 			"image": "models/thumbnails_new/doorway.png",
 			"model": "models/gltf/doorway.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Doorwayfront",
 			"image": "models/thumbnails_new/doorwayFront.png",
 			"model": "models/gltf/doorwayFront.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Doorwayopen",
 			"image": "models/thumbnails_new/doorwayOpen.png",
 			"model": "models/gltf/doorwayOpen.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Dryer",
@@ -623,14 +637,16 @@
 			"image": "models/thumbnails_new/hoodLarge.png",
 			"model": "models/gltf/hoodLarge.glb",
 			"type": 0,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Hoodmodern",
 			"image": "models/thumbnails_new/hoodModern.png",
 			"model": "models/gltf/hoodModern.glb",
 			"type": 0,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchenbar",
@@ -658,56 +674,64 @@
 			"image": "models/thumbnails_new/kitchenCabinet.png",
 			"model": "models/gltf/kitchenCabinet.glb",
 			"type": 9,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencabinetcornerinner",
 			"image": "models/thumbnails_new/kitchenCabinetCornerInner.png",
 			"model": "models/gltf/kitchenCabinetCornerInner.glb",
 			"type": 9,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencabinetcornerround",
 			"image": "models/thumbnails_new/kitchenCabinetCornerRound.png",
 			"model": "models/gltf/kitchenCabinetCornerRound.glb",
 			"type": 9,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencabinetdrawer",
 			"image": "models/thumbnails_new/kitchenCabinetDrawer.png",
 			"model": "models/gltf/kitchenCabinetDrawer.glb",
 			"type": 2,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencabinetupper",
 			"image": "models/thumbnails_new/kitchenCabinetUpper.png",
 			"model": "models/gltf/kitchenCabinetUpper.glb",
 			"type": 2,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencabinetuppercorner",
 			"image": "models/thumbnails_new/kitchenCabinetUpperCorner.png",
 			"model": "models/gltf/kitchenCabinetUpperCorner.glb",
 			"type": 2,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencabinetupperdouble",
 			"image": "models/thumbnails_new/kitchenCabinetUpperDouble.png",
 			"model": "models/gltf/kitchenCabinetUpperDouble.glb",
 			"type": 2,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencabinetupperlow",
 			"image": "models/thumbnails_new/kitchenCabinetUpperLow.png",
 			"model": "models/gltf/kitchenCabinetUpperLow.glb",
 			"type": 2,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchencoffeemachine",
@@ -721,70 +745,80 @@
 			"image": "models/thumbnails_new/kitchenFridge.png",
 			"model": "models/gltf/kitchenFridge.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchenfridgebuiltin",
 			"image": "models/thumbnails_new/kitchenFridgeBuiltIn.png",
 			"model": "models/gltf/kitchenFridgeBuiltIn.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchenfridgelarge",
 			"image": "models/thumbnails_new/kitchenFridgeLarge.png",
 			"model": "models/gltf/kitchenFridgeLarge.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchenfridgesmall",
 			"image": "models/thumbnails_new/kitchenFridgeSmall.png",
 			"model": "models/gltf/kitchenFridgeSmall.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchenmicrowave",
 			"image": "models/thumbnails_new/kitchenMicrowave.png",
 			"model": "models/gltf/kitchenMicrowave.glb",
 			"type": 0,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchensink",
 			"image": "models/thumbnails_new/kitchenSink.png",
 			"model": "models/gltf/kitchenSink.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchenstove",
 			"image": "models/thumbnails_new/kitchenStove.png",
 			"model": "models/gltf/kitchenStove.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Kitchenstoveelectric",
 			"image": "models/thumbnails_new/kitchenStoveElectric.png",
 			"model": "models/gltf/kitchenStoveElectric.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "cabinets"
 		},
 		{
 			"name": "Lamproundfloor",
 			"image": "models/thumbnails_new/lampRoundFloor.png",
 			"model": "models/gltf/lampRoundFloor.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "lighting"
 		},
 		{
 			"name": "Lamproundtable",
 			"image": "models/thumbnails_new/lampRoundTable.png",
 			"model": "models/gltf/lampRoundTable.glb",
 			"type": 0,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "lighting"
 		},
 		{
 			"name": "Lampsquareceiling",
@@ -804,21 +838,24 @@
 						"z": 0
 					}
 				}
-			]
+			],
+			"category": "lighting"
 		},
 		{
 			"name": "Lampsquarefloor",
 			"image": "models/thumbnails_new/lampSquareFloor.png",
 			"model": "models/gltf/lampSquareFloor.glb",
 			"type": 1,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "lighting"
 		},
 		{
 			"name": "Lampsquaretable",
 			"image": "models/thumbnails_new/lampSquareTable.png",
 			"model": "models/gltf/lampSquareTable.glb",
 			"type": 0,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "lighting"
 		},
 		{
 			"name": "Lampwall",
@@ -838,7 +875,8 @@
 						"z": 6
 					}
 				}
-			]
+			],
+			"category": "lighting"
 		},
 		{
 			"name": "Laptop",
@@ -1244,14 +1282,16 @@
 			"image": "models/thumbnails_new/wallDoorway.png",
 			"model": "models/gltf/wallDoorway.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Walldoorwaywide",
 			"image": "models/thumbnails_new/wallDoorwayWide.png",
 			"model": "models/gltf/wallDoorwayWide.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Wallhalf",
@@ -1265,14 +1305,16 @@
 			"image": "models/thumbnails_new/wallWindow.png",
 			"model": "models/gltf/wallWindow.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Wallwindowslide",
 			"image": "models/thumbnails_new/wallWindowSlide.png",
 			"model": "models/gltf/wallWindowSlide.glb",
 			"type": 3,
-			"format": "gltf"
+			"format": "gltf",
+			"category": "openings"
 		},
 		{
 			"name": "Washer",
@@ -1308,7 +1350,8 @@
 					"cols": 2
 				},
 				"openFraction": 0
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Window - Casement",
@@ -1332,7 +1375,8 @@
 					"cols": 2
 				},
 				"openFraction": 0.35
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Window - Picture",
@@ -1354,7 +1398,8 @@
 					"cols": 2
 				},
 				"openFraction": 0
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Door",
@@ -1372,7 +1417,8 @@
 				"swing": "negative",
 				"leaf": "six-panel",
 				"openFraction": 0
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Door - French",
@@ -1394,7 +1440,8 @@
 					"rows": 4,
 					"cols": 2
 				}
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Door - Bypass Closet",
@@ -1412,7 +1459,8 @@
 				"swing": "negative",
 				"leaf": "two-panel",
 				"openFraction": 0.6
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Door - Sliding Patio",
@@ -1429,7 +1477,8 @@
 				"hand": "lo",
 				"swing": "negative",
 				"openFraction": 0.5
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Door - Pocket",
@@ -1446,7 +1495,8 @@
 				"hand": "lo",
 				"swing": "negative",
 				"openFraction": 0.35
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Door - Bifold",
@@ -1464,7 +1514,8 @@
 				"swing": "negative",
 				"leaves": 2,
 				"openFraction": 0.5
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Door - Barn",
@@ -1481,7 +1532,8 @@
 				"hand": "lo",
 				"swing": "negative",
 				"openFraction": 0
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Cased Opening",
@@ -1497,7 +1549,8 @@
 				"wallThickness": 11.43,
 				"hand": "lo",
 				"swing": "negative"
-			}
+			},
+			"category": "openings"
 		},
 		{
 			"name": "Recessed Can",
@@ -1515,7 +1568,8 @@
 				"on": true,
 				"diameter": 10.16,
 				"castShadow": true
-			}
+			},
+			"category": "lighting"
 		},
 		{
 			"name": "Pendant",
@@ -1534,7 +1588,8 @@
 				"diameter": 22,
 				"drop": 60,
 				"castShadow": true
-			}
+			},
+			"category": "lighting"
 		},
 		{
 			"name": "Ceiling Light",
@@ -1551,7 +1606,8 @@
 				"beamAngle": 150,
 				"on": true,
 				"diameter": 30
-			}
+			},
+			"category": "lighting"
 		},
 		{
 			"name": "Post",
@@ -1582,7 +1638,8 @@
 				"kind": "cabinet",
 				"front": "shaker",
 				"frame": "face"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Base Cabinet - Drawers",
@@ -1603,7 +1660,8 @@
 				"kind": "cabinet",
 				"front": "shaker",
 				"frame": "face"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Wall Cabinet",
@@ -1619,7 +1677,8 @@
 				"kind": "cabinet",
 				"front": "shaker",
 				"frame": "face"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Countertop",
@@ -1635,7 +1694,8 @@
 				"edge": "eased",
 				"backsplash": 10.16,
 				"cutouts": []
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Sink - Undermount",
@@ -1650,7 +1710,8 @@
 				"frontToBack": 47,
 				"depth": 24.1,
 				"kind": "sink"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Sink - Farmhouse",
@@ -1669,7 +1730,8 @@
 					"apron": "paint-white"
 				},
 				"kind": "sink"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Sink - Vessel",
@@ -1687,7 +1749,8 @@
 					"basin": "paint-white"
 				},
 				"kind": "sink"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Range",
@@ -1701,7 +1764,8 @@
 				"style": "freestanding",
 				"fuel": "gas",
 				"finish": "stainless"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Refrigerator",
@@ -1715,7 +1779,8 @@
 				"style": "freestanding",
 				"doors": "french",
 				"finish": "stainless"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Refrigerator - Panel Ready",
@@ -1730,7 +1795,8 @@
 				"doors": "french",
 				"finish": "panel-ready",
 				"front": "shaker"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Dishwasher",
@@ -1743,7 +1809,8 @@
 				"subkind": "dishwasher",
 				"controls": "front",
 				"finish": "stainless"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Microwave - Over Range",
@@ -1756,7 +1823,8 @@
 				"subkind": "microwave",
 				"mount": "over-range",
 				"finish": "stainless"
-			}
+			},
+			"category": "cabinets"
 		},
 		{
 			"name": "Vent Hood",
@@ -1770,7 +1838,8 @@
 				"style": "wall-chimney",
 				"ductless": false,
 				"finish": "stainless"
-			}
+			},
+			"category": "cabinets"
 		}
 	]
 }

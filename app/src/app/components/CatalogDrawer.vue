@@ -3,6 +3,7 @@
 import {computed, nextTick, ref, watch} from 'vue';
 import {DialogRoot, DialogPortal, DialogOverlay, DialogContent, DialogTitle, DialogDescription, DialogClose} from 'reka-ui';
 import {Search, X, Plus} from '@lucide/vue';
+import {categoryLabel, categoryOf} from '../composables/useCatalog.js';
 
 /**
  * The furniture catalog.
@@ -45,6 +46,15 @@ const props = defineProps({
 	},
 	/** Where a wall-bound item would land, so the drawer can say. */
 	placement: {type: Object, default: null},
+	/**
+	 * Which of the four palettes this is, or null for the whole catalog.
+	 *
+	 * Filtered here rather than in `useCatalog`, because the drawer already owns
+	 * two filters - the search box and the type chip - and a third one that lived
+	 * somewhere else would be the only one you could not reason about by reading
+	 * this file.
+	 */
+	category: {type: String, default: null},
 });
 
 const emit = defineEmits(['update:open', 'add-item', 'prefetch-item']);
@@ -62,7 +72,22 @@ const searchField = ref(null);
 /** Wall-bound item types, matching the list in useCatalog. */
 const WALL_BOUND_TYPES = [2, 3, 7, 9];
 
-const total = computed(() => props.sections.reduce((sum, section) => sum + section.items.length, 0));
+/** Everything this palette could show, before the search box and the chips. */
+const inCategory = computed(() => props.sections
+	.map((section) => ({
+		id: section.id,
+		heading: section.heading,
+		items: props.category
+			? section.items.filter((item) => categoryOf(item) === props.category)
+			: section.items,
+	}))
+	// A chip for a section this palette has nothing in is a chip that empties the
+	// grid, which is the wrong way round: the chips should say what is here.
+	.filter((section) => section.items.length > 0));
+
+const total = computed(() => inCategory.value.reduce((sum, section) => sum + section.items.length, 0));
+
+const title = computed(() => categoryLabel(props.category));
 
 /**
  * The visible rows: every item, tagged with the section it came from, filtered
@@ -76,7 +101,7 @@ const results = computed(function ()
 {
 	const needle = query.value.trim().toLowerCase();
 
-	return props.sections
+	return inCategory.value
 		.filter((section) => activeSection.value === null || section.id === activeSection.value)
 		.flatMap((section) => section.items.map((item) => ({item: item, section: section})))
 		.filter((row) => needle === '' || row.item.name.toLowerCase().includes(needle));
@@ -97,6 +122,15 @@ function close()
 {
 	emit('update:open', false);
 }
+
+// Switching palettes clears the two filters inside it. A type chip picked in
+// Cabinets means nothing in Lighting and would open an empty grid, which reads
+// as "there are no lights" rather than as "a filter is still on".
+watch(() => props.category, function ()
+{
+	activeSection.value = null;
+	query.value = '';
+});
 
 // Focus the search box on open. The drawer's whole purpose is finding
 // something, and the keyboard should already be in the right place.
@@ -125,7 +159,7 @@ watch(() => props.open, async function (open)
 				@interact-outside.prevent>
 				<div class="flex flex-none items-center gap-2 border-b border-line px-3 py-2.5">
 					<div>
-						<DialogTitle class="text-[13px] font-semibold">Furniture</DialogTitle>
+						<DialogTitle class="text-[13px] font-semibold">{{ title }}</DialogTitle>
 						<DialogDescription class="num text-ink-faint">
 							{{ results.length }} of {{ total }} models
 						</DialogDescription>
@@ -142,7 +176,8 @@ watch(() => props.open, async function (open)
 						<Search :size="14" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
 						<input
 							ref="searchField" v-model="query" type="search"
-							class="field-input pl-8" placeholder="Search 168 models" aria-label="Search the catalog">
+							class="field-input pl-8" :placeholder="`Search ${total} models`"
+							aria-label="Search the catalog">
 					</div>
 
 					<div class="mt-2 flex flex-wrap gap-1">
@@ -153,7 +188,7 @@ watch(() => props.open, async function (open)
 							All
 						</button>
 						<button
-							v-for="section in props.sections" :key="section.id" type="button"
+							v-for="section in inCategory" :key="section.id" type="button"
 							class="btn h-6 px-2 text-[11px]"
 							:class="{'is-active': activeSection === section.id}"
 							@click="activeSection = activeSection === section.id ? null : section.id">

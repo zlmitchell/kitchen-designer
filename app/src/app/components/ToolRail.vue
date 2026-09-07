@@ -3,7 +3,7 @@
 import {computed} from 'vue';
 import {
 	MousePointer2, PencilRuler, Eraser, Sofa, Footprints,
-	Copy, Trash2, Image as ImageIcon,
+	Copy, Trash2, Image as ImageIcon, Lightbulb, DoorOpen, Refrigerator,
 } from '@lucide/vue';
 
 import AppTip from './AppTip.vue';
@@ -48,6 +48,8 @@ const props = defineProps({
 	layout: {type: String, required: true},
 	canActOnItem: {type: Boolean, default: false},
 	catalogOpen: {type: Boolean, default: false},
+	/** Which palette is open, so the right button reads as pressed. */
+	catalogCategory: {type: String, default: null},
 	walkthrough: {type: Boolean, default: false},
 });
 
@@ -55,6 +57,26 @@ const emit = defineEmits([
 	'set-mode', 'open-catalog', 'duplicate-item', 'delete-item',
 	'toggle-walkthrough', 'open-backdrop',
 ]);
+
+/**
+ * The four palettes, as rail buttons.
+ *
+ * One button over 196 models was a filing cabinet with a search box: the fastest
+ * way to a base cabinet was to type it, and browsing was not really on offer.
+ * Splitting the button is the cheapest thing that makes the catalog browsable,
+ * and it costs no new UI - the drawer already filtered, it was just never told
+ * what by.
+ *
+ * Cabinets first, because this is a kitchen designer and that is what somebody
+ * opens it to place. Furniture last for the same reason, though it is still much
+ * the largest of the four.
+ */
+const PALETTES = [
+	{id: 'cabinets', label: 'Cabinets', icon: Refrigerator},
+	{id: 'openings', label: 'Windows & doors', icon: DoorOpen},
+	{id: 'lighting', label: 'Lighting', icon: Lightbulb},
+	{id: 'furniture', label: 'Furniture', icon: Sofa, keys: 'a'},
+];
 
 /** The plan tools, in the order the shortcut keys run: V, W, X. */
 const TOOLS = [
@@ -96,11 +118,14 @@ const showPlanTools = computed(() => props.layout !== LAYOUT_VIEW);
 		<div v-if="showPlanTools" class="my-1 h-px w-6 bg-line" />
 
 		<p class="eyebrow mb-0.5 text-[9px] tracking-[0.06em]">Scene</p>
-		<AppTip label="Furniture catalog" keys="a" side="right" :delay="0">
+		<AppTip
+			v-for="palette in PALETTES" :key="palette.id"
+			:label="palette.label" :keys="palette.keys" side="right" :delay="0">
 			<button
-				type="button" class="btn btn-tool" :class="{'is-active': props.catalogOpen}"
-				title="Furniture catalog" @click="emit('open-catalog')">
-				<Sofa :size="17" />
+				type="button" class="btn btn-tool"
+				:class="{'is-active': props.catalogOpen && props.catalogCategory === palette.id}"
+				:title="palette.label" @click="emit('open-catalog', palette.id)">
+				<component :is="palette.icon" :size="17" />
 			</button>
 		</AppTip>
 		<AppTip label="Walk through" keys="f" side="right" :delay="0">

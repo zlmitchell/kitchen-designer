@@ -93,6 +93,8 @@ const floorplanRef = ref(null);
 /** @type {import('vue').Ref<?{container: HTMLElement}>} */
 const viewportRef = ref(null);
 const catalogOpen = ref(false);
+/** Which of the four palettes the drawer is showing. */
+const catalogCategory = ref('furniture');
 const shortcutsOpen = ref(false);
 const importOpen = ref(false);
 const inspectorTab = ref('settings');
@@ -116,6 +118,8 @@ const lightingState = computed(() => ({
 	dark: lighting.dark.value,
 	studio: renderMode.value === RENDER_STUDIO,
 	times: lighting.times,
+	circuits: lighting.circuits.value,
+	switchedOff: lighting.switchedOff.value,
 }));
 
 const walkthrough = computed(() => camera.mode.value === MODE_WALKTHROUGH);
@@ -311,8 +315,19 @@ watch(() => camera.mode.value, function (mode)
  * thing you picked landed relative to the walls is the point. It only forces
  * the change when coming from plan-only - a user already in 3D stays in 3D.
  */
-function toggleCatalog()
+function toggleCatalog(category)
 {
+	const wanted = category || 'furniture';
+	// Clicking a DIFFERENT palette while one is open switches to it rather than
+	// closing the drawer. Only the button that is already lit closes it, which is
+	// what a row of toggles is expected to do and is the whole benefit of having
+	// four of them.
+	if (catalogOpen.value && catalogCategory.value !== wanted)
+	{
+		catalogCategory.value = wanted;
+		return;
+	}
+	catalogCategory.value = wanted;
 	catalogOpen.value = !catalogOpen.value;
 	if (catalogOpen.value && workspace.layout.value === LAYOUT_PLAN)
 	{
@@ -535,7 +550,7 @@ const bindings = computed(() => /** @type {Array<import('./composables/useShortc
 	{group: 'Tools', keys: 'w', label: 'Draw walls', run: () => editor.setMode(floorplannerModes.DRAW)},
 	{group: 'Tools', keys: 'x', label: 'Delete walls', run: () => editor.setMode(floorplannerModes.DELETE)},
 	{group: 'Tools', keys: 's', label: 'Toggle snap to grid', run: () => zoom.setSnap(!zoom.snap.value)},
-	{group: 'Tools', keys: 'a', label: 'Furniture catalog', run: toggleCatalog},
+	{group: 'Tools', keys: 'a', label: 'Furniture catalog', run: () => toggleCatalog('furniture')},
 	{
 		group: 'Tools', keys: 'mod+d', label: 'Duplicate item',
 		run: items.duplicateSelected, enabled: () => items.canActOnItem.value,
@@ -623,6 +638,8 @@ useShortcuts(() => bindings.value);
 				@set-hour="lighting.setHour"
 				@set-heading="lighting.setHeading"
 				@set-exposure="lighting.setExposure"
+				@toggle-circuit="lighting.toggleCircuit"
+				@lighting-opened="lighting.refreshCircuits"
 				@reset-lighting="lighting.reset"
 				@new-design="onNewDesign"
 				@open-design="onOpenDesign"
@@ -644,6 +661,7 @@ useShortcuts(() => bindings.value);
 					:layout="workspace.layout.value"
 					:can-act-on-item="items.canActOnItem.value"
 					:catalog-open="catalogOpen"
+					:catalog-category="catalogCategory"
 					:walkthrough="walkthrough"
 					@set-mode="editor.setMode"
 					@open-catalog="toggleCatalog"
@@ -730,6 +748,7 @@ useShortcuts(() => bindings.value);
 			v-model:open="catalogOpen"
 			:sections="catalog.sections.value"
 			:placement="selection.placementContext.value"
+			:category="catalogCategory"
 			@add-item="onAddItem"
 			@prefetch-item="assets.prefetchItem" />
 
