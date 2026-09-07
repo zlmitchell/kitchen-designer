@@ -98,6 +98,10 @@ function shaft(mat, profile, width, depth, height, y)
  */
 export const POST_SCHEMA = {
 	label: 'Post',
+	// The builder's own slot defaults, so the panel can show the finish an
+	// unspecified slot will actually be built with. A REFERENCE to `SLOTS`, not a
+	// copy: a default written twice is a default that goes stale.
+	slots: SLOTS,
 	fields: [
 		{key: 'profile', label: 'Profile', type: 'choice', options: [
 			{value: 'square', label: 'Square'},

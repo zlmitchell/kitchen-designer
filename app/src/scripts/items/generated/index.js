@@ -77,7 +77,12 @@ export const GENERATED_BUILDERS = {
  * model layer builds, the app layer asks - and a builder must stay importable
  * without dragging a UI contract along with it.
  *
- * @type {Record<string, {label: string, fields: Array<Object>}>}
+ * `slots` is the builder's own `SLOTS` object, by reference. The panel needs it
+ * to show the finish an unspecified slot will actually be built with - a spec
+ * names a material only for the slots somebody has changed, so most controls
+ * have nothing in the spec to render and went blank without it.
+ *
+ * @type {Record<string, {label: string, fields: Array<Object>, slots?: Record<string, string>}>}
  */
 export const GENERATED_SCHEMAS = {
 	door: DOOR_SCHEMA,
@@ -93,7 +98,7 @@ export const GENERATED_SCHEMAS = {
  * The schema for whatever a spec is, or null.
  *
  * @param {?Object} spec
- * @returns {?{label: string, fields: Array<Object>}}
+ * @returns {?{label: string, fields: Array<Object>, slots?: Record<string, string>}}
  */
 export function schemaForSpec(spec)
 {

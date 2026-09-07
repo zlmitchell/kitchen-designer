@@ -14,6 +14,7 @@ import {mount} from '@vue/test-utils';
 import SpecInspector from '../src/app/inspector/SpecInspector.vue';
 import {resetAll} from './helpers/harness.js';
 import {WINDOW_SCHEMA} from '../src/scripts/items/generated/window.js';
+import CATALOG from '../src/catalog/catalog.json';
 
 /** A stand-in for a placed generated item, which is all the panel reads. */
 function fakeItem(spec)
@@ -231,5 +232,76 @@ describe('a window offers the same style controls as a door and a cabinet', () =
 		expect(shared.sillHeight).toBe(false);
 		// And what the window IS stays local, the way a door's operation does.
 		expect(shared.type).toBe(false);
+	});
+});
+
+describe('a material control shows what the item is actually made of', () =>
+{
+	beforeEach(() => resetAll());
+
+	/** The value the select for a named field is showing. */
+	function finishOn(wrapper, label)
+	{
+		const field = fieldNamed(wrapper, label);
+		return field ? field.find('select').element.value : null;
+	}
+
+	// A spec names a finish only for the slots somebody has CHANGED -
+	// `materialsForSlots` keeps the builder's answer for every slot the spec is
+	// silent about - so an item straight out of the catalog has no `material`
+	// block at all, and every one of its finish dropdowns rendered with no option
+	// selected. A blank Glazing control on a window built and drawn in clear
+	// glass. Every generated kind did it.
+
+	it('falls back to the builder default when the spec names no finish', () =>
+	{
+		const {wrapper} = panelFor({kind: 'window', type: 'double-hung', width: 91.44,
+			height: 152.4, wallThickness: 11.43});
+		expect(finishOn(wrapper, 'Glazing')).toBe('glass-clear');
+		expect(finishOn(wrapper, 'Sash')).toBe('paint-white');
+		expect(finishOn(wrapper, 'Hardware')).toBe('metal-brushed-nickel');
+	});
+
+	it('shows what the spec names, when it names one', () =>
+	{
+		const {wrapper} = panelFor({kind: 'window', type: 'double-hung', width: 91.44,
+			height: 152.4, wallThickness: 11.43,
+			material: {glass: 'glass-frosted'}});
+		expect(finishOn(wrapper, 'Glazing')).toBe('glass-frosted');
+		// And a slot it stays silent about still shows the default.
+		expect(finishOn(wrapper, 'Sash')).toBe('paint-white');
+	});
+
+	it('falls back for an id this build has retired, rather than going blank', () =>
+	{
+		// A saved design outlives the library. `materialsForSlots` builds it with
+		// the default; the panel should say so, not show an empty control naming a
+		// finish that no longer exists.
+		const {wrapper} = panelFor({kind: 'window', type: 'double-hung', width: 91.44,
+			height: 152.4, wallThickness: 11.43,
+			material: {glass: 'no-such-finish'}});
+		expect(finishOn(wrapper, 'Glazing')).toBe('glass-clear');
+	});
+
+	it('leaves no finish blank on any generated item in the catalog', () =>
+	{
+		// The sweep, because this was never about windows. Seven builders, and the
+		// panel could not name the default for any of them.
+		const seen = new Set();
+		const blank = [];
+		CATALOG.items.filter((entry) => entry.format === 'generated').forEach((entry) =>
+		{
+			if (seen.has(entry.model)) {return;}
+			seen.add(entry.model);
+			const {wrapper} = panelFor(entry.spec);
+			wrapper.findAll('.field').forEach((field) =>
+			{
+				const select = field.find('select');
+				if (!select.exists() || !select.element.querySelector('optgroup')) {return;}
+				if (!select.element.value) {blank.push(`${entry.name}: ${field.text().split('\n')[0]}`);}
+			});
+		});
+		expect(seen.size).toBeGreaterThan(4);
+		expect(blank).toEqual([]);
 	});
 });

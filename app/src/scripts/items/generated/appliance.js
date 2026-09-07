@@ -767,6 +767,10 @@ function shell(s)
 /** What a panel may ask about an appliance. */
 export const APPLIANCE_SCHEMA = {
 	label: 'Appliance',
+	// The builder's own slot defaults, so the panel can show the finish an
+	// unspecified slot will actually be built with. A REFERENCE to `SLOTS`, not a
+	// copy: a default written twice is a default that goes stale.
+	slots: SLOTS,
 	fields: [
 		{key: 'subkind', label: 'Appliance', type: 'choice', options: [
 			{value: 'range', label: 'Range'},

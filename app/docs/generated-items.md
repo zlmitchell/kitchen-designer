@@ -241,6 +241,19 @@ export const DOOR_SCHEMA = {
   the *wall's*; a door that disagrees with its wall is a bug, not a choice.
 - `key` may be dotted (`material.leaf`) to reach into a spec block.
 
+**Give the schema your `SLOTS`**, as `slots: SLOTS` — a reference, never a copy:
+
+```js
+export const DOOR_SCHEMA = {label: 'Door', slots: SLOTS, fields: [...]};
+```
+
+A spec names a finish only for the slots somebody has **changed** —
+`materialsForSlots` keeps your default for every slot it is silent about — so an
+item straight out of the catalog has no `material` block at all. Without this the
+panel has nothing to show and every finish control renders with no option
+selected: a blank Glazing dropdown on a window that is built, and drawn, in clear
+glass. All seven builders did it.
+
 ---
 
 ## How to test

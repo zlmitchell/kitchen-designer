@@ -978,6 +978,10 @@ export function applyDoorFit(item)
  */
 export const DOOR_SCHEMA = {
 	label: 'Door',
+	// The builder's own slot defaults, so the panel can show the finish an
+	// unspecified slot will actually be built with. A REFERENCE to `SLOTS`, not a
+	// copy: a default written twice is a default that goes stale.
+	slots: SLOTS,
 	fields: [
 		{key: 'operation', label: 'Operation', type: 'choice', options: [
 			{value: 'swing', label: 'Swinging'},

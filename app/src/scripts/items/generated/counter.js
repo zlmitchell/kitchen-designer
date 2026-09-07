@@ -209,6 +209,10 @@ function slabShape(width, depth, inset, cutouts)
 /** What a panel may ask about a counter. */
 export const COUNTER_SCHEMA = {
 	label: 'Countertop',
+	// The builder's own slot defaults, so the panel can show the finish an
+	// unspecified slot will actually be built with. A REFERENCE to `SLOTS`, not a
+	// copy: a default written twice is a default that goes stale.
+	slots: SLOTS,
 	fields: [
 		{key: 'width', label: 'Length', type: 'length', min: 30, max: 400, step: 1},
 		{key: 'depth', label: 'Depth', type: 'length', min: 30, max: 120, step: 1},

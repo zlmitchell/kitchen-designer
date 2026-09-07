@@ -240,6 +240,10 @@ function mounting(spec)
 /** What a panel may ask about a sink. */
 export const SINK_SCHEMA = {
 	label: 'Sink',
+	// The builder's own slot defaults, so the panel can show the finish an
+	// unspecified slot will actually be built with. A REFERENCE to `SLOTS`, not a
+	// copy: a default written twice is a default that goes stale.
+	slots: SLOTS,
 	fields: [
 		{key: 'mount', label: 'Mount', type: 'choice', options: [
 			{value: 'undermount', label: 'Undermount'},

@@ -5,7 +5,7 @@ import NumberField from './fields/NumberField.vue';
 import RangeField from './fields/RangeField.vue';
 import {Dimensioning} from '../../scripts/blueprint.js';
 import {schemaForSpec} from '../../scripts/items/generated/index.js';
-import {materialOptions, MATERIAL_GROUPS} from '../../scripts/core/materials.js';
+import {materialOptions, MATERIAL_GROUPS, MATERIALS} from '../../scripts/core/materials.js';
 import {useDisplayUnit} from '../composables/useDisplayUnit.js';
 import {useAssets} from '../composables/useAssets.js';
 
@@ -310,6 +310,42 @@ function onSelect(field, event)
 	write(field.key, /** @type {HTMLSelectElement} */ (event.target).value, field);
 }
 
+/**
+ * The finish a material control should show.
+ *
+ * Not simply `valueAt(field.key)`. A spec names a finish only for the slots
+ * somebody has CHANGED - `materialsForSlots(spec.material, SLOTS)` keeps the
+ * builder's own answer for every slot the spec is silent about - so a window
+ * straight out of the catalog has no `material` block at all. The select was
+ * therefore rendering with no option selected: a blank Glazing dropdown on a
+ * window that is built, and drawn, in clear glass. Every generated item did it,
+ * on every finish nobody had touched yet.
+ *
+ * So fall back to the builder's own default, read off `schema.slots`, which is a
+ * reference to the same `SLOTS` object the builder resolves against. The panel
+ * shows what the item is actually made of rather than what the file happens to
+ * mention.
+ *
+ * A retired id falls back the same way, and for the same reason `materialsForSlots`
+ * does: a saved design outlives the library, and a select whose value names no
+ * option it holds goes blank again. Showing the default is the honest answer -
+ * it is what the item is being built with.
+ */
+function materialValue(field)
+{
+	const stored = valueAt(field.key);
+	if (typeof stored === 'string' && MATERIALS[stored])
+	{
+		return stored;
+	}
+	const slots = schema.value && schema.value.slots;
+	// `material.leaf` names the `leaf` slot. The last segment is the slot, always:
+	// a material field reaches into the spec's one material block.
+	const parts = String(field.key).split('.');
+	const fallback = slots ? slots[parts[parts.length - 1]] : undefined;
+	return (fallback === undefined) ? '' : fallback;
+}
+
 const toDisplay = (cm) => Dimensioning.cmToMeasureRaw(Number(cm) || 0);
 const fromDisplay = (value) => Dimensioning.cmFromMeasureRaw(value);
 
@@ -391,7 +427,7 @@ watch(unit, readBack);
 				<span class="field-label">{{ field.label }}</span>
 				<select
 					class="field-input"
-					:value="valueAt(field.key)"
+					:value="materialValue(field)"
 					@pointerenter="warmSurfaces"
 					@focus="warmSurfaces"
 					@change="onSelect(field, $event)">

@@ -392,6 +392,10 @@ function hardwareFor(mats, kind, cx, cy, z, horizontal)
 /** What a panel may ask about a cabinet. */
 export const CABINET_SCHEMA = {
 	label: 'Cabinet',
+	// The builder's own slot defaults, so the panel can show the finish an
+	// unspecified slot will actually be built with. A REFERENCE to `SLOTS`, not a
+	// copy: a default written twice is a default that goes stale.
+	slots: SLOTS,
 	fields: [
 		{key: 'variant', label: 'Type', type: 'choice', options: [
 			{value: 'base', label: 'Base'},
