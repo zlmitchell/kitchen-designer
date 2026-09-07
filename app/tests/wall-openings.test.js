@@ -304,3 +304,88 @@ describe('setSpec rebuilds a generated item instead of scaling it', () =>
 		expect(item.setSpec({kind: 'door'})).toBe(false);
 	});
 });
+
+describe('a generated item is sized by its spec and nothing else', () =>
+{
+	beforeEach(() =>
+	{
+		resetAll();
+		installCanvas2D(window);
+	});
+
+	/** Load one item, as a design saved before this rule would have written it. */
+	function loadPost(scale, spec)
+	{
+		const model = new Model('/textures/');
+		model.loadSerialized(JSON.stringify({
+			floorplan: {version: '2.0.0', units: 'cm', corners: {}, walls: [], rooms: {},
+				wallTextures: [], floorTextures: {}, newFloorTextures: {}},
+			items: [{
+				id: 'p1', item_name: 'Post', item_type: 1, format: 'generated',
+				model_url: 'generated:post',
+				xpos: 0, ypos: 60, zpos: 0, rotation: 0,
+				scale_x: scale[0], scale_y: scale[1], scale_z: scale[2], fixed: false,
+				spec: Object.assign({kind: 'post', width: 10.16, depth: 10.16,
+					height: 106.68, profile: 'square', trim: 'none'}, spec),
+			}],
+		}));
+		return model.scene.getItems()[0];
+	}
+
+	it('folds a saved mesh scale into the spec, keeping the object the same size', () =>
+	{
+		// The real case, from an exported design: a post stretched with the Item
+		// panel's height field, which SCALES. It was drawn at 244cm while its spec
+		// said 106.68, and the two would have multiplied on the next rebuild.
+		const item = loadPost([0.9, 2.2857142857, 0.9]);
+
+		// Same object as before, to the eye.
+		expect(item.getHeight()).toBeCloseTo(243.84, 1);
+		expect(item.getWidth()).toBeCloseTo(9.144, 2);
+		// But the numbers now say so, and the scale is gone.
+		expect(item.metadata.spec.height).toBeCloseTo(243.84, 1);
+		expect(item.metadata.spec.width).toBeCloseTo(9.144, 2);
+		expect(item.scale.x).toBe(1);
+		expect(item.scale.y).toBe(1);
+		expect(item.scale.z).toBe(1);
+	});
+
+	it('leaves an unscaled item alone', () =>
+	{
+		const item = loadPost([1, 1, 1]);
+		expect(item.metadata.spec.width).toBeCloseTo(10.16, 3);
+		expect(item.getHeight()).toBeCloseTo(106.68, 2);
+	});
+
+	it('writes the folded spec back out, so the file stops disagreeing with itself', () =>
+	{
+		const saved = loadPost([0.9, 2.2857142857, 0.9]).getMetaData();
+		expect(saved.spec.height).toBeCloseTo(243.84, 1);
+		expect(saved.scale_x).toBe(1);
+		expect(saved.scale_y).toBe(1);
+	});
+
+	it('does not multiply a stale scale against the next spec edit', () =>
+	{
+		// What the fold prevents. Without it, asking for a 4in post on an item
+		// somebody had stretched 2.29x gave 9in.
+		const item = loadPost([0.9, 2.2857142857, 0.9]);
+		const spec = item.getSpec();
+		spec.height = 106.68;
+		item.setSpec(spec);
+		expect(item.getHeight()).toBeCloseTo(106.68, 2);
+		expect(item.scale.y).toBe(1);
+	});
+
+	it('normalises the scale on any rebuild, even without a fold', () =>
+	{
+		const item = loadPost([1, 1, 1]);
+		// However it got there.
+		item.setScale(2, 2, 2);
+		const spec = item.getSpec();
+		spec.width = 20.32;
+		item.setSpec(spec);
+		expect(item.scale.x).toBe(1);
+		expect(item.getWidth()).toBeCloseTo(20.32, 2);
+	});
+});

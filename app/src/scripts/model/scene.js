@@ -538,6 +538,22 @@ export class Scene extends EventDispatcher
 			}
 			try
 			{
+				// A generated item's size is its spec, and nothing else. A design
+				// saved before that was true can carry a mesh scale as well - the
+				// Item panel's width/height/depth fields call `Item.resize`, which
+				// scales - and the two would then multiply on the next rebuild: a
+				// post drawn at 244cm whose spec says 106.68 becomes 244 again only
+				// by luck. Folded once, here, so the file that comes back out says
+				// what the object is.
+				var unscaled = scale && (Math.abs(scale.x - 1) > 1e-6
+					|| Math.abs(scale.y - 1) > 1e-6 || Math.abs(scale.z - 1) > 1e-6);
+				if (unscaled && typeof builder.absorbScale === 'function')
+				{
+					metadata.spec = builder.absorbScale(metadata.spec || {}, scale);
+					// null rather than a unit vector: the constructor skips scaling
+					// entirely on null, which leaves scale at three exact 1s.
+					scale = null;
+				}
 				var built = builder(metadata.spec || {});
 				loaderCallback(built.geometry, built.materials, built.parts, built.onBound, builder);
 			}

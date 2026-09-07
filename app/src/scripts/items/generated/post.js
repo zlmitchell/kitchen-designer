@@ -118,6 +118,34 @@ export const POST_SCHEMA = {
 };
 
 /**
+ * Fold a mesh scale into the spec.
+ *
+ * Only ever needed by a design saved before a generated item's size lived in its
+ * spec. The Item panel's width/height/depth fields call `Item.resize`, which
+ * SCALES - so a post stretched with them came out drawn at 244cm while its spec
+ * still said 106.68, and the two would have multiplied on the next rebuild.
+ *
+ * Absorbing is exact for a post because its spec fields ARE its bounding box:
+ * width is x, height is y, depth is z, with nothing added around them. That is
+ * not true of every kind - a door's `width` is the clear opening and its bounds
+ * are that plus two jambs - which is why this is declared per builder rather
+ * than guessed from the schema.
+ *
+ * @param {PostSpec} spec
+ * @param {{x: number, y: number, z: number}} scale
+ * @returns {PostSpec} A new spec; the caller then resets the scale to 1.
+ */
+buildPost.absorbScale = function (spec, scale)
+{
+	var s = Object.assign({}, DEFAULTS, spec || {});
+	return Object.assign({}, s, {
+		width: s.width * scale.x,
+		depth: s.depth * scale.z,
+		height: s.height * scale.y,
+	});
+};
+
+/**
  * Build a post.
  *
  * Centred on the origin in all three axes, like every generated part: `Item`'s

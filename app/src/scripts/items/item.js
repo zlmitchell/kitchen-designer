@@ -707,7 +707,11 @@ export class Item extends Mesh
 		this.geometry.applyMatrix4(new Matrix4().makeTranslation(
 			-0.5 * (box.max.x + box.min.x), -0.5 * (box.max.y + box.min.y), -0.5 * (box.max.z + box.min.z)));
 		this.geometry.computeBoundingBox();
-		this.halfSize = this.objectHalfSize().multiply(this.scale);
+		// Back to unit scale. A generated item is sized by its spec, so a leftover
+		// scale would multiply against the size just asked for - type 4in into the
+		// panel on an item somebody had stretched 2.29x and you would get 9.
+		this.scale.set(1, 1, 1);
+		this.halfSize = this.objectHalfSize();
 
 		(built.parts || []).forEach((part) => {this.add(part);});
 		this.generatedParts = built.parts || [];

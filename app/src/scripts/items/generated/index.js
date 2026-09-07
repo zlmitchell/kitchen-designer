@@ -34,7 +34,18 @@ import {buildPost, POST_SCHEMA} from './post.js';
  * @property {function(Object): void} [onBound] Called when the item binds to a
  *           wall edge - the only moment its own axes are known.
  */
-/** @type {Record<string, function(Object): GeneratedBuild>} */
+/**
+ * A builder, plus the one optional thing it may declare about itself.
+ *
+ * `absorbScale` folds a mesh scale into a spec, for a design saved before a
+ * generated item's size lived in its spec. Optional and per builder rather than
+ * derived, because the mapping is not general: a post's spec fields ARE its
+ * bounding box, while a door's `width` is the clear opening and its bounds are
+ * that plus two jambs.
+ *
+ * @typedef {{(spec: Object): GeneratedBuild, absorbScale?: function(Object, {x: number, y: number, z: number}): Object}} GeneratedBuilder
+ */
+/** @type {Record<string, GeneratedBuilder>} */
 export const GENERATED_BUILDERS = {
 	door: buildDoor,
 	post: buildPost,

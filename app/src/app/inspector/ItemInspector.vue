@@ -35,6 +35,8 @@ const name = ref('');
 const dimensions = reactive({width: 0, height: 0, depth: 0});
 const rotation = ref(0);
 const canRotate = ref(false);
+/** A generated item is sized by its spec, so scaling it is not on offer here. */
+const generated = ref(false);
 const flags = reactive({proportional: false, fixed: false});
 // `ref([])` infers `Ref<never[]>`, so filling it is an error and reading from
 // it is an error on `never` - one omission producing four (RM-004 B3).
@@ -57,6 +59,12 @@ function readBack()
 	// (`WallItem.changeWallEdge` overwrites rotation.y), so offering the control
 	// would be offering a number the next bind discards.
 	canRotate.value = Boolean(props.item.allowRotate) && !props.item.fixed;
+	// Width/height/depth below call `Item.resize`, which SCALES the mesh. For a
+	// generated item that is the wrong operation and a trap: it stretches the
+	// stiles with the box, and it leaves a scale that then multiplies against the
+	// next spec edit. A design carried a post drawn at 244cm whose spec said
+	// 106.68 because of exactly this. SpecInspector owns size for these.
+	generated.value = Boolean(props.item.metadata && props.item.metadata.spec);
 }
 
 /**
@@ -166,15 +174,17 @@ onBeforeUnmount(() => {materials.value = [];});
 	<section class="inspector-section">
 		<h3 class="inspector-heading">{{ name }}</h3>
 
-		<NumberField
-			label="Width" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.width"
-			@update:model-value="resize('width', $event)" />
-		<NumberField
-			label="Height" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.height"
-			@update:model-value="resize('height', $event)" />
-		<NumberField
-			label="Depth" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.depth"
-			@update:model-value="resize('depth', $event)" />
+		<template v-if="!generated">
+			<NumberField
+				label="Width" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.width"
+				@update:model-value="resize('width', $event)" />
+			<NumberField
+				label="Height" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.height"
+				@update:model-value="resize('height', $event)" />
+			<NumberField
+				label="Depth" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.depth"
+				@update:model-value="resize('depth', $event)" />
+		</template>
 
 		<NumberField
 			v-if="canRotate" label="Rotation" unit="degrees" :min="0" :max="360" :step="15"
@@ -193,7 +203,7 @@ onBeforeUnmount(() => {materials.value = [];});
 		</div>
 
 		<CheckField
-			label="Keep proportions" :model-value="flags.proportional"
+			v-if="!generated" label="Keep proportions" :model-value="flags.proportional"
 			@update:model-value="setProportional" />
 		<CheckField
 			label="Lock in place" :model-value="flags.fixed"

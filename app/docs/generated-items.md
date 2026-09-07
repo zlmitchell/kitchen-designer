@@ -164,7 +164,20 @@ field that throws mid-edit then cannot leave a half-applied spec on the item.
 
 `setSpec` disposes the old geometry and materials itself — nothing else will,
 because the item is not being removed and `removed()` is the only other place
-that frees them.
+that frees them. It also **resets `scale` to 1**: a leftover scale would multiply
+against the size just asked for, so typing 4in on an item somebody had stretched
+2.29× would give 9.
+
+The corollary in the UI: `ItemInspector` hides its width/height/depth fields for a
+generated item, because those call `Item.resize` and *scale the mesh*. Two panels
+offering size, one rebuilding and one stretching, is a trap — a real design
+carried a post drawn at 244cm whose spec still said 106.68.
+
+For a design saved before that rule, a builder may export `absorbScale(spec,
+scale)`, which `Scene.addItem` applies once on load and then drops the scale. It
+is declared per builder rather than guessed, because the mapping is not general:
+a post's spec fields *are* its bounding box, while a door's `width` is the clear
+opening and its bounds are that plus two jambs.
 
 ---
 
