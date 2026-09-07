@@ -162,6 +162,14 @@
 			"metalness": 0,
 			"opacity": 0.45,
 			"transparent": true
+		},
+		"glass-smoked": {
+			"label": "Smoked glass",
+			"group": "glass",
+			"_comment": "An oven window and a microwave door. Deliberately NOT transparent, and that is not a shortcut: the glass is backed by an unlit cavity, so opacity would buy a view of nothing and cost the sort order every transparent surface costs. The two above stay transparent because what is behind them is the room.",
+			"color": "#26282b",
+			"roughness": 0.08,
+			"metalness": 0
 		}
 	}
 }

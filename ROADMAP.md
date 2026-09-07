@@ -48,11 +48,12 @@ meshes. Every "no" below comes back to the same two root causes.
 | Sink mount: on-counter / in-counter / farmhouse / vessel | — | No |
 | Round or oval basins (bath vessels) | `Bathroomsink`, `Bathroomsinksquare` — fixed meshes | No |
 | Sink material: fireclay, stainless, composite, enamel, glass, stone, copper | Colour tint on one mesh | No |
-| Range / cooktop | `Kitchenstove`, `Kitchenstoveelectric` | Mesh only |
-| Fridge, built-in vs freestanding | 4 fixed Kenney fridges | Mesh only |
-| Vent hood | `Hoodlarge`, `Hoodmodern` — type 0, "anywhere" | Mesh only |
-| Microwave: counter / in-cabinet / over-range | `Kitchenmicrowave`, type 0 | No |
-| Dishwasher | **Absent from the catalog entirely** | No |
+| Range / cooktop | `generated:appliance`, `subkind: range` — freestanding vs slide-in, gas grates vs electric rings | **Done** |
+| Fridge, built-in vs freestanding | `subkind: fridge`, plus four door layouts | **Done** |
+| Vent hood | `subkind: hood` — under-cabinet, wall chimney, island, downdraft, `ductless` | **Done** |
+| Microwave: counter / in-cabinet / over-range | `subkind: microwave`, four mounts; over-range grows a vent and lights | **Done** |
+| Dishwasher | `subkind: dishwasher`, front or hidden controls. Was absent from the catalog entirely | **Done** |
+| Panel-ready appliance fronts | The face is built by `cabinet.js`'s own `frontPanel`, in the run's profile | **Done** |
 
 Two root causes, and they are the whole plan:
 
@@ -227,7 +228,9 @@ material, which is a Phase 2 material question rather than a geometry one. And
 tall, face-frame or frameless, slab / shaker / raised fronts, doors and drawer
 banks, knob or pull), `generated:counter` (slab, edge profile, backsplash,
 cutouts) and `generated:sink` (five mounts, rect / round / oval, bowl splits,
-material-driven wall thickness). Appliances are what remain.
+material-driven wall thickness). **Appliances too** - see phase 4, which was
+built here rather than after runs, because only the built-in fridge's face
+alignment actually waited on a run and the other four did not.
 
 The sink confirmed the design the audit argued for: **five mounts are one
 builder**, differing only in where the rim sits against the slab plus at most one
@@ -376,19 +379,69 @@ features:
   how the range, dishwasher and built-in fridge get counter and face alignment
   for free instead of each solving it alone.
 
-### Phase 4 — appliances
+### Phase 4 — appliances ✅
 
-All one `kind: "appliance"` with a `subkind`, because they are all a box with a
-face treatment and a size that has to be honest:
+Built. All one `kind: "appliance"` with a `subkind`, because they are all a box
+with a face treatment and a size that has to be honest:
 
-- **range**: 30/36in, slide-in vs freestanding, gas grates vs electric coils
-- **fridge**: freestanding vs built-in / panel-ready (flush with the cabinet
-  face — which is a `run` question, hence the ordering)
-- **dishwasher**: 24in, panel-ready vs stainless. Absent entirely today.
-- **microwave** with a `mount`: `counter | in-cabinet-shelf | over-range |
-  drawer`. Over-range claims an upper slot and replaces the hood.
-- **vent hood**: `under-cabinet | wall-chimney | island | downdraft |
-  microwave-integrated`, width tied to the range, `ductless` flag.
+- **range**: 30/36in, freestanding (with a backguard) vs slide-in (with a front
+  control band), gas grates vs electric rings on ceramic
+- **fridge**: freestanding vs built-in / panel-ready, and four door layouts —
+  french, side-by-side, top-freezer, bottom-freezer
+- **dishwasher**: 24in, front controls or hidden. Absent from the catalog before
+  this.
+- **microwave** with a `mount`: `counter | in-cabinet | over-range | drawer`
+- **vent hood**: `under-cabinet | wall-chimney | island | downdraft`, with a
+  `ductless` flag that stops the flue short of the ceiling
+
+The design claim is the sink's, one level out: **five appliances are one
+builder**. There is one `faceRects` that divides the front into panels, one
+`facePanel` that builds one, one `barHandle`, and a short `extras` per subkind
+for the things that genuinely are extra. The face layout IS the difference
+between these objects, and it is a list of rectangles.
+
+**Panel-ready is not a colour.** `finish: panel-ready` builds the face with
+`cabinet.js`'s own `frontPanel`, in the run's shaker / slab / raised profile —
+which is what panel-ready means, and the reason `frontPanel` is now exported.
+A white box would have been the one thing this app exists not to do. It also
+stands the panel off by a face frame's thickness, because a cabinet's door
+stands off its FRAME and not its carcass: hung flat, a panel-ready dishwasher
+between two shaker cabinets sat 3/4in behind them, which is the one thing the
+whole finish exists to avoid.
+
+Five things the work turned up, and **four of them were invisible to every
+number**. A vertex count said each part existed; the offline render said where
+it was:
+
+- **The hood's filter was inside its own canopy.** A canopy is a solid, so
+  setting the filter where a real one sits swallowed it whole: the render from
+  below showed a blank cap. It hangs proud now.
+- **The over-range microwave's vent baffles were inside the carcass**, one
+  centimetre up. Same shape of error, same only-visible-from-below place.
+- **The gas grates fell between the burners.** Bars spread evenly across the
+  width rather than over each burner column gave five stripes and four dots.
+  Nothing about a bar's dimensions says whether there is a burner under it.
+- **A chimney hood's flue overhung its canopy and stood on nothing.** A frustum
+  is symmetric by construction and a wall hood is not, so the canopy's top ring
+  is sheared back to put its rectangle at the wall. `CylinderGeometry` with four
+  radial segments is that frustum in one call — the same trade the sink's lathe
+  makes.
+- **The reveals did not read.** On a stainless machine the body behind the
+  fronts is stainless too, so a cabinet's 1/8in gap between two panels rendered
+  as one unbroken sheet. Appliance door gaps are wider in life and are wider
+  here, over a dark liner — the gasket line you actually see.
+
+And the tests had to be told the same thing twice: materials pool BY NAME, so on
+a stainless appliance the body, the face and the handles arrive as ONE merged
+group. Six of the first measurements were reporting the whole object. The specs
+under test hand the part being measured its own material, which is the note
+already standing on `cabinets.test.js`.
+
+`microwave-integrated` is **deliberately not a hood style**. It is not a shape —
+it is an over-range microwave and the absence of a hood, which is a decision
+about what occupies the slot above the range. Phase 3's run is what will refuse
+to put both in one slot; the microwave's `over-range` mount grows the vent and
+the underside lights that make it able to do the job.
 
 ### Phase 5 — windows and doors
 
@@ -640,8 +693,8 @@ Walk the runs, emit stock nomenclature, price against more than one system.
 ```
 0 spine ──┬── 1 half walls          cheapest; splits kitchen from great room
           ├── 2 cabinets + counters the point of the app
+          │      ├── 4 appliances   built BEFORE runs; see below
           │      └── 3 runs
-          │            └── 4 appliances   built-in fridge needs face alignment
           ├── 5 windows + doors
           │      └── 6 lighting     daylight needs windows
           └── 7 takeoff             reads the specs from 2-4
@@ -649,6 +702,15 @@ Walk the runs, emit stock nomenclature, price against more than one system.
 
 Phase 5 can move ahead of 2 if the walkthrough needs to stop looking wrong
 sooner — every window in the traced plan is a stretched mesh right now.
+
+**Phase 4 was pulled ahead of phase 3, and only one thing was lost by it.** The
+ordering above put appliances after runs because a built-in fridge has to align
+its face with the cabinets beside it. That is true, and it is the *only* part of
+an appliance that waits on a run: a range, a dishwasher, a microwave and a hood
+are each a box with an honest size, and each of them is placeable by hand today.
+So the panel-ready front is built and correct, and *matching* it to the run
+beside it is done in the inspector until phase 3 arrives — which is the same
+trade the farmhouse sink is already making one row down.
 
 Three things in Phase 2 reach forward into Phase 3 and land there instead: a
 **farmhouse sink**, because its apron replaces the cabinet front beneath it; a

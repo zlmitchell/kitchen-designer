@@ -288,7 +288,9 @@ docker compose run --rm --no-deps -T -v "$OUT:/plan-out" dev node /app/render-sc
 
 **Aim the camera at the thing in question.** A general overview cannot answer
 "can you see through this opening"; stand 300cm back from one door on its own
-axis and look.
+axis and look. And aim it where the object is *used from*: an over-range
+microwave and a vent hood are both looked at from underneath, and each was
+hiding a fault there that no other angle showed.
 
 ### 3b. Which container to run in, and why it matters
 
@@ -406,4 +408,22 @@ not obvious:
    clear of the contour edge.
 6. **Float32.** Geometry positions are float32, so a 200cm extent resolves to a
    few microns. Never assert an exact zero on a bounding box — 4 decimal places
-   is the honest limit.
+   is the honest limit. The same goes for a *size*: an appliance test asserting
+   `>= 76.2` on a 76.2cm extent failed on the nose.
+7. **Two coplanar faces z-fight, and it reads as geometry.** A thin plate laid
+   flush behind a panel — to make a reveal read dark — shares a plane with both
+   the panel and the box behind it, and the range came out with a dashed line
+   stitched along the top of its oven door. Hold such a plate a hair inside on
+   every axis; a millimetre is enough and nothing can see it.
+8. **A solid swallows anything put inside it.** A vent hood's filter belongs
+   recessed into the canopy, and a canopy is a closed frustum, so the filter
+   rendered as nothing at all while its triangles were present and correct. A
+   part that is meant to be seen has to be *proud*. Two of the five faults in the
+   appliances were this one, and neither was visible to any measurement — only to
+   a render aimed from below.
+9. **Materials pool BY NAME, so parts can merge into one group.** A stainless
+   appliance has its body, its face and its handles all in `metal-stainless`, and
+   `mergeMeshes` gives you one group for all three — so a test asking "where is
+   the face" gets the whole object and passes or fails for the wrong reason. Six
+   appliance measurements did exactly that. Hand the part under test its own
+   material in the spec.

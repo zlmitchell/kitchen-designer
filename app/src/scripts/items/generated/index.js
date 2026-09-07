@@ -4,6 +4,7 @@ import {buildPost, POST_SCHEMA} from './post.js';
 import {buildCabinet, CABINET_SCHEMA} from './cabinet.js';
 import {buildCounter, COUNTER_SCHEMA} from './counter.js';
 import {buildSink, SINK_SCHEMA} from './sink.js';
+import {buildAppliance, APPLIANCE_SCHEMA} from './appliance.js';
 
 /**
  * Items whose geometry is generated from a spec instead of fetched.
@@ -55,6 +56,7 @@ export const GENERATED_BUILDERS = {
 	cabinet: buildCabinet,
 	counter: buildCounter,
 	sink: buildSink,
+	appliance: buildAppliance,
 };
 
 /**
@@ -72,6 +74,7 @@ export const GENERATED_SCHEMAS = {
 	cabinet: CABINET_SCHEMA,
 	counter: COUNTER_SCHEMA,
 	sink: SINK_SCHEMA,
+	appliance: APPLIANCE_SCHEMA,
 };
 
 /**

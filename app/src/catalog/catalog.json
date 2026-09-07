@@ -1370,6 +1370,89 @@
 				},
 				"kind": "sink"
 			}
+		},
+		{
+			"name": "Range",
+			"image": "models/thumbnails_new/appliance-range.png",
+			"model": "generated:appliance",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "range",
+				"style": "freestanding",
+				"fuel": "gas",
+				"finish": "stainless"
+			}
+		},
+		{
+			"name": "Refrigerator",
+			"image": "models/thumbnails_new/appliance-fridge.png",
+			"model": "generated:appliance",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "fridge",
+				"style": "freestanding",
+				"doors": "french",
+				"finish": "stainless"
+			}
+		},
+		{
+			"name": "Refrigerator - Panel Ready",
+			"image": "models/thumbnails_new/appliance-fridge-panel.png",
+			"model": "generated:appliance",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "fridge",
+				"style": "built-in",
+				"doors": "french",
+				"finish": "panel-ready",
+				"front": "shaker"
+			}
+		},
+		{
+			"name": "Dishwasher",
+			"image": "models/thumbnails_new/appliance-dishwasher.png",
+			"model": "generated:appliance",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "dishwasher",
+				"controls": "front",
+				"finish": "stainless"
+			}
+		},
+		{
+			"name": "Microwave - Over Range",
+			"image": "models/thumbnails_new/appliance-microwave.png",
+			"model": "generated:appliance",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "microwave",
+				"mount": "over-range",
+				"finish": "stainless"
+			}
+		},
+		{
+			"name": "Vent Hood",
+			"image": "models/thumbnails_new/appliance-hood.png",
+			"model": "generated:appliance",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "hood",
+				"style": "wall-chimney",
+				"ductless": false,
+				"finish": "stainless"
+			}
 		}
 	]
 }

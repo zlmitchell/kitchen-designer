@@ -1264,6 +1264,36 @@
 			"hash": "sha256-ovSGbd2VKkStAaLFkj2f8vYWTd4tae9qUwLOIGcAJ24=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/appliance-dishwasher.png": {
+			"bytes": 2874,
+			"hash": "sha256-p+qsQVZd7+f+k6ovZTIo0w+mJTB8VSS3pQAjPnZrxiY=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-fridge-panel.png": {
+			"bytes": 2542,
+			"hash": "sha256-sm+Z2Fy3rJy8J2DqwZIaeXAwrIxsQxH+02aJKKmCmlo=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-fridge.png": {
+			"bytes": 3178,
+			"hash": "sha256-aKmG/XlIJcpqTStLKIau1xUjEHjjiYysMI+LCxP+FC0=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-hood.png": {
+			"bytes": 1925,
+			"hash": "sha256-3VeqDquXyL1VK4TFg+UbLrAGzyTtLI3HamOCr+ni2rk=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-microwave.png": {
+			"bytes": 2822,
+			"hash": "sha256-UfrfgsXGSQsXolbO5Ytkzv3+XFGSv3SC7pfmRIY2HUw=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-range.png": {
+			"bytes": 6302,
+			"hash": "sha256-Xh2i/C8BsX8F5brHljq2xtrlLpp94E8zj8ODKfPMb8k=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/bathroomCabinet.png": {
 			"bytes": 1261,
 			"hash": "sha256-1e5Oy3ACSmpR93rOaN/jB/9qPNpjJtV5q0zCCpFfOXM=",

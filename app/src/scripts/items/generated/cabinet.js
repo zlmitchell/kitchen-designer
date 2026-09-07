@@ -275,9 +275,14 @@ function shell(s)
 /**
  * One front panel, in the chosen style.
  *
+ * Exported because a panel-ready appliance is not a colour, it is a CABINET
+ * FRONT screwed to a dishwasher - so `appliance.js` asks for one of these rather
+ * than approximating one, and a panel-ready fridge standing in a shaker run gets
+ * shaker doors with the run's reveals without anybody keeping the two in step.
+ *
  * @returns {Array<Mesh>} One box for a slab, five for a shaker, six for raised.
  */
-function frontPanel(mats, style, x0, x1, y0, y1, z0, thickness)
+export function frontPanel(mats, style, x0, x1, y0, y1, z0, thickness)
 {
 	var mat = mats.front;
 	var z1 = z0 + thickness;
