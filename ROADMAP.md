@@ -42,7 +42,10 @@ meshes. Every "no" below comes back to the same two root causes.
 | Door front style | — | No |
 | Counter depth / cabinet depth | Mesh stretch | No |
 | Upper cabinet depth / height | 4 fixed Kenney uppers | No |
-| Countertops | The word does not appear anywhere in `app/src` | No |
+| Countertops | `generated:counter` — slab, edge profile, backsplash, cutouts | **Done** |
+| Counter around a corner | One rectangle; `slabShape` draws four points | No |
+| Corner cabinet (blind, susan, corner drawer) | — | No |
+| Cabinet with an exposed end or back (island, peninsula) | Draws a ply back and a raw ply side, always | No |
 | Floating drawers (no toe kick) | — | No |
 | Sinks | `Kitchensink` is a **floor item** — it does not cut a counter | No |
 | Sink mount: on-counter / in-counter / farmhouse / vessel | — | No |
@@ -378,6 +381,62 @@ features:
 - an **`appliance-slot` member** reserves width without being a cabinet. This is
   how the range, dishwasher and built-in fridge get counter and face alignment
   for free instead of each solving it alone.
+
+#### 3a. Corners, and the cabinet that is not simply against a wall
+
+An L kitchen is two runs meeting, and the corner is where every assumption in
+`cabinet.js` runs out. The builder assumes **exactly one face is the front and
+everything else is buried**: a back in carcass ply, two raw ply sides, and a full
+face carrying doors across its whole width. Three cases break that, and the
+corner is the one that breaks it hardest.
+
+**The blind corner.** Where two base runs meet, one run's end cabinet is
+*blind*: the other run butts its side into that cabinet's face, so part of the
+face is behind the adjacent run and can carry nothing. Two things follow, and
+both are the neighbour's numbers rather than the cabinet's own:
+
+- **The blind portion is blank.** No door, no drawer front, no pull — a filler
+  panel or nothing at all, because it is behind the other run. A door drawn there
+  opens into a carcass. Today `carcassAt` divides the whole opening into doors
+  and has no way to say "this much of the width is not face".
+- **The blind width comes from the ADJACENT run's depth**, not from this
+  cabinet. It is that depth plus a filler — typically 3in — so the door beside it
+  can swing clear of the other run's face frame and its hardware.
+- **And the depth has to match the adjacent run's depth.** If it does not, the
+  two faces step at the corner and the counter above cannot be one slab. This is
+  the thing to get right first: it is one number, it is not the cabinet's own,
+  and everything visible at the corner depends on it.
+
+The other two corner solutions are worth naming now so the field is not designed
+around only one of them: a **corner susan**, whose front is a 45° angled face
+across the corner and which is therefore not a rectangle in plan; and a **corner
+drawer** unit, whose drawers run diagonally. Both are still "one cabinet spanning
+the corner", so they belong to the same member rather than to a new kind.
+
+**The exposed end and the exposed back.** The same assumption, one step out. A
+run that ends in open floor shows a raw ply side where a finished end panel
+belongs, and an island or peninsula shows a ply back — or wants doors on it,
+which is a peninsula's whole point. Neither is expressible today.
+
+**Why this settles the requirements mechanism rather than just using it.** The
+roadmap already wants one rule — an item declares requirements of its host and
+the host validates — with the farmhouse sink and the pocket door as its two
+cases. Both of those are a child constraining its *container*. The corner is a
+third shape and the one that decides the design: a cabinet in run A needs a
+number that belongs to run B, so it is **peer to peer, not child to host**. Two
+cases were enough to see a pattern; this is the one that says whether the pattern
+is general or whether it was only ever "ask your parent".
+
+**The counter turns the same corner**, and that half is nearly free: an L outline
+is six points instead of four, `ShapeUtils.triangulateShape` handles the concave
+polygon, the bullnose bevel survives the reflex vertex without self-intersecting,
+and a sink cutout still cuts — measured at exactly the requested overall size.
+Two things it does need: the bevel inset must be applied **per edge** rather than
+by shrinking half-extents, which is a rectangle-only shortcut, and the backsplash
+has to follow the back edges round instead of being one box. Butting two
+rectangular counters instead leaves the two splashes stopping short of each
+other, with an open notch at exactly the inside corner where a real kitchen has a
+continuous return.
 
 ### Phase 4 — appliances ✅
 
