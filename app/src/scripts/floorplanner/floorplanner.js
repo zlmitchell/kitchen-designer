@@ -1,7 +1,7 @@
 // @ts-check
 import {EventDispatcher, Vector2} from 'three';
 import {cmPerPixel, pixelsPerCm} from '../core/dimensioning.js';
-import {configDimUnit, snapTolerance} from '../core/configuration.js';
+import {configDimUnit, snapTolerance, gridSpacing} from '../core/configuration.js';
 import {EVENT_MODE_RESET, EVENT_LOADED} from '../core/events.js';
 import {EVENT_CORNER_ATTRIBUTES_CHANGED, EVENT_WALL_ATTRIBUTES_CHANGED, EVENT_ROOM_ATTRIBUTES_CHANGED} from '../core/events.js';
 import {EVENT_CORNER_2D_HOVER, EVENT_WALL_2D_HOVER, EVENT_ROOM_2D_HOVER} from '../core/events.js';
@@ -30,6 +30,29 @@ import {FloorplannerView2D, floorplannerModes} from './floorplanner_view.js';
 * The Floorplanner implements an interactive tool for creation of floorplans in
 * 2D.
 */
+/**
+ * The nearest grid line, at a given pitch.
+ *
+ * `Math.round`, where both snap sites used `Math.floor`. Flooring does not snap:
+ * it drags everything down and left by up to a whole cell, always in the same
+ * direction. On the default 25cm grid a point 24cm past a line lands back on that
+ * line rather than on the one 1cm away. Rounding is symmetric, which is what
+ * "snap to the nearest grid line" means and what the drawn grid implies.
+ *
+ * @param {number} value
+ * @param {number} pitch Centimetres between grid lines. Zero would divide by
+ *        nothing, so the value passes through untouched.
+ * @returns {number}
+ */
+function snapToPitch(value, pitch)
+{
+	if (!pitch)
+	{
+		return value;
+	}
+	return Math.round(value / pitch) * pitch;
+}
+
 export class Floorplanner2D extends EventDispatcher
 {
 	/**
@@ -355,11 +378,22 @@ export class Floorplanner2D extends EventDispatcher
 		}
 		
 		if(this.gridsnapmode || this.configuration.getNumericValue('snapToGrid'))
-		{			
-			this.targetX = Math.floor(this.targetX / this.configuration.getNumericValue(snapTolerance)) * this.configuration.getNumericValue(snapTolerance);
-			this.targetY = Math.floor(this.targetY / this.configuration.getNumericValue(snapTolerance)) * this.configuration.getNumericValue(snapTolerance);
-			
-			//The below will not work, the snapTolerance is necessary for X, Y axis snapping, where as grid snapping is for snapping to grid lines
+		{
+			// Snap to the grid you can SEE.
+			//
+			// This read snapTolerance, and the comment left here said so - "the
+			// snapTolerance is necessary for X, Y axis snapping, whereas grid
+			// snapping is for snapping to grid lines" - and then did it anyway.
+			// gridSpacing drew the grid and nothing else, so the Settings panel's
+			// "Grid resolution" changed what you looked at while "Snap every"
+			// silently decided where things landed. Both default to 25, so it was
+			// invisible until somebody changed one - and then the grid lied.
+			//
+			// They are different jobs and keep their own numbers: snapTolerance is
+			// a DISTANCE, "how close before I grab", used by the axis snapping
+			// above; gridSpacing is a PITCH, "how far apart the lines are".
+			this.targetX = snapToPitch(this.targetX, this.configuration.getNumericValue(gridSpacing));
+			this.targetY = snapToPitch(this.targetY, this.configuration.getNumericValue(gridSpacing));
 		}
 
 		this.view.invalidate();
@@ -554,8 +588,8 @@ export class Floorplanner2D extends EventDispatcher
 				my = this.mouseY;
 				if(this.gridsnapmode || this.configuration.getNumericValue('snapToGrid'))
 				{
-					mx = Math.floor(this.mouseX / this.configuration.getNumericValue(snapTolerance)) * this.configuration.getNumericValue(snapTolerance);
-					my = Math.floor(this.mouseY / this.configuration.getNumericValue(snapTolerance)) * this.configuration.getNumericValue(snapTolerance);
+					mx = snapToPitch(this.mouseX, this.configuration.getNumericValue(gridSpacing));
+					my = snapToPitch(this.mouseY, this.configuration.getNumericValue(gridSpacing));
 				}
 				
 				this._clickedWallControl.x = mx;

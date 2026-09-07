@@ -8,24 +8,20 @@ import {materialsForSlots} from '../../core/materials.js';
  *
  * ## Why this is not a short wall
  *
- * Because a short wall cannot be short enough, and fails at it silently.
- *
  * `README.md` reasoned that architect3d has no column primitive but a wall is
  * 10cm thick by default, so 4in of one is a 4x4 and needs no model and no new
- * concept. The first half is true and the second is not. Two floors get in the
- * way, and the inner one destroys data:
+ * concept. What prompted this file was that the second half was not true: grid
+ * snapping quantised to a 25cm pitch, so the shortest wall you could drag was
+ * 9.84in - "the smallest was 10 inches" - and below 20cm a wall's own two ends
+ * FUSED, which does not shorten a wall, it deletes it. Silently. An exported
+ * design carried a 0.56cm remnant of one.
  *
- *   - grid snapping quantises to `snapTolerance`, 25cm by default - so the
- *     shortest wall you can drag or type is 9.84in, which is where "the smallest
- *     was 10 inches" comes from;
- *   - `cornerTolerance` is a hardcoded 20cm, and two corners closer than that
- *     FUSE. Measured: asked for 8in a wall survives, asked for 6in its two ends
- *     merge and the wall ceases to exist. No error, no warning. A design
- *     exported after trying it carried a 0.56cm wall - the remnant.
+ * Both of those are fixed now (`Corner.mergeWithIntersected` will not weld a
+ * wall to itself, and snapping reads the visible grid), so a 4in wall is
+ * possible. This is still not one, for the reasons that were always the better
+ * ones and that no bug fix reaches:
  *
- * So a 4x4 was unreachable, and asking for one deleted the wall.
- *
- * A post is also not a wall in the ways that matter to the rest of the model.
+ * A post is not a wall in the ways that matter to the rest of the model.
  * Rooms are found by walking closed loops of walls, so a column standing in open
  * floor is a wall run that goes nowhere and has to be argued out again -
  * `extract.py:600 drop_islands` exists partly for that. And a post has no
@@ -35,6 +31,9 @@ import {materialsForSlots} from '../../core/materials.js';
  *
  * A `FloorItem` built from a spec, which is the machinery phase 0 put in.
  * Nothing here touches corners, so any size works and nothing can collapse.
+ *
+ * A post is also a plain box with a size, which is a spec; a wall is a pair of
+ * corners with a topology.
  *
  * The trade, stated plainly: a post does not follow a wall when the wall is
  * dragged. It is furniture, and it stays where it was put. For a post that caps

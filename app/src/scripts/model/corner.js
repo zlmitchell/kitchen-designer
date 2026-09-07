@@ -779,7 +779,18 @@ export class Corner extends EventDispatcher
 		{
 			var corner = this.floorplan.getCorners()[i];
 			if (this.distanceFromCorner(corner) < cornerTolerance && corner != this
-				&& sameElevation(this, corner))
+				&& sameElevation(this, corner)
+				// Never a wall's own other end. Fusing those does not shorten the
+				// wall, it DESTROYS it: both corners go and the wall goes with
+				// them, silently. Measured on a free wall - asked for 8in it comes
+				// out 8in, asked for 6in the wall ceases to exist, no error - and a
+				// design exported after trying carried a 0.56cm remnant of one.
+				//
+				// Two DIFFERENT walls meeting is the case this merge exists for and
+				// is untouched; the guard is only that a wall may not be welded to
+				// itself. What you get instead is a short wall, which is what was
+				// asked for.
+				&& !this.wallToOrFrom(corner))
 			{
 				this.combineWithCorner(corner);
 				return true;

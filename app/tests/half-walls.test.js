@@ -209,23 +209,29 @@ describe('a post is an item, not a very short wall', () =>
 {
 	beforeEach(() => resetAll());
 
-	it('cannot be made as a wall at all, which is why it is not one', () =>
+	it('is not a wall for reasons that outlive the bug that prompted it', () =>
 	{
-		// The measurement that decided this. `cornerTolerance` is a hardcoded 20cm
-		// and two corners closer than that fuse, so a wall shorter than about 8in
-		// does not come out short - it ceases to exist, silently. A design
-		// exported after trying carried a 0.56cm wall, the remnant.
-		const survives = [];
-		for (const askedCm of [25.4, 20.32, 15.24, 10.16])
-		{
-			const floorplan = new Floorplan();
-			const wall = floorplan.newWall(floorplan.newCorner(0, 0), floorplan.newCorner(200, 0));
-			floorplan.update();
-			wall.wallSize = askedCm;
-			survives.push([askedCm, floorplan.getCorners().length > 0 && wall.wallLength() > 1]);
-		}
-		// 10in and 8in survive; 6in and the 4in we actually wanted do not.
-		expect(survives.map(([, ok]) => ok)).toEqual([true, true, false, false]);
+		// The measurement that prompted this was that a wall could not be made
+		// short enough: `cornerTolerance` is 20cm and two corners closer than that
+		// fused, so asking for 6in destroyed the wall. That is fixed now - see
+		// "a wall is never welded to itself" below - and a 4in wall is possible.
+		//
+		// A post is still not a wall, and the surviving reasons are the better
+		// ones. Rooms are found by walking closed loops of walls, so a column in
+		// open floor is a run that goes nowhere and has to be argued back out -
+		// part of what extract.py's drop_islands exists for. A post also has no
+		// inside and outside, no items in it, and no need of two half edges. And
+		// with snap-to-grid on you still cannot DRAG one shorter than the grid.
+		const floorplan = new Floorplan();
+		const wall = floorplan.newWall(floorplan.newCorner(0, 0), floorplan.newCorner(200, 0));
+		floorplan.update();
+		wall.wallSize = 10.16;
+
+		// A 4in wall now survives...
+		expect(wall.wallLength()).toBeCloseTo(10.16, 1);
+		// ...and is still two corners and two half edges pretending to be a stick.
+		expect(floorplan.getCorners().length).toBe(2);
+		expect(buildPost({width: 10.16}).parts).toEqual([]);
 	});
 
 	it('builds at 4in, which is the whole point', () =>
@@ -277,5 +283,45 @@ describe('a post is an item, not a very short wall', () =>
 		// But it is wider, because the bands stand proud.
 		expect(banded.geometry.boundingBox.getSize(new Vector3()).x)
 			.toBeGreaterThan(plain.geometry.boundingBox.getSize(new Vector3()).x);
+	});
+});
+
+describe('a wall is never welded to itself', () =>
+{
+	beforeEach(() => resetAll());
+
+	it('survives being made shorter than the corner tolerance', () =>
+	{
+		// It used to cease to exist. `cornerTolerance` is 20cm and
+		// `mergeWithIntersected` fused any two corners closer than that - including
+		// a wall's own two ends, which does not shorten the wall, it deletes it.
+		// Silently: asked for 6in you got no wall, no error and no message.
+		for (const askedCm of [15.24, 10.16, 5.08])
+		{
+			const floorplan = new Floorplan();
+			const wall = floorplan.newWall(floorplan.newCorner(0, 0), floorplan.newCorner(200, 0));
+			floorplan.update();
+			wall.wallSize = askedCm;
+			expect(floorplan.getCorners().length, `${askedCm}cm keeps its corners`).toBe(2);
+			expect(wall.wallLength(), `${askedCm}cm comes out that long`).toBeCloseTo(askedCm, 1);
+		}
+	});
+
+	it('still fuses two different walls that meet', () =>
+	{
+		// The case the merge exists for, and the one that must not change: drawing
+		// a corner onto another wall's corner joins them.
+		const floorplan = new Floorplan();
+		const a = floorplan.newCorner(0, 0);
+		const b = floorplan.newCorner(200, 0);
+		floorplan.newWall(a, b);
+		const c = floorplan.newCorner(200, 300);
+		const second = floorplan.newWall(c, floorplan.newCorner(400, 300));
+		floorplan.update();
+		const before = floorplan.getCorners().length;
+
+		// Drag the second wall's free start onto the first wall's end.
+		second.getStart().move(b.x + 2, b.y + 2);
+		expect(floorplan.getCorners().length).toBeLessThan(before);
 	});
 });
