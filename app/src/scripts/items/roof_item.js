@@ -22,7 +22,36 @@ export class RoofItem extends Item
 	constructor(model, metadata, geometry, material, position, rotation, scale)
 	{
 		super(model, metadata, geometry, material, position, rotation, scale);
-		this.allowRotate = false;
+		/**
+		 * A ceiling fitting turns, and until now none of them could.
+		 *
+		 * `allowRotate` was false here, which is defensible for a round can and
+		 * wrong for everything else on a ceiling: a strip runs ALONG a run, a
+		 * rectangular fitting has a long axis, and a fan has blades. It also gates
+		 * the HUD handle (`three/hud.js:98`), so a ceiling item drew no grip at
+		 * all -- which reads as "this cannot be moved" rather than as "this cannot
+		 * be turned", and was half of a bug report.
+		 *
+		 * Nothing here overwrites `rotation.y` the way `WallItem.changeWallEdge`
+		 * does, which is the reason that class genuinely has to refuse.
+		 */
+		this.allowRotate = true;
+		/**
+		 * A ceiling is picked from underneath it or from above it, and the drag has
+		 * to work either way.
+		 *
+		 * `Room.generateRoofPlane` builds one triangle fan whose faces point DOWN,
+		 * into the room -- measured, `(0, -1, 0)`. The backface filter drops any
+		 * hit whose normal agrees with the ray, so with the camera above the
+		 * ceiling, which is where the 3D view normally sits, every hit on the roof
+		 * plane was discarded and `itemIntersection` returned null. `clickDragged`
+		 * then had nothing to move, so a ceiling light could only be dragged from
+		 * inside the room looking UP.
+		 *
+		 * The filter has nothing to say here anyway: the roof plane is an invisible
+		 * `DoubleSide` picking helper and not a surface anybody sees.
+		 */
+		this.dragCullsBackfaces = false;
 		this.boundToFloor = false;
 		this._freePosition = false;
 		if(this.geometry)

@@ -169,6 +169,19 @@ export class Item extends Mesh
 		this.position_set = false;
 		/** Show rotate option in context menu */
 		this.allowRotate = true;
+		/**
+		 * Whether a drag ignores a picking plane it is looking at from behind.
+		 *
+		 * `Controller.getIntersections` can drop any hit whose face points the same
+		 * way as the ray, and for a wall that is exactly right: the far face of a
+		 * wall is not a surface you are allowed to drag an item onto, and without
+		 * the filter a picture would bind to the room next door.
+		 *
+		 * It is wrong for a plane you legitimately work from both sides of. See
+		 * `RoofItem`, which turns it off - a ceiling has ONE face, pointing down
+		 * into the room, and the 3D view looks at it from above.
+		 */
+		this.dragCullsBackfaces = true;
 		/** */
 		this.fixed = false;
 		/** dragging */
@@ -245,7 +258,7 @@ export class Item extends Mesh
 		 * registry lookup already happens - the item does not import the registry,
 		 * so the model layer keeps one direction of dependency.
 		 *
-		 * @type {?function(Object): {geometry: Object, materials: Array, parts: Array, onBound?: function, onPlaced?: function, datum?: {y: number}}}
+		 * @type {?function(Object): {geometry: Object, materials: Array, parts: Array, onBound?: function, onPlaced?: function, datum?: {y: number}, fixtures?: Array<Object>}}
 		 */
 		this._specBuilder = null;
 
@@ -751,6 +764,21 @@ export class Item extends Mesh
 		(built.parts || []).forEach((part) => {this.add(part);});
 		this.generatedParts = built.parts || [];
 		this.metadata.spec = spec;
+		/**
+		 * Fixtures the BUILDER decided on, in this item's own frame.
+		 *
+		 * An under-cabinet strip is not a light somebody placed under a cabinet, it
+		 * is a property OF the cabinet -- it is the cabinet's width, it is screwed to
+		 * its underside, and it moves with it. So the builder is what knows where it
+		 * goes, and `metadata.fixtures` is the slot `fixturesOn` already reads for
+		 * "an object that is not itself a light but carries one".
+		 *
+		 * Assigned rather than merged, and null when the builder offers none: for a
+		 * generated item the spec is the whole truth, so a strip switched off has to
+		 * be able to go away again. The saved `fixtures` block for such an item is
+		 * therefore derived state, rebuilt from the spec on load.
+		 */
+		this.metadata.fixtures = built.fixtures || null;
 		// Keep the builder's own reference plane still, rather than the bounding
 		// box's centre.
 		//

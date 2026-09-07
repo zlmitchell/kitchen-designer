@@ -573,7 +573,10 @@ export class Controller extends EventDispatcher
 		var intersections;
 		if (customIntersections && customIntersections.length > 0)
 		{
-			intersections = this.getIntersections(vec2, customIntersections, true);
+			// The item decides. A wall item needs the backface filter and a ceiling
+			// item is broken by it - see `Item.dragCullsBackfaces`.
+			intersections = this.getIntersections(vec2, customIntersections,
+				item.dragCullsBackfaces !== false);
 		}
 		else
 		{
