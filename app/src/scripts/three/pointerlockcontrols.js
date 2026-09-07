@@ -41,6 +41,30 @@ import {PointerLockControls as PointerLockControlsAddon} from 'three/addons/cont
  *     pulled forward to S2 to satisfy its exit gate; the file it was fixed in
  *     no longer exists.
  */
+/**
+ * Eye height standing, in centimetres. 5ft 10in.
+ *
+ * Not the top of the head -- the EYE, which is what a camera is. The fork walked
+ * at 125cm and `Main` overrode it to 160, and both are wrong in the same
+ * direction: 160cm of eye height is a person of about 5ft 5in, so every wall
+ * cabinet in the app looked taller than it is and the 18in splash above a
+ * worktop read as a shelf at chin height. The whole point of walking the model
+ * is to answer "can I reach that", and the answer is wrong if the eye is wrong.
+ */
+export const EYE_HEIGHT = 177.8;
+
+/**
+ * Eye height crouching, in centimetres. 3ft.
+ *
+ * The height a base cabinet is looked into from, which is the reason to crouch
+ * in a kitchen at all: it is roughly the eye of somebody squatting at an open
+ * drawer, and it is also a child's eye line.
+ */
+export const CROUCH_HEIGHT = 91.44;
+
+/** How fast the eye moves between the two. Seconds are `delta * this`. */
+const CROUCH_EASE = 12;
+
 export class PointerLockControls extends PointerLockControlsAddon
 {
 	/**
@@ -52,8 +76,29 @@ export class PointerLockControls extends PointerLockControlsAddon
 	{
 		super(camera, domElement || document.body);
 
-		/** Eye height, in centimetres. The floor the walker cannot fall through. */
-		this.characterHeight = 125;
+		/** Eye height standing, in centimetres. The floor the walker cannot fall through. */
+		this.characterHeight = EYE_HEIGHT;
+		/** Eye height with Ctrl held. */
+		this.crouchHeight = CROUCH_HEIGHT;
+		/** Whether Ctrl is down right now. */
+		this._crouching = false;
+		/**
+		 * The eye height in force this frame, eased between the two.
+		 *
+		 * Eased and not switched, because a snap from 178cm to 91cm is a
+		 * teleport - the eye arrives before the body and it reads as the room
+		 * jumping rather than as crouching. Standing back up is the same movement
+		 * in reverse, and gravity cannot do it: the clamp below is what lifts the
+		 * walker, so the ease has to live in the height and not in the velocity.
+		 *
+		 * Null until the first frame, and then whatever the standing height is at
+		 * that moment. Seeded with `EYE_HEIGHT` instead, it eased from the
+		 * constant towards a `characterHeight` an embedder had since set - so the
+		 * walk STARTED with a transient, the floor drifted for a second, and a
+		 * walker asked to be 160 came to rest at 160.02.
+		 * @type {?number}
+		 */
+		this._eyeHeight = null;
 		/** Ground acceleration while a direction key is held. */
 		this.walkspeed = 3000;
 		/** Kept for source compatibility; the addon expresses this as pointerSpeed. */
@@ -89,15 +134,23 @@ export class PointerLockControls extends PointerLockControlsAddon
 		return this.object;
 	}
 
-	/** WASD and the arrows, by physical key so the layout does not matter. */
+	/** WASD, the arrows, Space and Ctrl, by physical key so the layout does not matter. */
 	_setKey(event, down)
 	{
-		if (this.enabled === false)
+		// A key going UP is always honoured, even with the controls disabled.
+		// Leaving walk mode with a key held used to leave the flag set, so the
+		// walker was still moving - or now, still crouching - when it came back.
+		// Nothing can be started while disabled, which is what the gate is for.
+		if (this.enabled === false && down)
 		{
 			return;
 		}
 		switch (event.code)
 		{
+		case 'ControlLeft':
+		case 'ControlRight':
+			this._crouching = down;
+			break;
 		case 'ArrowUp':
 		case 'KeyW':
 			this._moveForward = down;
@@ -146,6 +199,24 @@ export class PointerLockControls extends PointerLockControlsAddon
 		var velocity = this._velocity;
 		var direction = this._direction;
 
+		// Where the eye wants to be, and how far it gets this frame. Clamped at 1
+		// so a long frame settles rather than overshooting past the target.
+		var wanted = this._crouching ? this.crouchHeight : this.characterHeight;
+		if (this._eyeHeight === null)
+		{
+			this._eyeHeight = wanted;
+		}
+		this._eyeHeight += (wanted - this._eyeHeight) * Math.min(1, delta * CROUCH_EASE);
+		// Settle rather than creep. A proportional ease is an asymptote and never
+		// arrives, so the eye would sit a ten-thousandth of a millimetre off its
+		// own height for ever - invisible, but it means the walker's height is
+		// never actually the number anybody set, and `characterHeight = 160`
+		// would never quite be 160.
+		if (Math.abs(wanted - this._eyeHeight) < 0.01)
+		{
+			this._eyeHeight = wanted;
+		}
+
 		velocity.x -= velocity.x * 10.0 * delta;
 		velocity.z -= velocity.z * 10.0 * delta;
 		velocity.y -= 9.8 * 100.0 * delta; // 100.0 = mass
@@ -179,10 +250,14 @@ export class PointerLockControls extends PointerLockControlsAddon
 		this.moveForward(-velocity.z * delta);
 		this.object.position.y += velocity.y * delta;
 
-		if (this.object.position.y < this.characterHeight)
+		// The floor, at whatever height the eye is currently at. Dropping into a
+		// crouch lowers it and gravity does the rest; standing up raises it and
+		// this clamp is what carries the walker back, which is why the ease is on
+		// the height rather than on the velocity.
+		if (this.object.position.y < this._eyeHeight)
 		{
 			velocity.y = 0;
-			this.object.position.y = this.characterHeight;
+			this.object.position.y = this._eyeHeight;
 			this._canJump = true;
 		}
 	}
