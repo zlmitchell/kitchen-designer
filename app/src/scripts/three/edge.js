@@ -1,11 +1,12 @@
 // @ts-check
-import {EventDispatcher, RepeatWrapping, BufferAttribute, Vector2, Vector3, MeshBasicMaterial, MeshStandardMaterial, FrontSide, DoubleSide, BackSide, Shape, Path, ShapeGeometry, Mesh, SRGBColorSpace} from 'three';
+import {Color, EventDispatcher, RepeatWrapping, BufferAttribute, Vector2, Vector3, MeshBasicMaterial, MeshStandardMaterial, FrontSide, DoubleSide, BackSide, Shape, Path, ShapeGeometry, Mesh, SRGBColorSpace} from 'three';
 import {Utils} from '../core/utils.js';
 import {triangleFanGeometry} from '../core/geometry_builders.js';
 import {EVENT_REDRAW, EVENT_CAMERA_MOVED, EVENT_CAMERA_ACTIVE_STATUS} from '../core/events.js';
 import {isStudio} from '../core/render_profile.js';
 import {acquireTexture, releaseTexture} from './texture_cache.js';
 import {runtimeOf} from '../core/design_runtime.js';
+import {defaultWallColor} from '../model/wall.js';
 
 /**
  * The hand-painted vignette every wall is lit with. One image, one decode -
@@ -384,7 +385,12 @@ export class Edge extends EventDispatcher
 			return;			
 		}
 
-		var color = 0xFFFFFF;
+		// The face's own colour, not a constant. This was `0xFFFFFF` written into
+		// the source, so every wall in every design was the same white and nothing
+		// could say otherwise - see `Wall#frontColor`. It multiplies the texture,
+		// so white leaves the wallmap exactly as it was.
+		var painted = this.front ? this.wall.frontColor : this.wall.backColor;
+		var color = new Color(painted || defaultWallColor).getHex();
 		var wallMaterial = isStudio(this.renderProfile) ? this.makeStudioWallMaterial(color, FrontSide) : new MeshBasicMaterial({
 			color: color,
 			side: FrontSide,

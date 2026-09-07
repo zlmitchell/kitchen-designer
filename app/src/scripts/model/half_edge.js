@@ -234,7 +234,66 @@ export class HalfEdge extends EventDispatcher
 
 		this.dispatchEvent({type:EVENT_REDRAW, item: this});
 	}
-	
+
+	/**
+	 * Paint this face.
+	 *
+	 * The same shape as `setTexture` and for the same reason: a colour belongs to
+	 * a FACE, not to a wall, because the two sides of a wall are in different
+	 * rooms and are routinely painted differently.
+	 *
+	 * @param {string} color `#rrggbb`. It multiplies the texture, so white is
+	 *        "unpainted" rather than "white paint over the map".
+	 * @emits {EVENT_REDRAW}
+	 */
+	setColor(color)
+	{
+		if (this.front)
+		{
+			this.wall.frontColor = color;
+		}
+		else
+		{
+			this.wall.backColor = color;
+		}
+		this.dispatchEvent({type:EVENT_REDRAW, item: this});
+	}
+
+	/** What this face is painted. @returns {string} */
+	getColor()
+	{
+		return this.front ? this.wall.frontColor : this.wall.backColor;
+	}
+
+	/**
+	 * Choose this face's finish - matte, satin, gloss and the rest.
+	 *
+	 * Beside `setColor` and dispatching the same event, because the finish is
+	 * part of the same decision as the colour: you buy one tin, and it is both.
+	 *
+	 * @param {string} sheen One of `WALL_SHEENS`' ids. An unknown name is stored
+	 *        as given and renders flat - see `wallSheenRoughness`.
+	 * @emits {EVENT_REDRAW}
+	 */
+	setSheen(sheen)
+	{
+		if (this.front)
+		{
+			this.wall.frontSheen = sheen;
+		}
+		else
+		{
+			this.wall.backSheen = sheen;
+		}
+		this.dispatchEvent({type:EVENT_REDRAW, item: this});
+	}
+
+	/** What finish this face is painted in. @returns {string} */
+	getSheen()
+	{
+		return this.front ? this.wall.frontSheen : this.wall.backSheen;
+	}
+
 	/**
 	 * Emit the redraw event
 	 * @emits {EVENT_REDRAW}

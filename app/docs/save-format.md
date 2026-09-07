@@ -60,6 +60,8 @@ An array. Each wall names the two corners it spans:
   "corner2": "0438a3a5-…",
   "frontTexture": {"url": "rooms/textures/marbletiles.jpg", "stretch": false, "scale": 300},
   "backTexture":  {"url": "rooms/textures/light_brick.jpg", "stretch": false, "scale": 300},
+  "frontColor": "#f2f0ec",
+  "backColor": "#ffffff",
   "wallType": "STRAIGHT",
   "a": {"x": 176.77, "y": 176.77},
   "b": {"x": 323.22, "y": 176.77}
@@ -70,6 +72,7 @@ An array. Each wall names the two corners it spans:
 |---|---|
 | `corner1`, `corner2` | Corner ids. A wall with a missing endpoint is skipped on save. |
 | `frontTexture`, `backTexture` | `{url, stretch, scale}`. When `stretch` is true the map is fitted to the wall and `scale` is ignored — which is why stretched entries are often saved with `scale: 0`. |
+| `frontColor`, `backColor` | `#rrggbb`, per face. **Multiplies** the texture rather than replacing it, so `#ffffff` is unpainted and anything else is paint over the map. Per face because the two sides of a wall are in different rooms. Absent in a file written before walls could be painted, and read back as white. |
 | `wallType` | `"STRAIGHT"` or `"CURVED"`. |
 | `a`, `b` | Bezier control points. Only meaningful when `wallType` is `"CURVED"`, but always written. |
 

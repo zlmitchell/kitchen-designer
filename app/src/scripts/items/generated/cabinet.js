@@ -96,6 +96,26 @@ const DEFAULTS = {
 	drawers: [],
 	hardware: 'knob',
 	/**
+	 * What happens between the top of a wall cabinet and the ceiling.
+	 *
+	 * `standard` leaves the gap that most kitchens have and nobody wants -- it
+	 * collects dust and it is the reason cabinets look like they were put in
+	 * rather than built in. The other three are the ways of not having it:
+	 *
+	 *   - `to-ceiling` makes ONE taller cabinet. A 42in wall cabinet on an 8ft
+	 *     ceiling is exactly this, and it is why 42in is a size you can buy.
+	 *   - `soffit` keeps a standard cabinet and fills above it with a closed box.
+	 *   - `stacked` puts a second, shorter cabinet on top, usually with glass in
+	 *     it. Two doors, not one tall one.
+	 *
+	 * Wall cabinets only. A base cabinet's top is the counter's business.
+	 */
+	topTreatment: 'standard',
+	/** Bottom of a wall cabinet above the floor. 54in leaves 18in of splash. */
+	mountHeight: 137.16,
+	/** Where the ceiling is. Needed to reach it, and nothing else knows. */
+	ceilingHeight: 243.84,
+	/**
 	 * Whether this cabinet has a recessed toe kick. Defaults to the variant's
 	 * answer - a base cabinet does, a wall cabinet does not - and is overridable
 	 * for a base that gets a separate plinth.
@@ -205,16 +225,44 @@ function centre(group)
 	group.updateMatrixWorld(true);
 }
 
+/**
+ * How tall the whole assembly is, and how much of that is cabinet.
+ *
+ * They are the same number for every treatment but two. A soffit and a stack
+ * both reach the ceiling while the CABINET below stays a normal cabinet, so the
+ * envelope and the carcass part company and everything downstream has to be
+ * told which one it wants.
+ */
+function heights(s, variant)
+{
+	var asked = (s.height === undefined) ? variant.height : s.height;
+	if (s.variant !== 'wall' || s.topTreatment === 'standard')
+	{
+		return {envelope: asked, carcass: asked, fill: 0};
+	}
+	// Everything else reaches the ceiling; what differs is what fills the top.
+	var envelope = Math.max(asked, s.ceilingHeight - s.mountHeight);
+	if (s.topTreatment === 'to-ceiling')
+	{
+		// One taller cabinet. A 42in wall cabinet is exactly this.
+		return {envelope: envelope, carcass: envelope, fill: 0};
+	}
+	// soffit and stacked keep a normal cabinet and fill above it.
+	return {envelope: envelope, carcass: asked, fill: envelope - asked};
+}
+
 /** The resolved sizes every part is placed against. */
 function shell(s)
 {
 	var variant = VARIANTS[s.variant] || VARIANTS.base;
-	var height = (s.height === undefined) ? variant.height : s.height;
+	var tall = heights(s, variant);
+	var height = tall.envelope;
 	var depth = (s.depth === undefined) ? variant.depth : s.depth;
 	var wantsToe = (s.toeKick === null || s.toeKick === undefined) ? variant.toeKick : s.toeKick;
 	var toe = wantsToe ? s.toeHeight : 0;
 	return {
 		width: s.width, height: height, depth: depth,
+		carcassHeight: tall.carcass, fill: tall.fill,
 		toe: toe,
 		// Centred, so Item's recentring is a no-op. See docs/generated-items.md.
 		x1: s.width / 2, y1: height / 2, z1: depth / 2,
@@ -321,6 +369,16 @@ export const CABINET_SCHEMA = {
 			{value: 'pull', label: 'Pull'},
 			{value: 'none', label: 'None'},
 		]},
+		{key: 'topTreatment', label: 'Above', type: 'choice', when: {variant: 'wall'}, options: [
+			{value: 'standard', label: 'Gap'},
+			{value: 'to-ceiling', label: 'To ceiling'},
+			{value: 'soffit', label: 'Soffit'},
+			{value: 'stacked', label: 'Stacked'},
+		]},
+		{key: 'ceilingHeight', label: 'Ceiling height', type: 'length', min: 200, max: 400,
+			step: 1, when: {variant: 'wall'}},
+		{key: 'mountHeight', label: 'Mounted at', type: 'length', min: 90, max: 200,
+			step: 1, when: {variant: 'wall'}},
 		{key: 'toeKick', label: 'Toe kick', type: 'choice', options: [
 			{value: true, label: 'Recessed'},
 			{value: false, label: 'None'},
@@ -338,43 +396,46 @@ export const CABINET_SCHEMA = {
  * @param {CabinetSpec} spec
  * @returns {{geometry: import('three').BufferGeometry, materials: Array, parts: Array}}
  */
-export function buildCabinet(spec)
+/**
+ * A carcass, its face frame, and the fronts filling the opening.
+ *
+ * Pulled out of `buildCabinet` so a stacked upper can have one too. A stack is
+ * two cabinets, not one tall cabinet with a rail across it - the doors break at
+ * the joint, and that break is the whole visual difference between a stack and a
+ * 42in cabinet.
+ *
+ * @param {Object} group Where the meshes go.
+ * @param {Object} s The resolved spec.
+ * @param {Object} mats Materials by slot.
+ * @param {Object} f The shell.
+ * @param {number} yLo Bottom of this box, in the centred frame.
+ * @param {number} yHi Top of it.
+ * @param {number} doors How many doors across its opening.
+ * @param {Array<number>} drawers Drawer heights, top down.
+ */
+function carcassAt(group, s, mats, f, yLo, yHi, doors, drawers)
 {
-	var s = Object.assign({}, DEFAULTS, spec || {});
-	var mats = materialsForSlots(s.material, SLOTS);
-	var f = shell(s);
-	var group = new Group();
-
-	var lift = f.floor + f.toe;
 	var back = -f.z1;
+	var deckAt = yLo;
 
-	// ---- carcass ----------------------------------------------------------
-	group.add(box(mats.carcass, -f.x1, -f.x1 + s.panel, lift, f.y1, back, f.face));
-	group.add(box(mats.carcass, f.x1 - s.panel, f.x1, lift, f.y1, back, f.face));
-	// Deck and back.
-	group.add(box(mats.carcass, -f.x1, f.x1, lift, lift + s.panel, back, f.face));
-	group.add(box(mats.carcass, -f.x1, f.x1, lift, f.y1, back, back + s.panel));
-	// Top: a full deck on a wall cabinet, a stretcher on a base one, because
-	// that is how each is built and the top of a base cabinet is never seen.
+	group.add(box(mats.carcass, -f.x1, -f.x1 + s.panel, deckAt, yHi, back, f.face));
+	group.add(box(mats.carcass, f.x1 - s.panel, f.x1, deckAt, yHi, back, f.face));
+	group.add(box(mats.carcass, -f.x1, f.x1, deckAt, deckAt + s.panel, back, f.face));
+	group.add(box(mats.carcass, -f.x1, f.x1, deckAt, yHi, back, back + s.panel));
+	// Top: a full deck on a wall cabinet, a stretcher on a base one, because that
+	// is how each is built and the top of a base cabinet is never seen.
 	if (s.variant === 'wall')
 	{
-		group.add(box(mats.carcass, -f.x1, f.x1, f.y1 - s.panel, f.y1, back, f.face));
+		group.add(box(mats.carcass, -f.x1, f.x1, yHi - s.panel, yHi, back, f.face));
 	}
 	else
 	{
-		group.add(box(mats.carcass, -f.x1, f.x1, f.y1 - s.panel, f.y1, back, back + 12));
-		group.add(box(mats.carcass, -f.x1, f.x1, f.y1 - s.panel, f.y1, f.face - 12, f.face));
+		group.add(box(mats.carcass, -f.x1, f.x1, yHi - s.panel, yHi, back, back + 12));
+		group.add(box(mats.carcass, -f.x1, f.x1, yHi - s.panel, yHi, f.face - 12, f.face));
 	}
 
-	// ---- toe kick ---------------------------------------------------------
-	if (f.toe > 0)
-	{
-		group.add(box(mats.carcass, -f.x1, f.x1, f.floor, lift, back, f.face - s.toeRecess));
-	}
-
-	// ---- face frame, and the opening it leaves -----------------------------
-	var openLo = lift + s.panel;
-	var openHi = f.y1 - s.panel;
+	var openLo = deckAt + s.panel;
+	var openHi = yHi - s.panel;
 	var openX0 = -f.x1;
 	var openX1 = f.x1;
 	var frontZ = f.face;
@@ -383,28 +444,27 @@ export function buildCabinet(spec)
 	{
 		var fz0 = f.face;
 		var fz1 = f.face + s.panel;
-		group.add(box(mats.frame, -f.x1, -f.x1 + s.stile, lift, f.y1, fz0, fz1));
-		group.add(box(mats.frame, f.x1 - s.stile, f.x1, lift, f.y1, fz0, fz1));
-		group.add(box(mats.frame, -f.x1 + s.stile, f.x1 - s.stile, f.y1 - s.stile, f.y1, fz0, fz1));
-		group.add(box(mats.frame, -f.x1 + s.stile, f.x1 - s.stile, lift, lift + s.stile, fz0, fz1));
-		openLo = lift + s.stile;
-		openHi = f.y1 - s.stile;
+		group.add(box(mats.frame, -f.x1, -f.x1 + s.stile, deckAt, yHi, fz0, fz1));
+		group.add(box(mats.frame, f.x1 - s.stile, f.x1, deckAt, yHi, fz0, fz1));
+		group.add(box(mats.frame, -f.x1 + s.stile, f.x1 - s.stile, yHi - s.stile, yHi, fz0, fz1));
+		group.add(box(mats.frame, -f.x1 + s.stile, f.x1 - s.stile, deckAt, deckAt + s.stile, fz0, fz1));
+		openLo = deckAt + s.stile;
+		openHi = yHi - s.stile;
 		openX0 = -f.x1 + s.stile;
 		openX1 = f.x1 - s.stile;
 		frontZ = fz1;
 	}
 
-	// ---- fronts ------------------------------------------------------------
-	//
 	// Built into their own group so that making doors open later is a change of
 	// parent rather than a rewrite - see the note at the top of this file.
 	var fronts = new Group();
 	fronts.name = 'cabinet-fronts';
 	var r = s.reveal;
 	var cursor = openHi;
-	var drawers = fitDrawers(s.drawers || [], openHi - openLo, Math.max(0, Math.min(2, s.doors)));
+	var doorCount = Math.max(0, Math.min(2, doors));
+	var fitted = fitDrawers(drawers || [], openHi - openLo, doorCount);
 
-	drawers.forEach((drawerHeight) =>
+	fitted.forEach((drawerHeight) =>
 	{
 		var lo = cursor - drawerHeight;
 		if (lo < openLo - 0.01)
@@ -418,7 +478,6 @@ export function buildCabinet(spec)
 		cursor = lo;
 	});
 
-	var doorCount = Math.max(0, Math.min(2, s.doors));
 	if (doorCount > 0 && cursor - openLo > 5)
 	{
 		var span = (openX1 - openX0);
@@ -438,6 +497,54 @@ export function buildCabinet(spec)
 	}
 
 	group.add(fronts);
+}
+
+/**
+ * Build a cabinet.
+ *
+ * @param {CabinetSpec} spec
+ * @returns {{geometry: import('three').BufferGeometry, materials: Array, parts: Array}}
+ */
+export function buildCabinet(spec)
+{
+	var s = Object.assign({}, DEFAULTS, spec || {});
+	var mats = materialsForSlots(s.material, SLOTS);
+	var f = shell(s);
+	var group = new Group();
+
+	var lift = f.floor + f.toe;
+	var back = -f.z1;
+	// Where the cabinet proper stops. The same as the envelope top for everything
+	// except a soffit or a stack, which reach the ceiling with something else.
+	var cabinetTop = f.floor + f.carcassHeight;
+
+	carcassAt(group, s, mats, f, lift, cabinetTop, s.doors, s.drawers);
+
+	// ---- toe kick ---------------------------------------------------------
+	if (f.toe > 0)
+	{
+		group.add(box(mats.carcass, -f.x1, f.x1, f.floor, lift, back, f.face - s.toeRecess));
+	}
+
+	// ---- what fills the gap to the ceiling ---------------------------------
+	if (f.fill > 0.5)
+	{
+		if (s.topTreatment === 'stacked')
+		{
+			// A second cabinet, not a taller one. The doors break at the joint, and
+			// that break is the whole visual difference between a stack and a 42in
+			// cabinet - which is why this goes through carcassAt again rather than
+			// stretching the one below.
+			carcassAt(group, s, mats, f, cabinetTop, f.y1, Math.max(1, s.doors), []);
+		}
+		else
+		{
+			// A soffit: a closed box, flush with the cabinet face, in the frame
+			// material because that is what it is painted to match.
+			group.add(box(mats.frame, -f.x1, f.x1, cabinetTop, f.y1, back, f.face + s.panel));
+		}
+	}
+
 	centre(group);
 	var merged = mergeMeshes(group);
 	return {geometry: merged.geometry, materials: merged.materials, parts: []};

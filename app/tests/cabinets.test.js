@@ -253,3 +253,71 @@ describe('a cabinet is finished from the material library', () =>
 		expect(buildCabinet({}).parts).toEqual([]);
 	});
 });
+
+describe('a wall cabinet decides what happens above it', () =>
+{
+	// The gap over a standard wall cabinet is the thing nobody wants: it collects
+	// dust and it is why cabinets read as put in rather than built in. These are
+	// the three ways of not having it.
+	const WALL = {variant: 'wall', ceilingHeight: 243.84, mountHeight: 137.16};
+	const TO_CEILING = 243.84 - 137.16;
+
+	it('leaves the gap by default, which is what a stock cabinet does', () =>
+	{
+		expect(size(buildCabinet(WALL)).y).toBeCloseTo(76.2, 2);
+	});
+
+	it('reaches the ceiling as one taller cabinet', () =>
+	{
+		// A 42in wall cabinet on an 8ft ceiling IS this, which is why 42in is a
+		// size you can buy.
+		const built = buildCabinet(Object.assign({}, WALL, {topTreatment: 'to-ceiling'}));
+		expect(size(built).y).toBeCloseTo(TO_CEILING, 1);
+		// One cabinet, so its doors run the whole height: no break in the middle.
+		const fronts = partBounds(buildCabinet(Object.assign({}, WALL,
+			{topTreatment: 'to-ceiling', material: DISTINCT})), 'wood-walnut');
+		expect(fronts.max.y - fronts.min.y).toBeGreaterThan(TO_CEILING * 0.85);
+	});
+
+	it('fills above with a soffit, leaving the cabinet a normal cabinet', () =>
+	{
+		const built = buildCabinet(Object.assign({}, WALL,
+			{topTreatment: 'soffit', material: DISTINCT}));
+		// Reaches the ceiling...
+		expect(size(built).y).toBeCloseTo(TO_CEILING, 1);
+		// ...but the doors do not: they stop at the standard 30in cabinet.
+		const fronts = partBounds(built, 'wood-walnut');
+		expect(fronts.max.y - fronts.min.y).toBeLessThan(76.2);
+	});
+
+	it('stacks a second cabinet rather than stretching the first', () =>
+	{
+		// The doors break at the joint, and that break is the whole visual
+		// difference between a stack and a 42in cabinet.
+		const stacked = buildCabinet(Object.assign({}, WALL,
+			{topTreatment: 'stacked', material: DISTINCT}));
+		const tall = buildCabinet(Object.assign({}, WALL,
+			{topTreatment: 'to-ceiling', material: DISTINCT}));
+		expect(size(stacked).y).toBeCloseTo(size(tall).y, 1);
+		// Same envelope, more geometry: a second carcass and a second set of doors.
+		expect(stacked.geometry.attributes.position.count)
+			.toBeGreaterThan(tall.geometry.attributes.position.count);
+	});
+
+	it('follows the ceiling it is given', () =>
+	{
+		const low = buildCabinet(Object.assign({}, WALL,
+			{topTreatment: 'to-ceiling', ceilingHeight: 243.84}));
+		const high = buildCabinet(Object.assign({}, WALL,
+			{topTreatment: 'to-ceiling', ceilingHeight: 274.32}));
+		expect(size(high).y - size(low).y).toBeCloseTo(274.32 - 243.84, 1);
+	});
+
+	it('leaves a base cabinet alone, whatever it is asked', () =>
+	{
+		// A base cabinet's top is the counter's business.
+		const plain = buildCabinet({variant: 'base'});
+		const asked = buildCabinet({variant: 'base', topTreatment: 'to-ceiling'});
+		expect(size(asked).y).toBeCloseTo(size(plain).y, 3);
+	});
+});

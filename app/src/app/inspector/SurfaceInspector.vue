@@ -3,6 +3,7 @@
 import {computed, ref, watch} from 'vue';
 import TexturePicker from './TexturePicker.vue';
 import CheckField from './fields/CheckField.vue';
+import ColorField from './fields/ColorField.vue';
 import textures from '../../catalog/textures.json';
 import {SELECTION_WALL} from '../composables/useSelection.js';
 
@@ -21,11 +22,27 @@ import {SELECTION_WALL} from '../composables/useSelection.js';
  * The behaviour underneath is unchanged: `HalfEdge.setTexture` for a wall,
  * `Room.setTexture` for a floor, `Room.setRoomWallsTexture` for all of a room's
  * walls at once.
+ *
+ * ## Paint
+ *
+ * `three/edge.js` had `var color = 0xFFFFFF` written into it, so every wall in
+ * every design was the same white and nothing anywhere could say otherwise. The
+ * colour MULTIPLIES the texture, so white is "unpainted" and anything else is
+ * paint over the wallmap - which is why this is a colour beside the texture
+ * picker rather than instead of it.
+ *
+ * Per FACE, like the texture, because the two sides of a wall are in different
+ * rooms. With a floor selected it paints the whole room, which is the gesture
+ * anybody actually wants.
  */
 
 const props = defineProps({
 	selection: {type: Object, required: true},
 });
+
+// Painting writes straight onto the model and dispatches EVENT_REDRAW, which
+// rebuilds the wall - but nothing in that path reaches the history stack.
+const emit = defineEmits(['changed']);
 
 const forAllWalls = ref(false);
 
@@ -64,6 +81,26 @@ function applyRoomWalls(texture)
 	revision.value++;
 }
 
+const currentColor = computed(() =>
+{
+	void revision.value;
+	return (isWall.value && target.value.getColor) ? target.value.getColor() : '#ffffff';
+});
+
+function paintWall(color)
+{
+	target.value.setColor(color);
+	revision.value++;
+	emit('changed');
+}
+
+function paintRoomWalls(color)
+{
+	target.value.setRoomWallsColor(color);
+	revision.value++;
+	emit('changed');
+}
+
 function pickWallTexture(texture)
 {
 	if (isWall.value)
@@ -86,6 +123,8 @@ watch(() => props.selection, () => {forAllWalls.value = false; revision.value++;
 			<TexturePicker
 				label="Wall" :textures="textures.wall" :current="currentTexture"
 				@select="pickWallTexture" />
+			<ColorField
+				label="Paint" :model-value="currentColor" @update:model-value="paintWall" />
 		</template>
 
 		<template v-else>
@@ -97,6 +136,9 @@ watch(() => props.selection, () => {forAllWalls.value = false; revision.value++;
 				label="Walls in this room" :textures="textures.wall"
 				:disabled="!forAllWalls" :current="null"
 				@select="pickWallTexture" />
+			<ColorField
+				label="Paint this room" :model-value="'#ffffff'"
+				@update:model-value="paintRoomWalls" />
 		</template>
 	</section>
 </template>

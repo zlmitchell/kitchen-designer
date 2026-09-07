@@ -18,25 +18,6 @@ const bounds = (built) =>
 const size = (built) => bounds(built).getSize(new Vector3());
 const verts = (built) => built.geometry.attributes.position.count;
 
-/** Is any triangle covering this point on the slab's top surface? */
-function covered(built, x, z)
-{
-	const box = bounds(built);
-	const position = built.geometry.getAttribute('position');
-	// Vertices at the top face, projected down.
-	const top = box.max.y;
-	const near = [];
-	for (let i = 0; i < position.count; i++)
-	{
-		if (Math.abs(position.getY(i) - top) < 0.3)
-		{
-			near.push([position.getX(i), position.getZ(i)]);
-		}
-	}
-	// A point is "in the hole" if no top-face vertex is close to it on any side -
-	// crude, so the test uses generous holes and asks about their middle.
-	return near.some(([vx, vz]) => Math.abs(vx - x) < 3 && Math.abs(vz - z) < 3);
-}
 
 describe('a counter is a slab', () =>
 {

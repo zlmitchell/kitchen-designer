@@ -15,6 +15,54 @@ import {Utils} from '../core/utils.js';
 export const defaultWallTexture = {url: 'rooms/textures/wallmap.png', stretch: true, scale: 0};
 
 /**
+ * Unpainted. White, because the colour MULTIPLIES the texture - so white is the
+ * identity and anything else tints the map underneath it.
+ */
+export const defaultWallColor = '#ffffff';
+
+/**
+ * How glossy a painted face is, as a name rather than a number.
+ *
+ * A sheen IS a roughness, and roughness is a render concern - but the vocabulary
+ * is a model one, because a saved file records `satin` and not `0.5`. Re-tuning
+ * what satin looks like then changes every design at once instead of leaving
+ * older files pinned to a number somebody has since decided was wrong.
+ *
+ * `matte` deliberately carries no number of its own. It is whatever the active
+ * render profile already calls a wall (`wallRoughness`), which is what every
+ * wall in every design was before this list existed - so a wall nobody has
+ * chosen a finish for renders exactly as it used to, in either profile.
+ *
+ * Ordered flattest-first: that is the order a paint chart uses, and the order
+ * the picker shows.
+ */
+export const WALL_SHEENS = Object.freeze([
+	Object.freeze({id: 'matte', label: 'Matte', roughness: null}),
+	Object.freeze({id: 'eggshell', label: 'Eggshell', roughness: 0.7}),
+	Object.freeze({id: 'satin', label: 'Satin', roughness: 0.5}),
+	Object.freeze({id: 'semi-gloss', label: 'Semi-gloss', roughness: 0.3}),
+	Object.freeze({id: 'gloss', label: 'Gloss', roughness: 0.15}),
+]);
+
+/** Flat paint: the finish a face has when nobody has chosen one. */
+export const defaultWallSheen = 'matte';
+
+/**
+ * The roughness a sheen name asks for.
+ *
+ * @param {?string} sheen One of `WALL_SHEENS`' ids.
+ * @returns {?number} A linear 0..1 roughness, or null for "whatever the profile
+ *          calls matte". Null is also the answer for a name this build does not
+ *          know, so a file written by a later version - or one hand-edited -
+ *          opens as flat paint rather than throwing.
+ */
+export function wallSheenRoughness(sheen)
+{
+	var entry = WALL_SHEENS.find((candidate) => candidate.id === sheen);
+	return entry ? entry.roughness : null;
+}
+
+/**
  * A Wall is the basic element to create Rooms.
  *
  * Walls consists of two half edges.
@@ -123,6 +171,40 @@ export class Wall extends EventDispatcher
 
 		/** The back-side texture. */
 		this.backTexture = defaultWallTexture;
+
+		/**
+		 * What colour each face is painted, as `#rrggbb`.
+		 *
+		 * Multiplies the texture rather than replacing it, which is why white is
+		 * "no colour": the stock wallmap is a near-white surface, so a tint over it
+		 * is paint over plaster and reads the way paint does. `three/edge.js` had
+		 * `var color = 0xFFFFFF` written into it, so every wall in every design was
+		 * the same white and there was no way to say otherwise.
+		 *
+		 * Per FACE, not per wall, because the two sides of a wall are in different
+		 * rooms and are routinely different colours. That is also why the texture
+		 * is already per face.
+		 */
+		this.frontColor = defaultWallColor;
+
+		/** @see Wall#frontColor */
+		this.backColor = defaultWallColor;
+
+		/**
+		 * What finish each face is painted in - one of `WALL_SHEENS`' ids.
+		 *
+		 * Per face beside the colour, because it is part of the same decision: a
+		 * kitchen is routinely satin where a bedroom on the other side of the same
+		 * wall is matte, for the same reason the two sides are different colours.
+		 *
+		 * Only the studio profile can show it. Classic draws walls with
+		 * MeshBasicMaterial, which has no roughness at all - so this is recorded
+		 * and saved in both, and visible in one.
+		 */
+		this.frontSheen = defaultWallSheen;
+
+		/** @see Wall#frontSheen */
+		this.backSheen = defaultWallSheen;
 
 		// A Wall has no floorplan of its own; it reaches one through its start
 		// corner, which is what makes the model layer need no new plumbing for

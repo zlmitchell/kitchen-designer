@@ -170,6 +170,38 @@ export class Room extends EventDispatcher
 	}
 
 	/**
+	 * Paint every wall face that looks into this room.
+	 *
+	 * Walks the same cycle `setRoomWallsTexture` does. A room is painted one
+	 * colour far more often than a single face is, so this is the common gesture
+	 * rather than the bulk one.
+	 *
+	 * @param {string} color `#rrggbb`.
+	 */
+	setRoomWallsColor(color)
+	{
+		var edge = this.edgePointer;
+		if (!edge)
+		{
+			return;
+		}
+		var iterateWhile = true;
+		edge.setColor(color);
+		while (iterateWhile)
+		{
+			// The same `!edge.next` guard the texture walk carries: `next` is null
+			// on an unlinked edge, and without it a broken DCEL is a TypeError
+			// rather than a short walk.
+			if (!edge.next || edge.next === this.edgePointer)
+			{
+				break;
+			}
+			edge = edge.next;
+			edge.setColor(color);
+		}
+	}
+
+	/**
 	 * textureStretch always true, just an argument for consistency with walls
 	 */
 	setTexture(textureUrl, textureStretch, textureScale)

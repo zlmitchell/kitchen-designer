@@ -728,6 +728,10 @@ export class Floorplan extends EventDispatcher
 					'thickness': wall.thickness,
 					'frontTexture': wall.frontTexture,
 					'backTexture': wall.backTexture,
+					// Per face, like the textures and for the same reason: the two
+					// sides of a wall are in different rooms.
+					'frontColor': wall.frontColor,
+					'backColor': wall.backColor,
 					'wallType': wall.wallType.description,
 					'a':{x: wall.a.x, y:wall.a.y},
 					'b':{x: wall.b.x, y:wall.b.y},
@@ -902,6 +906,16 @@ export class Floorplan extends EventDispatcher
 			if (wall.backTexture)
 			{
 				newWall.backTexture = wall.backTexture;
+			}
+			// Asked of the record, like the thickness above. A file written before
+			// walls could be painted simply keeps the white its constructor took.
+			if (wall.frontColor)
+			{
+				newWall.frontColor = wall.frontColor;
+			}
+			if (wall.backColor)
+			{
+				newWall.backColor = wall.backColor;
 			}
 			// Control points and wallType arrived with save format 0.0.2a. Whether
 			// a given file carries them is a property of THAT FILE, so ask the

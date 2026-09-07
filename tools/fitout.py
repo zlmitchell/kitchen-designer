@@ -207,14 +207,44 @@ def main():
             return along, height, offset_across
         return offset_across, height, along
 
-    items = list(design.get("items", []))
+    # Which cabinet the sink goes in.
+    #
+    # A sink is centred on ONE cabinet, because that is how a kitchen is built:
+    # the bowl sits between two cabinet sides, and a sink straddling a joint has
+    # a carcass side running up the middle of it. So the run is measured first,
+    # a sink base is chosen, and the bowl and the cutout both take that
+    # cabinet's centre rather than the run's.
+    #
+    # Wide enough means the bowl clears the carcass sides and the face frame -
+    # a 30in sink does not go in a 30in cabinet.
+    needed = SINK_WIDTH + 7.6
+    centres = []
     cursor = along_lo
     for width in widths:
+        centres.append((cursor + width / 2.0, width))
+        cursor += width
+    run_middle = along_lo + sum(widths) / 2.0
+    roomy = [(abs(c - run_middle), i) for i, (c, w) in enumerate(centres) if w >= needed]
+    if roomy:
+        roomy.sort()
+        sink_index = roomy[0][1]
+    else:
+        sink_index = None
+        print(f"  no cabinet is {needed:.0f}cm or wider - the sink is left out")
+
+    items = list(design.get("items", []))
+    cursor = along_lo
+    for index, width in enumerate(widths):
         centre = cursor + width / 2.0
+        is_sink_base = index == sink_index
         x, y, z = place(centre, back_to_centre, BASE_HEIGHT / 2.0)
-        items.append(item("Base Cabinet", "generated:cabinet", 9, x, y, z, rotation, {
+        items.append(item("Sink Base" if is_sink_base else "Base Cabinet",
+                          "generated:cabinet", 9, x, y, z, rotation, {
             "kind": "cabinet", "variant": "base", "width": round(width, 2),
-            "doors": 2 if width > 50 else 1, "drawers": [15.24],
+            "doors": 2 if width > 50 else 1,
+            # A sink base has no drawer. The bowl is where it would go, which is
+            # why a real one carries a false front or nothing at all.
+            "drawers": [] if is_sink_base else [15.24],
             "front": "shaker", "frame": "face", "hardware": "knob",
             "material": {"front": "paint-white", "frame": "paint-white",
                          "carcass": "wood-birch-ply", "hardware": "metal-brushed-nickel"},
@@ -241,8 +271,23 @@ def main():
     counter_depth = BASE_DEPTH + COUNTER_OVERHANG
     counter_centre_along = along_lo + counter_run / 2.0
     counter_across = face + inward * counter_depth / 2.0
-    # The sink goes in the middle cabinet, and the cutout goes with it.
-    sink_offset = 0.0
+    # The cutout goes where the SINK BASE is, not where the counter's middle is.
+    sink_along = centres[sink_index][0] if sink_index is not None else counter_centre_along
+    sink_offset = sink_along - counter_centre_along
+    # The cutout's x is in the COUNTER's own frame, and `sink_offset` was measured
+    # in the plan's. The item's rotation is what maps between them, so an offset
+    # has to follow the same flip - otherwise the cutout lands the wrong side of
+    # centre, which on a symmetric run looks like nothing at all and on this one
+    # looks like a hole in the worktop with the sink somewhere else.
+    #
+    # Rotating by theta sends local +x to world (cos, 0, -sin). A horizontal wall
+    # faced the other way is rotated by pi, so local +x runs backwards along the
+    # plan's x. A vertical wall at +pi/2 sends local +x to world -z, and the plan's
+    # y IS world z - so that one flips too, and the one at 3pi/2 does not.
+    if (axis == "h" and inward < 0) or (axis == "v" and inward > 0):
+        sink_offset = -sink_offset
+    print(f"  sink base: cabinet {sink_index if sink_index is not None else '-'}"
+          f"  offset {sink_offset:+.1f}cm from the counter's middle")
     x, y, z = place(counter_centre_along, counter_across,
                     BASE_HEIGHT + COUNTER_THICKNESS / 2.0)
     items.append(item("Countertop", "generated:counter", 0, x, y, z, rotation, {
@@ -256,8 +301,15 @@ def main():
 
     # Undermount, so its rim is at the slab's underside and the cut edge shows.
     sink_height = SINK_DEPTH + 0.3
-    x, y, z = place(counter_centre_along + sink_offset, counter_across,
-                    BASE_HEIGHT - sink_height / 2.0)
+    if sink_index is None:
+        design["items"] = items
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w", newline="\n") as handle:
+            json.dump(design, handle, indent=1)
+        print(f"  -> {args.out}  ({len(items)} items, {len(walls)} walls)")
+        return 0
+
+    x, y, z = place(sink_along, counter_across, BASE_HEIGHT - sink_height / 2.0)
     items.append(item("Sink", "generated:sink", 0, x, y, z, rotation, {
         "kind": "sink", "mount": "undermount", "shape": "rect",
         "width": SINK_WIDTH, "frontToBack": SINK_FRONT_TO_BACK, "depth": SINK_DEPTH,
