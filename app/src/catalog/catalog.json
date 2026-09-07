@@ -1302,6 +1302,22 @@
 				"front": "shaker",
 				"frame": "face"
 			}
+		},
+		{
+			"name": "Countertop",
+			"image": "models/thumbnails_new/counter.png",
+			"model": "generated:counter",
+			"type": 0,
+			"format": "generated",
+			"spec": {
+				"kind": "counter",
+				"width": 243.84,
+				"depth": 63.5,
+				"thickness": 3.81,
+				"edge": "eased",
+				"backsplash": 10.16,
+				"cutouts": []
+			}
 		}
 	]
 }

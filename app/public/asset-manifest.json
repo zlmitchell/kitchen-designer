@@ -1469,6 +1469,11 @@
 			"hash": "sha256-4+Vp6j7wfDxh1b1jErAsO3rK9pM4TFnctpS8BGWnxQE=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/counter.png": {
+			"bytes": 3736,
+			"hash": "sha256-95kYeAhmNcR7n9J/ZgtfH9swYBA4OkYz9C94btCbEvw=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/desk.png": {
 			"bytes": 4895,
 			"hash": "sha256-BMel6oX3fkwqsaG0moWJS1byTF6+RE1N87D65grs66Y=",

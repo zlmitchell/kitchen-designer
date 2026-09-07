@@ -223,6 +223,29 @@ material, which is a Phase 2 material question rather than a geometry one. And
 
 ### Phase 2 — cabinets and counters
 
+**Cabinets and counters are built.** `generated:cabinet` (base / wall / tall,
+face-frame or frameless, slab / shaker / raised fronts, doors and drawer banks,
+knob or pull) and `generated:counter` (slab, edge profile, backsplash, cutouts).
+Sinks and appliances are what remain.
+
+Four things the work turned up, all of which a triangle count would have missed:
+
+- **The raised panel did not stand out.** Its inset chose a sign and then passed
+  it through `Math.abs()`, so both styles built the same panel.
+- **An overflowing drawer was silently dropped** rather than the set being
+  scaled — four drawers into a 68.6cm opening came out as three and a gap.
+- **`mergeMeshes` recomputes each mesh from its parent's CURRENT world matrix**,
+  so shifting a group after the last update moves some children and not others.
+  Centring a cabinet moved the carcass and left the fronts, which read as a 68cm
+  cabinet measuring 71.5.
+- **A hole reaching the slab's edge is discarded, not clipped** — the same trap
+  as the wall openings, one file over. Counter cutouts are clamped inside.
+
+Also settled: `floatHeight` was removed rather than left in. A gap below is not
+geometry, so it cannot survive in a bounding box, and every floor-bound item
+class pins the bottom of the bounds to the floor. A floating drawer hangs from
+the counter, which makes it a run question — phase 3.
+
 The spine of the app. A cabinet is **panels, not a box**:
 
 - carcass: 2 sides, deck, back, top stretcher
