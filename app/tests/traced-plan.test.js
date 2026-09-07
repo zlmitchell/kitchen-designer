@@ -22,7 +22,16 @@ import {join} from 'node:path';
 import {DesignDocument} from '../src/scripts/model/document.js';
 
 // Where compose mounts data/. Same default the vite middleware and nginx use.
-const PLAN = join(process.env.PLAN_DIR || '/plan', 'design.json');
+//
+// `design.traced.json` in preference to `design.json`, because they are not the
+// same artifact. `design.json` is what the app OPENS and a human is free to edit
+// it, export over it, or dress it with `tools/fitout.py`; the traced copy is what
+// the extractor produced and nothing else. This file is the seam between the
+// extractor and the loader, so it has to read the latter - fitting out a kitchen
+// otherwise failed this suite on cabinets it was never about.
+const PLAN_DIR = process.env.PLAN_DIR || '/plan';
+const TRACED = join(PLAN_DIR, 'design.traced.json');
+const PLAN = existsSync(TRACED) ? TRACED : join(PLAN_DIR, 'design.json');
 const traced = existsSync(PLAN);
 
 /** Inches, measured off the elevations. See plans/NOTES.md. */
@@ -74,11 +83,17 @@ describe('the traced plan', () =>
 		// at the same spot as the full wall it runs into - which is why the
 		// extractor keys corners by height as well as position.
 		const PONY_CM = 42 * 2.54;
+		// The editor's own default counts too. `Floorplan.newCorner` starts a
+		// corner at the CONFIGURED wall height, and a design that has been opened
+		// and edited - which is the useful one to keep in data/ - carries corners
+		// the editor made alongside the ones the tracer did. Asserting only the
+		// tracer's two heights would be asserting that nobody had touched the plan.
+		const EDITOR_DEFAULT_CM = 250;
 		for (const corner of points)
 		{
-			const ceiling = Math.abs(corner.elevation - CEILING_CM) < 0.01;
-			const pony = Math.abs(corner.elevation - PONY_CM) < 0.01;
-			expect(ceiling || pony, `elevation ${corner.elevation} is neither`).toBe(true);
+			const known = [CEILING_CM, PONY_CM, EDITOR_DEFAULT_CM]
+				.some((height) => Math.abs(corner.elevation - height) < 0.01);
+			expect(known, `elevation ${corner.elevation} is none of them`).toBe(true);
 		}
 	});
 
@@ -119,7 +134,14 @@ describe('the traced plan', () =>
 
 		expect(items.length).toBeGreaterThan(0);
 
-		for (const item of items)
+		// Openings only. This file describes what the TRACER produces, and a design
+		// in data/ may also have been fitted out - `tools/fitout.py` puts cabinets,
+		// a counter and a sink in it, and none of those is an opening, sits on a
+		// wall line, or has a wall thickness to fill.
+		const openings = items.filter((entry) => entry.item_type === 3 || entry.item_type === 7);
+		expect(openings.length).toBeGreaterThan(0);
+
+		for (const item of openings)
 		{
 			if (item.format === 'generated')
 			{
@@ -174,7 +196,7 @@ describe('the traced plan', () =>
 			into.set(key, span ? [Math.min(span[0], lo), Math.max(span[1], hi)] : [lo, hi]);
 		}
 
-		for (const item of items)
+		for (const item of openings)
 		{
 			const onAWall = [
 				[lines.horizontal, item.zpos, item.xpos],

@@ -389,9 +389,22 @@ def main():
           o.get("hinge"), o.get("swing"), o.get("exterior")) for o in openings],
         ox, oy, open_doors=not args.closed_doors)
 
+    built = design(corners, walls, args.ceiling, underlay, placed)
     with open(args.out, "w", newline="\n") as handle:
-        json.dump(design(corners, walls, args.ceiling, underlay, placed),
-                  handle, indent=1)
+        json.dump(built, handle, indent=1)
+
+    # A second copy under a stable name, beside whatever -o asked for.
+    #
+    # `design.json` is what the app OPENS, and a human is free to edit it,
+    # export over it from the editor, or dress it with tools/fitout.py. This one
+    # is what the TRACER produced and nothing else, which is what
+    # app/tests/traced-plan.test.js -- the seam between the extractor and the
+    # loader -- has to check. Without it, fitting out the kitchen made that suite
+    # fail on cabinets it was never about.
+    traced_copy = os.path.join(os.path.dirname(args.out) or ".", "design.traced.json")
+    if os.path.abspath(traced_copy) != os.path.abspath(args.out):
+        with open(traced_copy, "w", newline="\n") as handle:
+            json.dump(built, handle, indent=1)
 
     checks = verify(corners, walls)
     span_x = max(x for x, _, _ in corners.values()) - ox
