@@ -127,6 +127,15 @@ export class Floorplanner2D extends EventDispatcher
 		this.wallWidth = this.dimensioning.cmToPixel(this.configuration.getNumericValue('wallThickness'));
 		this.gridsnapmode = false;
 		this.shiftkey = false;
+		/**
+		 * The existing corner the pointer is snapped to while drawing, or null.
+		 *
+		 * Set by `updateTarget`, read by `mouseup` - so what the highlight promised
+		 * and what the click does are the same value and cannot drift apart.
+		 *
+		 * @type {?Object}
+		 */
+		this.targetCorner = null;
 		// Initialization:
 
 		this.setMode(floorplannerModes.MOVE);
@@ -349,9 +358,70 @@ export class Floorplanner2D extends EventDispatcher
 		this.setMode(floorplannerModes.MOVE);
 	}
 
+	/**
+	 * The corner a click would land on, or null for empty canvas.
+	 *
+	 * Joining an existing corner ALREADY WORKED, and that is worth stating plainly
+	 * because the obvious diagnosis is wrong: `Floorplan.newCorner` returns an
+	 * existing corner rather than making one whenever the two are within
+	 * `cornerTolerance`, so a click near a junction has always attached to it and
+	 * the run has always continued through it.
+	 *
+	 * What was missing is every way of KNOWING that. `updateTarget` only ever
+	 * aligned to the last node's x or y, so the preview line went wherever the
+	 * mouse was and stopped short of the corner it was about to join; the hover
+	 * highlight is guarded on not being in DRAW mode, so nothing lit up. The 20cm
+	 * grab circle was real and completely invisible, which is what "I drag and
+	 * hope for the best" describes.
+	 *
+	 * So this snaps BEFORE the click. The target moves onto the corner, the
+	 * preview ends there, and the corner lights up using the same `activeCorner`
+	 * highlight MOVE mode already had - the plan says what the click will do
+	 * before you commit to it.
+	 *
+	 * It also moves the grab radius off `cornerTolerance` and onto
+	 * `snapTolerance`: the configured "how close before I grab", what the axis
+	 * snapping below already uses, and the one the Settings panel exposes.
+	 *
+	 * @returns {?Object} A Corner, or null.
+	 */
+	cornerUnderPointer()
+	{
+		if (this.mode != floorplannerModes.DRAW)
+		{
+			return null;
+		}
+		return this.floorplan.overlappedCorner(this.mouseX, this.mouseY,
+			this.configuration.getNumericValue(snapTolerance));
+	}
+
 	/** */
 	updateTarget()
 	{
+		// An existing corner beats every other rule, including the grid. Somebody
+		// aiming at a junction means that junction and not the grid line nearest
+		// it - and a wall that ends a centimetre short of one is exactly the defect
+		// this whole snap exists to stop.
+		this.targetCorner = this.cornerUnderPointer();
+		// The view draws `activeCorner` as a hover, which is the feedback this
+		// needs and which DRAW mode was never given: the hover block in
+		// `mousemove` is guarded on not being in DRAW mode.
+		//
+		// ONLY in DRAW mode. `updateTarget` also runs on every MOVE-mode drag, and
+		// `activeCorner` is what that drag is holding on to - writing null over it
+		// here drops the corner mid-gesture.
+		if (this.mode == floorplannerModes.DRAW)
+		{
+			this.activeCorner = this.targetCorner;
+		}
+		if (this.targetCorner)
+		{
+			this.targetX = this.targetCorner.x;
+			this.targetY = this.targetCorner.y;
+			this.view.invalidate();
+			return;
+		}
+
 		if (this.mode == floorplannerModes.DRAW && this.lastNode)
 		{
 			if (Math.abs(this.mouseX - this.lastNode.x) < this.configuration.getNumericValue(snapTolerance))
@@ -649,19 +719,39 @@ export class Floorplanner2D extends EventDispatcher
 		// drawing
 		if (this.mode == floorplannerModes.DRAW && !this.mouseMoved)
 		{
-			// This creates the corner already
-			var corner = this.floorplan.newCorner(this.targetX, this.targetY);
+			// The corner the pointer snapped to, if any. `updateTarget` found it and
+			// the highlight has been saying so since the pointer arrived.
+			var existing = this.targetCorner;
 
-			// further create a newWall based on the newly inserted corners
-			// (one in the above line and the other in the previous mouse action
-			// of start drawing a new wall)
+			// Clicking the point you are drawing FROM ends the run.
+			//
+			// Two reasons, and the second is a real defect. There was no way to
+			// stop drawing except the Escape key, which is not discoverable. And
+			// clicking near the last node made `newCorner` hand back that very
+			// corner, so `newWall(lastNode, corner)` built a wall from a corner to
+			// ITSELF - a degenerate wall, produced by the gesture somebody would
+			// most naturally try in order to finish.
+			if (existing != null && existing === this.lastNode)
+			{
+				this.setMode(floorplannerModes.MOVE);
+				return;
+			}
+
+			// Take the snapped corner directly. `newCorner` would usually return the
+			// same one - it dedupes within `cornerTolerance` - but only for corners
+			// inside ITS radius, not the one the highlight just promised. Going
+			// through the target keeps the click and the highlight one answer.
+			var corner = existing || this.floorplan.newCorner(this.targetX, this.targetY);
+
 			if (this.lastNode != null)
 			{
 				this.floorplan.newWall(this.lastNode, corner);
 				this.floorplan.newWallsForIntersections(this.lastNode, corner);
 				this.view.invalidate();
 			}
-			if (corner.mergeWithIntersected() && this.lastNode != null)
+			// Only a corner this click invented can need welding onto a WALL it
+			// landed in the middle of, which is the other thing this does.
+			if (existing == null && corner.mergeWithIntersected() && this.lastNode != null)
 			{
 				this.setMode(floorplannerModes.MOVE);
 			}

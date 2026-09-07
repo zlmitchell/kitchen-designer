@@ -728,3 +728,134 @@ describe('Floorplanner2D lifecycle', () =>
 		expect(observer.liveCount()).toBe(0);
 	});
 });
+
+describe('drawing onto a corner that is already there', () =>
+{
+	/**
+	 * Joining a corner already worked - `Floorplan.newCorner` hands back an
+	 * existing corner within `cornerTolerance` instead of making one - so two of
+	 * the tests below pass against the old code and are guards, not regressions.
+	 * The three that FAIL without the fix are the ones that matter, and all three
+	 * are about KNOWING: nothing snapped the preview onto the corner, nothing lit
+	 * the corner up (the hover block is guarded on not being in DRAW mode), and
+	 * there was no way to end a run except Escape. The 20cm grab circle was real
+	 * and completely invisible.
+	 */
+
+	/** A planner in DRAW mode over a plan holding one corner, at 200,200cm. */
+	function plannerWithCorner()
+	{
+		const {canvas} = buildFloorplannerDom(window, {width: 800, height: 600});
+		const floorplan = new Floorplan();
+		const planner = new Floorplanner2D(canvas, floorplan);
+		const corner = floorplan.newCorner(200, 200);
+		planner.setMode(floorplannerModes.DRAW);
+		return {canvas, floorplan, planner, corner};
+	}
+
+	/** Put the pointer at a plan position, in centimetres. */
+	function pointAt(canvas, planner, cmX, cmY)
+	{
+		const px = Dimensioning.cmToPixel(cmX) - planner.originX;
+		const py = Dimensioning.cmToPixel(cmY) - planner.originY;
+		firePointer(canvas, 'pointermove', {clientX: px, clientY: py});
+	}
+
+	function clickAt(canvas, planner, cmX, cmY)
+	{
+		pointAt(canvas, planner, cmX, cmY);
+		firePointer(canvas, 'pointerdown', {clientX: planner.rawMouseX, clientY: planner.rawMouseY});
+		firePointer(canvas, 'pointerup', {clientX: planner.rawMouseX, clientY: planner.rawMouseY});
+	}
+
+	it('snaps the target onto a nearby corner, before the click', () =>
+	{
+		// Snapping BEFORE the click is the whole difference: the preview line ends
+		// on the corner, so the plan says what the click will do.
+		const {canvas, planner, corner} = plannerWithCorner();
+		pointAt(canvas, planner, 205, 203);
+
+		expect(planner.targetCorner).toBe(corner);
+		expect(planner.targetX).toBe(200);
+		expect(planner.targetY).toBe(200);
+		planner.dispose();
+	});
+
+	it('lights the corner up, using the highlight MOVE mode already had', () =>
+	{
+		const {canvas, planner, corner} = plannerWithCorner();
+		pointAt(canvas, planner, 205, 203);
+		expect(planner.activeCorner).toBe(corner);
+
+		// And lets go of it again once the pointer leaves.
+		pointAt(canvas, planner, 500, 500);
+		expect(planner.targetCorner).toBe(null);
+		expect(planner.activeCorner).toBe(null);
+		planner.dispose();
+	});
+
+	it('joins the corner that is there instead of stacking a second one on it', () =>
+	{
+		// A guard, not a regression: `newCorner` already deduped within 20cm. It is
+		// here so the snap cannot later be "fixed" into making a second corner.
+		const {canvas, floorplan, planner, corner} = plannerWithCorner();
+		clickAt(canvas, planner, 400, 400);
+		clickAt(canvas, planner, 204, 202);
+
+		// Two corners, not three: the one that was there and the one just drawn.
+		expect(floorplan.getCorners().length).toBe(2);
+		expect(floorplan.getWalls().length).toBe(1);
+		const wall = floorplan.getWalls()[0];
+		expect(wall.getStart() === corner || wall.getEnd() === corner).toBe(true);
+		planner.dispose();
+	});
+
+	it('continues from it', () =>
+	{
+		// Also a guard. This worked before, by the same `newCorner` dedupe. The
+		// complaint was never that it stopped - it was that you could not tell
+		// whether you had hit the corner at all.
+		const {canvas, floorplan, planner, corner} = plannerWithCorner();
+		clickAt(canvas, planner, 400, 400);
+		clickAt(canvas, planner, 202, 201);
+
+		expect(planner.mode).toBe(floorplannerModes.DRAW);
+		expect(planner.lastNode).toBe(corner);
+
+		clickAt(canvas, planner, 200, 500);
+		expect(floorplan.getWalls().length).toBe(2);
+		planner.dispose();
+	});
+
+	it('ends the run when you click the point you are drawing FROM', () =>
+	{
+		// Without this there is no way to stop except Escape, which is not
+		// discoverable - and clicking near the last node made `newCorner` hand back
+		// that very corner, so the wall was built from a corner to ITSELF.
+		const {canvas, floorplan, planner} = plannerWithCorner();
+		clickAt(canvas, planner, 400, 400);
+		const started = planner.lastNode;
+		expect(started).toBeTruthy();
+
+		clickAt(canvas, planner, 401, 400);
+		expect(planner.mode).toBe(floorplannerModes.MOVE);
+		expect(floorplan.getWalls().length).toBe(0);
+		planner.dispose();
+	});
+
+	it('leaves the MOVE-mode drag alone, which reads the same field', () =>
+	{
+		// `updateTarget` runs on every MOVE drag too, and `activeCorner` is what
+		// that drag is holding on to. Writing the draw-mode snap over it drops the
+		// corner mid-gesture.
+		const {canvas, planner, corner} = plannerWithCorner();
+		planner.setMode(floorplannerModes.MOVE);
+		pointAt(canvas, planner, 200, 200);
+		expect(planner.activeCorner).toBe(corner);
+
+		firePointer(canvas, 'pointerdown', {clientX: planner.rawMouseX, clientY: planner.rawMouseY});
+		pointAt(canvas, planner, 260, 240);
+		expect(planner.activeCorner, 'still holding the corner it grabbed').toBe(corner);
+		planner.dispose();
+	});
+});
