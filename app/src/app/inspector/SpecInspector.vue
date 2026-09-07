@@ -42,6 +42,19 @@ import {useDisplayUnit} from '../composables/useDisplayUnit.js';
 
 const props = defineProps({
 	item: {type: Object, required: true},
+	items: {
+		/**
+		 * Everything placed, so a change can reach more than one thing.
+		 *
+		 * A bare `type: Array` infers `unknown[]`, which makes every property read
+		 * off a member an error - the same shape RM-004 B3 found across the panels.
+		 * The annotation goes on `type`, not on the prop object.
+		 *
+		 * @type {import('vue').PropType<Array<Object>>}
+		 */
+		type: Array,
+		default: () => [],
+	},
 });
 
 const emit = defineEmits(['changed']);
@@ -49,6 +62,63 @@ const emit = defineEmits(['changed']);
 const {unit} = useDisplayUnit();
 
 const schema = computed(() => schemaForSpec(props.item.metadata && props.item.metadata.spec));
+
+/**
+ * How far a change to a LOOK reaches.
+ *
+ * Nobody picks a door style for one cabinet. A kitchen has one door style and
+ * one paint, and setting them twelve times is not a workflow - so a field the
+ * schema marks `shared` can be applied to a whole run at once.
+ *
+ * Sizes are deliberately not shareable. A width applies to the cabinet you are
+ * looking at and to nothing else, which is why the scope is a property of the
+ * FIELD rather than a mode the panel is in: switching to "all cabinets" and then
+ * typing a width would otherwise resize the kitchen.
+ */
+const SCOPES = [
+	{value: 'one', label: 'This one'},
+	{value: 'room', label: 'This room'},
+	{value: 'all', label: 'All'},
+	{value: 'wall', label: 'Uppers'},
+	{value: 'base', label: 'Bases'},
+];
+const scope = ref('one');
+const hasShared = computed(() =>
+	Boolean(schema.value && schema.value.fields.some((field) => field.shared)));
+
+/** The room a wall-bound item is in, or null for anything free-standing. */
+function roomOf(item)
+{
+	return (item.currentWallEdge && item.currentWallEdge.room) || null;
+}
+
+/**
+ * Everything a shared change should reach.
+ *
+ * Always includes the selected item, so the narrowest scope is still correct and
+ * a scope that matches nothing else is a no-op rather than a surprise.
+ */
+function targets()
+{
+	const self = props.item;
+	var all = props.items || [];
+	if (scope.value === 'one' || !all.length)
+	{
+		return [self];
+	}
+	const kind = self.metadata.spec.kind;
+	const room = roomOf(self);
+	const matches = all.filter((other) =>
+	{
+		const spec = other.metadata && other.metadata.spec;
+		if (!spec || spec.kind !== kind) {return false;}
+		if (scope.value === 'wall') {return spec.variant === 'wall';}
+		if (scope.value === 'base') {return spec.variant !== 'wall';}
+		if (scope.value === 'room') {return room !== null && roomOf(other) === room;}
+		return true;
+	});
+	return matches.indexOf(self) === -1 ? matches.concat([self]) : matches;
+}
 /** @type {import('vue').Ref<Object>} */
 const spec = ref({});
 
@@ -70,9 +140,9 @@ function valueAt(key)
 	return at;
 }
 
-function write(key, next)
+function apply(item, key, next)
 {
-	const edited = props.item.getSpec() || {};
+	const edited = item.getSpec() || {};
 	const parts = key.split('.');
 	let at = edited;
 	for (let i = 0; i < parts.length - 1; i++)
@@ -82,8 +152,17 @@ function write(key, next)
 		at = at[parts[i]];
 	}
 	at[parts[parts.length - 1]] = next;
+	item.setSpec(edited);
+}
 
-	props.item.setSpec(edited);
+function write(key, next, field)
+{
+	// Only a LOOK travels. A size belongs to the thing you are looking at.
+	const reach = (field && field.shared) ? targets() : [props.item];
+	for (const item of reach)
+	{
+		apply(item, key, next);
+	}
 	// Read back rather than trusting the write: a builder is entitled to
 	// normalise what it was handed, and the panel should show what the item took.
 	readBack();
@@ -126,7 +205,7 @@ function optionsFor(field)
 /** `$event.target` is an EventTarget until something says otherwise. */
 function onSelect(field, event)
 {
-	write(field.key, /** @type {HTMLSelectElement} */ (event.target).value);
+	write(field.key, /** @type {HTMLSelectElement} */ (event.target).value, field);
 }
 
 const toDisplay = (cm) => Dimensioning.cmToMeasureRaw(Number(cm) || 0);
@@ -140,6 +219,22 @@ watch(unit, readBack);
 	<section v-if="schema" class="inspector-section">
 		<h3 class="inspector-heading">{{ schema.label }}</h3>
 
+		<div v-if="hasShared" class="field">
+			<span class="field-label">Style applies to</span>
+			<div class="segmented">
+				<button
+					v-for="option in SCOPES" :key="option.value"
+					type="button" class="segment" :class="{'is-active': scope === option.value}"
+					:aria-pressed="scope === option.value" @click="scope = option.value">
+					{{ option.label }}
+				</button>
+			</div>
+		</div>
+		<p v-if="hasShared && scope !== 'one'" class="inspector-note">
+			Styles, finishes and hardware reach {{ targets().length }} of these.
+			Sizes only ever change this one.
+		</p>
+
 		<template v-for="field in visibleFields" :key="field.key">
 			<NumberField
 				v-if="field.type === 'length' && !field.readOnly"
@@ -148,7 +243,7 @@ watch(unit, readBack);
 				:max="field.max ? toDisplay(field.max) : undefined"
 				:step="0.1"
 				:model-value="toDisplay(valueAt(field.key))"
-				@update:model-value="write(field.key, fromDisplay($event))" />
+				@update:model-value="write(field.key, fromDisplay($event), field)" />
 
 			<div v-else-if="field.type === 'length'" class="field">
 				<span class="field-label">{{ field.label }}</span>
@@ -161,7 +256,7 @@ watch(unit, readBack);
 				v-else-if="field.type === 'fraction'"
 				:label="field.label" :min="field.min" :max="field.max" :step="field.step"
 				:model-value="Number(valueAt(field.key)) || 0"
-				@update:model-value="write(field.key, $event)" />
+				@update:model-value="write(field.key, $event, field)" />
 
 			<div v-else-if="field.type === 'choice'" class="field">
 				<span class="field-label">{{ field.label }}</span>
@@ -171,7 +266,7 @@ watch(unit, readBack);
 						type="button" class="segment"
 						:class="{'is-active': valueAt(field.key) === option.value}"
 						:aria-pressed="valueAt(field.key) === option.value"
-						@click="write(field.key, option.value)">
+						@click="write(field.key, option.value, field)">
 						{{ option.label }}
 					</button>
 				</div>

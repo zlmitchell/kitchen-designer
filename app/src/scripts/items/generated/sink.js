@@ -232,7 +232,7 @@ export const SINK_SCHEMA = {
 		{key: 'depth', label: 'Bowl depth', type: 'length', min: 8, max: 40, step: 0.5},
 		{key: 'apronHeight', label: 'Apron height', type: 'length', min: 10, max: 40, step: 1,
 			when: {mount: 'farmhouse'}},
-		{key: 'material.basin', label: 'Basin', type: 'material'},
+		{shared: true, key: 'material.basin', label: 'Basin', type: 'material'},
 	],
 };
 

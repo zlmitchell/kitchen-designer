@@ -100,6 +100,18 @@ const component = computed(() =>
  * is what you edit; leaving them on screen is honest about the fact that the old
  * behaviour is still there and still does what it always did.
  */
+/**
+ * Everything placed, so a style change can reach a whole run.
+ *
+ * Read through the store rather than held, because items come and go and the
+ * panel is keyed on the selection rather than remounted per change.
+ */
+const placedItems = computed(() =>
+{
+	var model = store.model && store.model.value;
+	return (model && model.scene) ? model.scene.getItems() : [];
+});
+
 const specItem = computed(() =>
 {
 	const selection = props.selection;
@@ -170,6 +182,7 @@ watch(() => props.selection, (selection) =>
 					v-if="specItem"
 					:key="`spec-${specItem.designId}`"
 					:item="specItem"
+					:items="placedItems"
 					@changed="emit('changed')" />
 				<component
 					:is="component" v-if="component && props.selection"

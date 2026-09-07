@@ -350,11 +350,11 @@ export const CABINET_SCHEMA = {
 		{key: 'width', label: 'Width', type: 'length', min: 22.86, max: 121.92, step: 7.62},
 		{key: 'height', label: 'Height', type: 'length', min: 30, max: 250, step: 1},
 		{key: 'depth', label: 'Depth', type: 'length', min: 20, max: 80, step: 1},
-		{key: 'frame', label: 'Construction', type: 'choice', options: [
+		{shared: true, key: 'frame', label: 'Construction', type: 'choice', options: [
 			{value: 'face', label: 'Face frame'},
 			{value: 'frameless', label: 'Frameless'},
 		]},
-		{key: 'front', label: 'Door style', type: 'choice', options: [
+		{shared: true, key: 'front', label: 'Door style', type: 'choice', options: [
 			{value: 'slab', label: 'Slab'},
 			{value: 'shaker', label: 'Shaker'},
 			{value: 'raised', label: 'Raised'},
@@ -364,12 +364,12 @@ export const CABINET_SCHEMA = {
 			{value: 1, label: 'One'},
 			{value: 2, label: 'Pair'},
 		]},
-		{key: 'hardware', label: 'Hardware', type: 'choice', options: [
+		{shared: true, key: 'hardware', label: 'Hardware', type: 'choice', options: [
 			{value: 'knob', label: 'Knob'},
 			{value: 'pull', label: 'Pull'},
 			{value: 'none', label: 'None'},
 		]},
-		{key: 'topTreatment', label: 'Above', type: 'choice', when: {variant: 'wall'}, options: [
+		{shared: true, key: 'topTreatment', label: 'Above', type: 'choice', when: {variant: 'wall'}, options: [
 			{value: 'standard', label: 'Gap'},
 			{value: 'to-ceiling', label: 'To ceiling'},
 			{value: 'soffit', label: 'Soffit'},
@@ -383,10 +383,10 @@ export const CABINET_SCHEMA = {
 			{value: true, label: 'Recessed'},
 			{value: false, label: 'None'},
 		]},
-		{key: 'material.front', label: 'Fronts', type: 'material'},
-		{key: 'material.frame', label: 'Frame', type: 'material', when: {frame: 'face'}},
-		{key: 'material.carcass', label: 'Carcass', type: 'material'},
-		{key: 'material.hardware', label: 'Hardware', type: 'material', group: 'metal'},
+		{shared: true, key: 'material.front', label: 'Fronts', type: 'material'},
+		{shared: true, key: 'material.frame', label: 'Frame', type: 'material', when: {frame: 'face'}},
+		{shared: true, key: 'material.carcass', label: 'Carcass', type: 'material'},
+		{shared: true, key: 'material.hardware', label: 'Hardware', type: 'material', group: 'metal'},
 	],
 };
 

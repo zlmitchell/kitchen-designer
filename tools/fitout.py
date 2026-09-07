@@ -116,6 +116,12 @@ def main():
                     help="index of the wall to fit out; default picks the "
                          "longest wall that has room for a run")
     ap.add_argument("--no-uppers", action="store_true")
+    ap.add_argument("--uppers", default="gap",
+                    choices=["gap", "to-ceiling", "soffit", "stacked"],
+                    help="what happens between the wall cabinets and the "
+                         "ceiling. `gap` is what stock cabinets leave and "
+                         "nobody wants; the other three are the ways of not "
+                         "having it")
     ap.add_argument("--list", action="store_true", help="print the walls and stop")
     args = ap.parse_args()
 
@@ -201,6 +207,24 @@ def main():
     face = across + inward * thickness / 2.0
     back_to_centre = face + inward * BASE_DEPTH / 2.0
 
+    # The ceiling, read off the plan rather than assumed. Corner elevations are
+    # what the 3D view draws a wall top to, and a cabinet asked to reach the
+    # ceiling has no other way of knowing where it is.
+    #
+    # The COMMONEST one, not the tallest. An edited plan carries corners the
+    # editor made at its configured default (250) alongside the ones the tracer
+    # measured (243.84 here, a 96in ceiling), and `max` picks the editor's -
+    # which is a ceiling nobody has, and 6cm of cabinet hanging through it.
+    # Pony-wall corners are excluded first, or a plan with enough of them would
+    # vote for 42in.
+    tally = {}
+    for corner in corners.values():
+        height = round(corner.get("elevation", 250), 2)
+        if height < 200:
+            continue
+        tally[height] = tally.get(height, 0) + 1
+    ceiling = max(tally.items(), key=lambda kv: (kv[1], -kv[0]))[0] if tally else 243.84
+
     def place(along, offset_across, height):
         """Plan (along, across) to world (x, y, z)."""
         if axis == "h":
@@ -254,13 +278,24 @@ def main():
     if not args.no_uppers:
         cursor = along_lo
         upper_centre = face + inward * WALL_CAB_DEPTH / 2.0
+        treatment = "standard" if args.uppers == "gap" else args.uppers
+        # How tall the whole upper assembly is. The builder works this out for
+        # itself from the ceiling and the mount height, but the ITEM has to be
+        # placed at the middle of it, and only the caller knows that.
+        upper_height = (WALL_CAB_HEIGHT if treatment == "standard"
+                        else max(WALL_CAB_HEIGHT, ceiling - WALL_CAB_BOTTOM))
+        print(f"  uppers: {args.uppers}, {upper_height:.0f}cm tall "
+              f"(ceiling {ceiling:.0f}cm)")
         for width in widths:
             centre = cursor + width / 2.0
-            x, y, z = place(centre, upper_centre, WALL_CAB_BOTTOM + WALL_CAB_HEIGHT / 2.0)
+            x, y, z = place(centre, upper_centre, WALL_CAB_BOTTOM + upper_height / 2.0)
             items.append(item("Wall Cabinet", "generated:cabinet", 2, x, y, z, rotation, {
                 "kind": "cabinet", "variant": "wall", "width": round(width, 2),
                 "doors": 2 if width > 50 else 1, "drawers": [],
                 "front": "shaker", "frame": "face", "hardware": "knob",
+                "topTreatment": treatment,
+                "ceilingHeight": round(ceiling, 2),
+                "mountHeight": WALL_CAB_BOTTOM,
                 "material": {"front": "paint-white", "frame": "paint-white",
                              "carcass": "wood-birch-ply", "hardware": "metal-brushed-nickel"},
             }))

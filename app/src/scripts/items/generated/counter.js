@@ -155,14 +155,14 @@ export const COUNTER_SCHEMA = {
 		{key: 'width', label: 'Length', type: 'length', min: 30, max: 400, step: 1},
 		{key: 'depth', label: 'Depth', type: 'length', min: 30, max: 120, step: 1},
 		{key: 'thickness', label: 'Thickness', type: 'length', min: 1, max: 12, step: 0.1},
-		{key: 'edge', label: 'Edge', type: 'choice', options: [
+		{shared: true, key: 'edge', label: 'Edge', type: 'choice', options: [
 			{value: 'square', label: 'Square'},
 			{value: 'eased', label: 'Eased'},
 			{value: 'bullnose', label: 'Bullnose'},
 		]},
 		{key: 'backsplash', label: 'Backsplash', type: 'length', min: 0, max: 60, step: 1},
-		{key: 'material.counter', label: 'Surface', type: 'material'},
-		{key: 'material.splash', label: 'Backsplash', type: 'material'},
+		{shared: true, key: 'material.counter', label: 'Surface', type: 'material'},
+		{shared: true, key: 'material.splash', label: 'Backsplash', type: 'material'},
 	],
 };
 
