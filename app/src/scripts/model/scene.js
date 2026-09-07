@@ -13,6 +13,7 @@ import {Scene as ThreeScene, LoadingManager} from 'three';
 import {runtimeOf} from '../core/design_runtime.js';
 import {disposeMaterial} from '../core/resource_registry.js';
 import {Utils} from '../core/utils.js';
+import {applyFitting, releaseFitting} from '../items/fitting.js';
 import {mergeMeshes} from '../core/geometry_merge.js';
 import {resolveModelUrl} from '../core/legacy_models.js';
 import {Factory} from '../items/factory.js';
@@ -203,6 +204,32 @@ export class Scene extends EventDispatcher
 		return this.items;
 	}
 
+	/**
+	 * Fit an item to the things it sits in, and them to it.
+	 *
+	 * The one entry point for the rule in `items/fitting.js`, so that "when does
+	 * a counter learn its sink changed" has a single answer. Called after a
+	 * generated item is rebuilt (`Item.setSpec`) and after one is dragged
+	 * (`three/controller.js`), which are the two moments the relationship can
+	 * change.
+	 *
+	 * Only a sink drives anything today. A counter passed here does nothing, and
+	 * deliberately: that is also what stops the cascade, since fitting a sink
+	 * rebuilds its counter and its cabinet, and each of those comes back through
+	 * here.
+	 *
+	 * @param {Object} item
+	 * @returns {boolean} Whether anything moved or was rebuilt.
+	 */
+	refit(item)
+	{
+		if (!item)
+		{
+			return false;
+		}
+		return applyFitting(item, this.items);
+	}
+
 	/** Gets the count of items.
 	 * @returns The count.
 	 */
@@ -233,6 +260,11 @@ export class Scene extends EventDispatcher
 	removeItem(item, keepInList)
 	{
 		keepInList = keepInList || false;
+		// Give back whatever this item asked of its hosts, BEFORE it goes: a
+		// deleted sink still has to be found by position to know whose worktop it
+		// was in, and a moment later it is out of the list. Without this a deleted
+		// sink leaves its hole in the counter and its apron cut in the cabinet.
+		releaseFitting(item, this.items);
 		// use this for item meshes
 		this.dispatchEvent({type: EVENT_ITEM_REMOVED, item:item});
 		item.removed();
@@ -394,8 +426,17 @@ export class Scene extends EventDispatcher
 		 *        `Item.onBound`.
 		 * @param {?function(Object): Object} [specBuilder] The builder that made
 		 *        this, so `Item.setSpec` can ask it again at a new size.
+		 * @param {?{y: number}} [datum] Where the builder's own origin went when it
+		 *        centred itself. A sink reasons in "y = 0 is the top of the
+		 *        worktop" and then centres, which loses that plane; reporting the
+		 *        shift is what lets `items/fitting.js` put it back. See
+		 *        `Item.specDatum`.
+		 * @param {?function(Object): void} [onPlaced] Called once the item has been
+		 *        moved and come to rest - the other direction of `onBound`, for a
+		 *        spec field that is also a position. A window's sill height is both.
+		 *        See `Item.onPlaced`.
 		 */
-		var loaderCallback = function (geometry, materials, parts, onBound, specBuilder)
+		var loaderCallback = function (geometry, materials, parts, onBound, specBuilder, datum, onPlaced)
 		{
 			if (!scope.loadSession.finished(generation))
 			{
@@ -429,10 +470,18 @@ export class Scene extends EventDispatcher
 			{
 				item.onBound = onBound;
 			}
+			if (onPlaced)
+			{
+				item.onPlaced = onPlaced;
+			}
 			if (specBuilder)
 			{
 				// So `setSpec` can rebuild at a new size rather than scale this one.
 				item._specBuilder = specBuilder;
+			}
+			if (datum)
+			{
+				item.specDatum = datum;
 			}
 			item.fixed = fixed || false;
 			scope.items.push(item);
@@ -555,7 +604,8 @@ export class Scene extends EventDispatcher
 					scale = null;
 				}
 				var built = builder(metadata.spec || {});
-				loaderCallback(built.geometry, built.materials, built.parts, built.onBound, builder);
+				loaderCallback(built.geometry, built.materials, built.parts, built.onBound, builder, built.datum,
+					built.onPlaced);
 			}
 			catch (error)
 			{

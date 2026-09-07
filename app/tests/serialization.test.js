@@ -171,21 +171,23 @@ describe('saveFloorplan - top level schema', () =>
 
 describe('saveFloorplan - wall entries', () =>
 {
-	it('writes exactly ten keys per wall, in a fixed order', () =>
+	it('writes exactly twelve keys per wall, in a fixed order', () =>
 	{
 		// `thickness` joined the format when the plan extractor began measuring
 		// it per wall. It is per-wall in the model too -- a 2x4 partition and a
 		// 2x6 exterior wall are different thicknesses in one house -- and was
 		// the only such property the file did not carry.
 		//
-		// `frontColor` and `backColor` joined it when walls became paintable.
-		// Per FACE, beside the textures and for the same reason: the two sides of
-		// a wall are in different rooms. Additive, so a file written before them
-		// still opens - the loader asks the record rather than a version stamp.
+		// `frontColor` and `backColor` joined it when walls became paintable, and
+		// `frontSheen`/`backSheen` when that paint gained a finish. Per FACE,
+		// beside the textures and for the same reason: the two sides of a wall are
+		// in different rooms. Additive, so a file written before any of them still
+		// opens - the loader asks the record rather than a version stamp.
 		const {floorplan} = buildSquareRoom();
 		expect(Object.keys(floorplan.saveFloorplan().walls[0])).toEqual([
 			'corner1', 'corner2', 'thickness', 'frontTexture', 'backTexture',
-			'frontColor', 'backColor', 'wallType', 'a', 'b',
+			'frontColor', 'backColor', 'frontSheen', 'backSheen',
+			'wallType', 'a', 'b',
 		]);
 	});
 

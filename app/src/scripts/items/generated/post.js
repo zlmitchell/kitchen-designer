@@ -1,7 +1,8 @@
 // @ts-check
-import {BoxGeometry, CylinderGeometry, Group, Mesh} from 'three';
+import {CylinderGeometry, Group, Mesh} from 'three';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
+import {boxGeometryFor} from '../../core/geometry_builders.js';
 
 /**
  * A post: the thing at the open end of a pony wall.
@@ -82,7 +83,7 @@ function shaft(mat, profile, width, depth, height, y)
 		// not boxes, and the only reason is that a round post read as an octagon
 		// at 8.
 		? new CylinderGeometry(width / 2, width / 2, height, 24)
-		: new BoxGeometry(width, height, depth);
+		: boxGeometryFor(mat, width, height, depth);
 	var mesh = new Mesh(geometry, mat);
 	mesh.position.set(0, y, 0);
 	return mesh;

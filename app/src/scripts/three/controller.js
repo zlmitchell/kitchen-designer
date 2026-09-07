@@ -448,6 +448,13 @@ export class Controller extends EventDispatcher
 	{
 		if (this.mouseMoved && this.selectedObject)
 		{
+			// Before the event, not after: a drag can carry a sink from one run to
+			// another, and the listeners on this event save and snapshot. They
+			// should see the worktop already cut. See `Scene.refit`.
+			if (this.scene.refit)
+			{
+				this.scene.refit(this.selectedObject);
+			}
 			this.scene.dispatchEvent({type: EVENT_ITEM_MOVE_FINISH, item: this.selectedObject});
 		}
 	}

@@ -199,7 +199,7 @@ const GPU_KINDS = new Set(['model-texture', 'texture', 'environment']);
  * The two textures `Skybox` owns, added in RM-005 C1.
  *
  * B5's docblock below said the room textures were out of scope because they load
- * through `three/texture_cache.js`, which cannot hold a `CompressedTexture`.
+ * through `core/texture_cache.js`, which cannot hold a `CompressedTexture`.
  * That is true of five of the seven. It is not true of these two: `Skybox` has
  * never used the texture cache. It holds its own `TextureLoader`, and its
  * environment path already builds the material inside the load callback, which
@@ -277,7 +277,7 @@ const REFUSED_ROOM_TEXTURES = [
  *
  * ## Why the room textures are not here
  *
- * They load through `three/texture_cache.js`, and that module cannot hold a
+ * They load through `core/texture_cache.js`, and that module cannot hold a
  * KTX2 texture as it is written. The cache hands a caller a `Texture` clone
  * SYNCHRONOUSLY and fills in the pixels when the load lands - which works
  * because `TextureLoader.load()` returns a Texture immediately and every clone

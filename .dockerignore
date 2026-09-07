@@ -7,3 +7,9 @@ app/dist
 app/dist-demo
 app/docs/.vitepress/cache
 **/*.pdf
+# ...except the synthetic drawing the importer's tests trace. The rule above is
+# there to keep the architect's plans out of an image, and this one is the
+# opposite of that: a house that does not exist, drawn by tools/fixture_plan.py
+# and committed on purpose. Without the exception the image has no plan.pdf and
+# eighteen tests fail inside the container while passing outside it.
+!app/tests/drawings/*.pdf

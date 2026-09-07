@@ -4,9 +4,9 @@ import {Utils} from '../core/utils.js';
 import {triangleFanGeometry} from '../core/geometry_builders.js';
 import {EVENT_REDRAW, EVENT_CAMERA_MOVED, EVENT_CAMERA_ACTIVE_STATUS} from '../core/events.js';
 import {isStudio} from '../core/render_profile.js';
-import {acquireTexture, releaseTexture} from './texture_cache.js';
+import {acquireTexture, releaseTexture} from '../core/texture_cache.js';
 import {runtimeOf} from '../core/design_runtime.js';
-import {defaultWallColor} from '../model/wall.js';
+import {defaultWallColor, wallSheenRoughness} from '../model/wall.js';
 
 /**
  * The hand-painted vignette every wall is lit with. One image, one decode -
@@ -352,15 +352,19 @@ export class Edge extends EventDispatcher
 	 * @param {boolean} [lit=true] Whether to apply the vignette lightmap. The
 	 * exterior filler does not get one - it is the back of the wall, and the
 	 * vignette is painted for an interior.
+	 * @param {?number} [roughness] The face's chosen finish, as a roughness. Null
+	 * or omitted means the profile's own - which is what matte is, and what every
+	 * wall was before a face could carry a sheen. Fillers never pass one: the top
+	 * and the underside of a wall are not painted.
 	 * @returns {MeshStandardMaterial}
 	 */
-	makeStudioWallMaterial(color, side, lit)
+	makeStudioWallMaterial(color, side, lit, roughness)
 	{
 		var material = new MeshStandardMaterial({
 			color: color,
 			side: side,
 			map: this.texture,
-			roughness: this.renderProfile.wallRoughness,
+			roughness: (roughness === null || roughness === undefined) ? this.renderProfile.wallRoughness : roughness,
 			metalness: this.renderProfile.wallMetalness,
 			envMapIntensity: this.renderProfile.environmentIntensity,
 		});
@@ -391,7 +395,12 @@ export class Edge extends EventDispatcher
 		// so white leaves the wallmap exactly as it was.
 		var painted = this.front ? this.wall.frontColor : this.wall.backColor;
 		var color = new Color(painted || defaultWallColor).getHex();
-		var wallMaterial = isStudio(this.renderProfile) ? this.makeStudioWallMaterial(color, FrontSide) : new MeshBasicMaterial({
+		// And its finish, which is a roughness - so only the studio branch below
+		// can show it. MeshBasicMaterial has no roughness at all, which is why
+		// classic draws a satin wall and a matte one identically.
+		var sheen = this.front ? this.wall.frontSheen : this.wall.backSheen;
+		var roughness = wallSheenRoughness(sheen);
+		var wallMaterial = isStudio(this.renderProfile) ? this.makeStudioWallMaterial(color, FrontSide, true, roughness) : new MeshBasicMaterial({
 			color: color,
 			side: FrontSide,
 			map: this.texture,

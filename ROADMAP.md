@@ -17,16 +17,16 @@ meshes. Every "no" below comes back to the same two root causes.
 | Part | Today | Verdict |
 |---|---|---|
 | Half / pony walls | `Wall.setHeight`, and a Full/Half control on the wall panel | **Done** |
-| Window types | One `whitewindow.glb` plus two Kenney wall panels | No |
-| Muntins / grille in the glass | — | No |
-| Window width / height | Mesh `setScale` — stretches the frame along with the glass | No |
-| Floor-to-ceiling windows | — | No |
-| Door width / height / style | Two GLBs (`closed-door28x80`, `open_door`) | No |
-| Sliding patio door (glazed) | — | No |
-| Bypass closet doors | The **old** tracer detects them (`openings.py:72`); the new one has no slider case and `items_for` writes a swinging door | Detected, then discarded |
-| Pocket door | — | No, and it needs a wall cavity |
-| Bifold closet doors | — | No |
-| Barn door | — | No, and it is not an in-wall item at all |
+| Window types | Generated: fixed, picture, single/double hung, casement, slider, awning | **Done** |
+| Muntins / grille in the glass | `grille: {pattern, rows, cols}` — none/colonial/prairie/craftsman | **Done** |
+| Window width / height | Generated: `width`/`height`/`sillHeight` in the spec, nothing scaled | **Done** |
+| Floor-to-ceiling windows | `fullHeight` — the item asks its wall how tall it is | **Done** |
+| Door width / height / style | Generated: `width`/`height` in the spec, and `leaf` — flush, two-panel, six-panel, glazed | **Done** |
+| Sliding patio door (glazed) | `operation: sliding` — bypass geometry at door scale, glazed, on a sill track | **Done** |
+| Bypass closet doors | `operation: bypass` — two leaves offset across the wall, clearing half the opening. **The tracer still discards them**; see below | App yes, tracer no |
+| Pocket door | `operation: pocket`, and the wall is checked for thickness and run — it can refuse | **Done** |
+| Bifold closet doors | `operation: bifold`, 2 or 4 panels, folding along the head track | **Done** |
+| Barn door | `operation: barn`, as a type 9 `WallFloorItem` on the wall FACE — its track is its bounds | **Done** |
 | Door open / closed state | Generated: `openFraction` 0..1, hinged leaf on a pivot. `open_door.glb` held no open leaf — 7.62cm deep | **Done** |
 | Ceiling lights | `RoofItem` already snaps to the ceiling plane; `Chandelier`, `Ceilingfan`, `Lampsquareceiling` exist **as meshes that emit no light** | Placement yes, light no |
 | Any placeable light | `three/lights.js` is 3 global lights, total | No |
@@ -462,11 +462,7 @@ between these objects, and it is a list of rectangles.
 **Panel-ready is not a colour.** `finish: panel-ready` builds the face with
 `cabinet.js`'s own `frontPanel`, in the run's shaker / slab / raised profile —
 which is what panel-ready means, and the reason `frontPanel` is now exported.
-A white box would have been the one thing this app exists not to do. It also
-stands the panel off by a face frame's thickness, because a cabinet's door
-stands off its FRAME and not its carcass: hung flat, a panel-ready dishwasher
-between two shaker cabinets sat 3/4in behind them, which is the one thing the
-whole finish exists to avoid.
+A white box would have been the one thing this app exists not to do.
 
 Five things the work turned up, and **four of them were invisible to every
 number**. A vertex count said each part existed; the offline render said where
@@ -506,6 +502,14 @@ the underside lights that make it able to do the job.
 
 Same builder machinery, and the wall already cuts the hole.
 
+**The windows are done.** ✅ `src/scripts/items/generated/window.js`, and the
+glazing they need lives in `items/generated/opening.js` beside the door's, which
+is the "one opening builder, not two" below reduced to its actual content: the
+box primitive, the plan-space handing, the casing that laps both wall faces, and
+the sash. `door.js` and `window.js` are now only the part that differs — which
+members make up the lining, and what moves. The patio slider can therefore be a
+door that reaches the floor and is glazed, with no glazing code written twice.
+
 A window is: rough frame, jamb liner, sash frame(s), one glass plane, optional
 operator hardware, and **optional grille** —
 `grille: {pattern: none|colonial|prairie|craftsman, rows, cols}` as thin bars
@@ -515,6 +519,56 @@ slider, awning, picture.
 
 Sizing is `width` / `height` / `sillHeight`, plus a `fullHeight` flag that pins
 the head to the wall top and the sill to the floor.
+
+#### What it took, and the four things that were wrong
+
+The measurements were all green while three of these were true. Every one was
+found by rendering the thing and looking at it, which is the rule this repo
+keeps for exactly this reason.
+
+- **A window is the first generated item whose POSITION is part of what it is.**
+  A door's is not: it stands on the floor and `WallItem.resized` re-seats it
+  there. A window sits at its sill height, and there was nowhere to put that
+  number — `extract.py` baked `ypos: 157` and the height lived only in a mesh
+  scale. So `sillHeight` is a spec field, `onBound` applies it, and a new
+  `Item.onPlaced` — the other direction of `onBound`, called from
+  `WallItem.moveToPosition` — writes it back when somebody drags the window up
+  the wall. One direction alone means the panel and the mouse hold two different
+  numbers and the next bind silently discards the drag.
+- **`fullHeight` is the item asking its host a question**, and it is the
+  smallest instance of the phase 3 mechanism: the height a floor-to-ceiling
+  window wants belongs to the *wall*, so `onBound` reads it off the wall it just
+  bound to and rebuilds through `setSpec`. It is also the hole trap at the other
+  end of the wall, as promised above — and the test for it **had to be forced**.
+  Built to exactly the wall height the float32 bounding box rounded the safe way
+  and the hole was cut with `HOLE_INSET` disabled, so the regression only proves
+  anything when the head is pushed three microns past the wall top deliberately.
+- **The handle was authored in the frame's coordinates**, so it stayed hanging in
+  the middle of the empty opening the moment a casement swung away from it. Every
+  measurement of its position passed: the triangles were exactly where they were
+  put. It belongs to whatever moves, the way a door's knob is under the pivot.
+- **A slider slid the wrong way** — away from the fixed sash instead of behind
+  it — so the operable sash left the frame entirely and hung in free air beside
+  the window. This is the mistake named below, arrived at from the other side,
+  and a measurement of *travel* passes either way.
+- **A double hung given both sashes the full travel simply swaps them.** The
+  lower goes to the top, the upper comes to the bottom, and every part of the
+  opening is still covered — `openFraction: 1` rendered indistinguishably from
+  shut. Half the travel each is what leaves a gap at the head *and* at the sill,
+  and it is also how the thing is used.
+- And one that is only a detail: **a full-height window has nowhere to put head
+  or sill casing.** Casing stands proud of the opening by its own face width, and
+  the opening already fills the wall, so both runs land inside the ceiling and
+  under the floor. `buildCasing` takes `top` and `bottom` now; a door has no
+  bottom run because it stands on the floor, and a floor-to-ceiling window has
+  neither.
+
+`tools/extract.py` writes `generated:window`, so the sample sheet's eight
+windows arrive at five different widths with the same stiles. **This is one of
+the two-implementation changes `AGENTS.md` warns about and only the Python side
+has it** — `app/src/app/import/design.js` still writes a scaled
+`whitewindow.glb`, and porting `window_item` across is a small, mechanical job
+left for whoever owns that file.
 
 **One opening builder, not two.** A sliding patio door settles this: it reaches
 the floor, so it is a door (type 7, `InWallFloorItem`), and it is mostly glass, so
@@ -527,7 +581,7 @@ to either.
 **`operation`** is the axis the whole door question turns on, and it is
 independent of the slab style and of whether it is glazed:
 
-- `swing` — one leaf, `hand: left|right`, `openFraction` 0..1. What exists today.
+- `swing` — one leaf, `hand: lo|hi`, `openFraction` 0..1.
 - `french` — two swing leaves meeting at the middle, each with its own hand.
 - `bypass` (sliding closet) — **two leaves offset across the wall thickness**,
   overlapping along it, on a track header. The signature to get right is that a
@@ -551,11 +605,86 @@ independent of the slab style and of whether it is glazed:
   track above the opening and slides clear beside it, so the opening itself is a
   `cased` opening and the door is a `WallItem` overlapping it, needing clear wall
   to one side. Do not try to make it type 7; it will fight `boundMove` and the
-  hole-cutting both.
+  hole-cutting both. Built as a type 9 `WallFloorItem` — a `WallItem` that stands
+  on the floor — which is the class that was already there for it.
 
 `openFraction` earns its place here more than it does on a swing door: it is how
 you check that a slider actually leaves a path through, and for a bypass it is
 what shows that half the opening is never available.
+
+#### What the operations took, and the five things that were wrong
+
+**All eight are done.** ✅ `src/scripts/items/generated/door.js`, with the leaf
+itself in `opening.js` beside the sash, because **a glazed leaf IS a sash** — a
+french door and a patio slider are stiles, rails, one pane and a grille at door
+scale, which is `buildSash` exactly. That is the "one opening builder, not two"
+rule paying for itself a second time: the patio door needed no glazing code.
+
+`leaf` — `flush | two-panel | six-panel | glazed` — is orthogonal to `operation`
+and reaches all seven operations that have a leaf. The operation supplies its own
+defaults for the two cases where the word means the glass (`french` and
+`sliding` are glazed unless the spec says otherwise), which is what keeps
+`operation` the single field anybody actually sets.
+
+The measurements were green while four of these were true. Every one was found by
+rendering the thing and looking at it.
+
+- **Hardware proud of both faces makes two passing leaves intersect.** A bypass
+  leaf carries a finger pull, and a pull standing 6mm off the inner face of each
+  leaf put the two leaf assemblies 0.8cm *through* each other at the 2mm track
+  clearance — with both leaves correctly placed, correctly offset and correctly
+  sized. This is why real bypass hardware is *recessed*, and a recess is the one
+  thing a box cannot be, so the pull goes on the face nothing passes in front of.
+  Nothing about travel or leaf position can see this; the test that catches it
+  measures the leaf bounds **with the hardware included**.
+- **A barn door's pull overhung its own leaf by 7cm.** A 24cm bar placed 5cm in
+  from the leading edge the way a knob is. The leaf was the right size and the
+  bar was on it, so every measurement passed.
+- **A barn door's geometry is honestly asymmetric**, and it is the one build here
+  that is. Its track runs a full leaf width past one jamb and stops at the other,
+  because that is the wall a barn door needs — so `recentre` moves the origin
+  onto the geometry, **geometry and children together**. Doing it to one of them
+  is the bug `docs/generated-items.md` rule 2 describes.
+- **A pocket door rendered on its own is a door that has fallen off.** The leaf
+  goes into the wall, and the wall is the host, so with no wall there is nothing
+  to hide it and it stands in mid air beside the frame. Its catalog thumbnail
+  therefore carries a cutaway stub of wall — the far half of the thickness only,
+  because a whole wall swallows the leaf and leaves an empty doorway beside a
+  blank panel. The same shape of limitation as the window shots needing a sky.
+- **And one that was right first time and is worth stating, because it looks
+  wrong until it is derived.** A bifold is *two* rotations: the outer panel turns
+  θ about the jamb, the inner one turns **−2θ** about the joint between them.
+  The free end then sits at `2 × panel × cos θ` from the jamb with the two z
+  components cancelling **exactly**, so it runs along the head and never leaves
+  the wall line. Hinged to each other with one rotation it describes an arc and
+  swings into the room, which is a pair of doors and not a bifold.
+
+**The wall's thickness now wins.** `spec.wallThickness` is baked by `extract.py`
+and nothing had ever re-read it, so a door dragged onto a different wall kept the
+first wall's number and its lining stopped filling its opening. `applyDoorFit`
+reads it off the wall on binding and rebuilds through `setSpec` — the same shape
+as the window's `fullHeight`, and the pocket check is worthless without it, since
+it would otherwise be validating against a number from another wall.
+
+**The pocket door refuses, and refusing is not rewriting.** `pocketFit` is pure:
+it wants 4 1/4in of finished wall to hold the leaf, and half the opening plus the
+jamb plus a whole leaf plus framing of *run* on the side the pocket is framed
+into. The run is side-dependent, so it is a question about the **handing** as
+much as about the wall, and `hand` is stated in plan axes — which means the
+answer is only available once the item has bound and `resolveHanding` has run.
+What refuses is the **drawing**: the spec is left exactly as the user wrote it and
+the leaf is drawn shut, because a leaf with nowhere to go does not open. The
+reason goes to `item.specNotices`, which `SpecInspector` renders above the
+fields. Silently turning a pocket door into a swing door would be worse than the
+fault.
+
+**A barn door is a type 9 `WallFloorItem`, and its track is its bounds.** Putting
+the whole track — a leaf width past the opening — in the item's own geometry is
+what makes "needs clear wall to one side" true with no validation code at all:
+`boundMove` clamps travel along the wall by `sizeX / 2`, so the drag will not put
+it where the track would run off the end. `boundToFloor` seats it by half its own
+height, which is what the floor guide is doing down there. The opening it covers
+is a separate `cased` item, which is what a barn door is on a drawing too.
 
 **No door in this app has ever stood open, and there were three reasons stacked
 on top of each other.** ✅ **Done** — doors are generated, see
@@ -745,7 +874,226 @@ the only one that needs 0d.
 Falls out of Phases 2–4 with no new model work: the specs *are* the schedule.
 Walk the runs, emit stock nomenclature, price against more than one system.
 
+### Phase 8 — shaders and surfaces
+
+Not a third root cause. A and B are about a room that is built wrong; this is
+about a room that is built right and still looks like moulded plastic, which is
+the failure left over once Phases 2–6 land.
+
+The gap in one line: `createMaterial` (`core/materials.js:88`) builds a
+`MeshStandardMaterial` from colour, roughness and metalness **and nothing
+else** — no map of any kind. So `wood-walnut` is a brown solid, `stone-marble-
+carrara` is a white solid, and `metal-brushed-nickel` is a grey solid that is
+not brushed. Walls and floors, meanwhile, *do* carry images (`textures.json`,
+five wall and two floor), which leaves the room grained and the cabinetry in it
+flat — backwards, and the wrong way round for a kitchen app.
+
+Two things hold for every part below, so they are said once here:
+
+- **Studio only.** Classic draws walls with `MeshBasicMaterial` and builds no
+  environment, so nothing here is visible under it — the same gate every Phase 6
+  item carries, and the same gate the per-face paint sheen already sits behind.
+- **`npm run parity` is the exit.** `tools/capture-parity.mjs` already renders
+  the same states across engines and pairs the PNGs. A render change with no
+  before/after in that grid is an opinion.
+
+**8a. Maps on the material library.** ✅ Cheapest, biggest, and independent of
+everything else in this phase.
+
+Built, and four things came out differently from the sketch below. **ORM rather
+than separate roughness and AO maps** - glTF's packing, so one fetch and one
+upload where three greyscales would be three of each. **No normal maps**: at the
+distance a cabinet is looked at, grain is a colour phenomenon, and the slot
+stays in the schema for the first surface that needs relief. **Three generated
+sets, not eleven authored ones** - a map multiplies the entry's colour, so one
+neutral wood grain tinted by walnut and again by maple is two convincing woods,
+and `tools/make-surface-maps.mjs` rebuilds all six files from a seed. **KTX2 was
+not available**: `core/texture_cache.js` cannot hold a `CompressedTexture`, which
+`encode-textures.mjs` had already written down, so these ship as JPEG and PNG and
+get smaller for free the day that redesign happens.
+
+The cache moved from `three/` to `core/` to make any of it possible - `items/`
+and `core/` never import out of their own layer, and it is a renderer-free
+resource pool that was in the renderer's directory. It also now degrades without
+a DOM, because most of the suite that covers generated items runs headless.
+
+- `materials.json` gains `map` / `normalMap` / `roughnessMap` / `aoMap` beside
+  the colour, shaped the way `textures.json` already shapes a url. `createMaterial`
+  grows a load path, and it goes through `three/texture_cache.js` — which already
+  refcounts, and is why the wall lightmap is one decode for the scene rather than
+  one per wall.
+- Four earn it immediately, and Phase 2 already wrote the brief for two of them:
+  wood grain; marble veining; `stainless`, whose entry asks for "anisotropy-ish
+  streaks in the map"; and `copper` / hammered, "a normal map doing all the work".
+- **Tiling is per slot, not per material.** The same walnut goes on a 24in door
+  and a 12ft run, and at one scale one of them is wrong. `textures.json` settled
+  exactly this with `stretch` and `scale`; the item side has no equivalent.
+  Decide it with the first map, not the tenth.
+- **The ceiling is real and has a number.** `texture-vram` measures 28.71 MB
+  against a 47.34 MB limit, and an uploaded texel costs four bytes whatever the
+  file compressed to — so a colour+normal+roughness set is three uploads where
+  there were zero. The answer is already vendored: `npm run encode:textures`,
+  gated by `npm run oracle` at RMS 3.0. Encode as they are added, rather than
+  discovering the ceiling with twenty maps in the tree.
+
+**8b. Physical materials, where the stock one cannot reach.** Still no GLSL —
+`MeshPhysicalMaterial` and three parameters.
+
+- **`clearcoat` is what a lacquer door is**: pigment under a clear film, and a
+  second highlight that does not tint with the base. Today `lacquer-white` is
+  `paint-white` at half the roughness and its own comment admits that is the
+  entire trick. This is the honest version of it.
+- **`transmission` for glass, and this settles a question deferred twice in
+  writing** — once in `materials.json`'s `glass-clear` comment, once in Phase 5's
+  glazing note. Both say the same thing: it costs a render target, A/B it against
+  the parity grid, and the window glazing, the glass cabinet front and the Phase 2
+  glass sink bowl all want one answer. Settle it here and let those three read it.
+- **`anisotropy` for brushed metal** — the streak that runs along the brush
+  rather than around the highlight. It needs a tangent direction, so it is a
+  constraint on the panel builders' UVs before it is a material setting. Note the
+  collision: `Texture.anisotropy`, which `skybox.js` already sets from
+  `getMaxAnisotropy()`, is anisotropic *filtering* and an unrelated thing with
+  the same name.
+- **three's `sheen` is not our sheen.** Ours is roughness, named for how paint is
+  sold; three's is a retroreflective fuzz lobe for cloth. Nobody should wire
+  `WALL_SHEENS` to it, which is why it is written down.
+- Each of these compiles a larger shader for every material that opts in. Opt in
+  per entry, not per group.
+
+**8c. The composer.** `EffectComposer` from `three/examples/jsm`, so no new
+dependency — and no cost to the ESM entry either, whose `external` is
+`/^three(\/.*)?$/` and already covers addon subpaths. The bytes land on
+`lib-iife-gzip` (255,002 of 268,000) and `demo-js-gzip` (545,730 of 573,000),
+which is thin enough that the pass list is a budget decision, not a taste one.
+
+- **Contact shadows are the one that changes the room.** The gap under a toe
+  kick and the underside of a counter overhang are exactly where a render reads
+  as fake, and a 2048 shadow map cannot resolve either. An AO pass can. This is
+  the single most valuable pass here and it should be built first.
+- **Tone mapping has to move, and this is the trap.** `three/main.js:311` sets
+  `ACESFilmicToneMapping` and the profile's exposure on the renderer. Render
+  through a composer and that stage is still there — two tone mappings, a look
+  nobody chose. When the composer lands the renderer's stage goes to
+  `NoToneMapping` and the pass takes the profile's knob.
+- **Antialiasing changes meaning rather than improving.** The renderer is built
+  `{antialias: true}` (`three/main.js:265`), and MSAA does nothing once the scene
+  renders into a render target. SMAA or TAA is therefore a replacement for
+  something already working, not an addition — the parity grid will show it
+  immediately, which is the point of running it.
+- Bloom belongs to Phase 6 by subject — a lit sconce shade, a range hood's work
+  light — and is listed here only because it is the same pass in the same chain.
+- **`pauseRender` has to reach it.** The loop at `three/main.js:525` skips
+  rendering when paused; a composer that runs its own passes past that check
+  burns a battery on a still frame.
+
+**8d. Custom GLSL, last and only where nothing else reaches.**
+
+- **Prefer `onBeforeCompile` to a `ShaderMaterial`.** It keeps the lights, the
+  shadows, the environment map and the tone mapping, and replaces only the part
+  in question. A `ShaderMaterial` gives all of that up to change one line.
+- **The colour-space trap is already documented in this tree**, and every shader
+  written here inherits it: `three/skybox.js:96` notes that a material writing
+  `gl_FragColor` itself opts out of the sRGB encode three appends
+  (`ShaderChunk/colorspace_fragment.glsl.js`). `edge.js`'s `RECIPROCAL_PI`
+  cancellation and `lights.js`'s `* PI` are the same species of bug at the other
+  two ends of the pipeline. Three instances is a pattern, not bad luck.
+- What earns it: **procedural grout** (a backsplash is a grid, and a grid beats
+  an authored map at every scale and every tile size), edge wear on a painted
+  front, and grain that follows the panel rather than the UV island.
+- **A time-varying uniform needs Phase 0d.** There is no `Clock` in `src/` at
+  all. An animated shader and a turning fan blade want the same delta source, so
+  whichever arrives first builds it for both.
+- **Pin the version assumption.** `onBeforeCompile` string-patches three's own
+  shader source, which is precisely what the r98 → r185 move broke elsewhere
+  here. `vite.config.mjs`'s `dropBundledCodecs()` throws when its pattern matches
+  nothing, for exactly this reason — copy that shape rather than discovering the
+  breakage in a render.
+
 ---
+
+## Done, out of band — the drawing importer
+
+Not one of the phases. It arrived because the app could only ever open a plan
+somebody had already traced for it on the command line, and that is the whole
+of the answer to "how do I get MY house into this".
+
+**What it is.** File → Import (`Ctrl+I`) takes a **PDF, an SVG or a DXF**, shows
+the pages, lets you drag a box around the floor plan, asks what scale it is
+drawn at, and traces **walls with their real thicknesses, plus the windows and
+doors**, straight into the design — with the drawing itself laid underneath as a
+carbon sheet to check against.
+
+**Why it is big.** The tracer already existed, in Python, in `tools/`. It could
+not be reached from the browser: PyMuPDF is a C library with no WebAssembly
+build, so there was no Pyodide route, and the app is a static site with no
+server. So the tracer was **ported to JavaScript** — `layers`, `walls`,
+`openings`, `spaces` and the design writer, about 2,000 lines of Python, plus
+three drawing readers the Python never needed because pymupdf was doing that
+job:
+
+| | |
+|---|---|
+| `import/readers/pdf.js` | pdf.js gives an operator list, not paths. This is the state machine MuPDF runs internally: CTM stack, graphics state, paint op, and the path command stream. |
+| `import/readers/svg.js` | Its own XML tokeniser, so the reader needs no DOM and can be tested in the same headless suite as everything else. |
+| `import/readers/dxf.js` | The only format that **states its own scale**, so a DXF is never asked what it is drawn at. Lineweights are read out of the LAYER table directly, because dxf-parser drops them. |
+
+**How it was proved.** Not by eye. Every stage was run against the Python on the
+same input and diffed:
+
+- the PDF reader, against `pymupdf.get_drawings()` on a real 525-path sheet:
+  **525/525 paths identical**, item for item, after three corrections it forced
+  (a rectangle is one `re` item and not four lines; a closing edge IS a segment;
+  MuPDF's `contains` is half open).
+- `layers` and `walls`: the same structure layer picked, the same **55 boxes and
+  291 segments**, the same thicknesses.
+- the whole pipeline: **identical** corners, walls and items on the committed
+  fixture, and 83/83 corners and 77/77 walls agreeing to a hundredth of a
+  millimetre on the real sheet.
+
+`tools/fixture_plan.py` draws the fixture — one small house written three times,
+as a PDF, an SVG and a DXF — so the readers can be held against each other and
+all three against a known answer. `plans/` is our house and can never be a test
+fixture.
+
+**One deliberate divergence, and it is a bug in the Python.**
+`opening_truth.find` looks up the two face lines a wall was built from by
+comparing values that `walls.coalesce` rounded to three decimals against raw
+coordinates, with a tolerance of 1e-6. That only matches by luck. MuPDF holds
+coordinates as float32 and pdf.js keeps float64, so the two land on opposite
+sides of it — and when it fails it fails silently and completely: the structural
+half of the opening detection, the half that finds a cased opening with nothing
+drawn in it, returns nothing and the trace still succeeds. Measured on the
+sample sheet, Python finds **0** openings there and the JS finds **17**. The JS
+uses a tolerance that matches the rounding actually applied; `tools/` still has
+the 1e-6 and **should be brought into line**, which is left undone here only
+because changing it changes what the Python finds on the house it is tuned
+against.
+
+**What it cost.** Two size budgets went up, and nothing else should have moved:
+`demo-js-gzip` 353 -> 546 KB and `demo-total` 13.69 -> 18.50 MB, all of it
+pdf.js and its worker. Both chunks are dynamically imported and emitted as
+separate assets, so **first paint is unchanged** — nothing fetches them until
+File → Import is opened. `tools/budget.json` records the reasoning beside the
+numbers.
+
+**Two deliberate divergences from the Python, both recorded in AGENTS.md.**
+The face-match tolerance above, and window sashes: `find_openings` merges
+adjacent window spans, which reports a 20 + 51 + 20 triple as one 91in pane.
+The JS keeps the sashes apart, so a twin reads as two units and a triple as
+three, each with its own frame.
+
+**What it does not do yet.**
+
+- **Fixtures and cabinets are still not traced**, in either implementation —
+  stages 5 and 6 of `AGENTS.md`'s pipeline, which wait on a spec to emit into.
+- **The region and the scale are asked for, not detected.** A human picks the
+  region for the same reason `--clip` is hand-set in `tools/`: drawing extents
+  do not fall out of a sheet reliably. There is no scale calibration tool — the
+  reported overall size in feet is the check, and it is the one number a wrong
+  scale always gets wrong.
+- **Two implementations now exist and can drift.** That is the standing cost of
+  this decision, and the reason the parity work above is written down rather
+  than merely done.
 
 ## Order, and why
 
@@ -756,11 +1104,25 @@ Walk the runs, emit stock nomenclature, price against more than one system.
           │      └── 3 runs
           ├── 5 windows + doors
           │      └── 6 lighting     daylight needs windows
+          │            └── 8 shaders  AO needs a lit room; bloom needs fixtures
           └── 7 takeoff             reads the specs from 2-4
 ```
 
-Phase 5 can move ahead of 2 if the walkthrough needs to stop looking wrong
-sooner — every window in the traced plan is a stretched mesh right now.
+Phase 5's **windows** were pulled ahead of phase 3 for exactly the reason this
+note gave: every window in the traced plan was a stretched mesh. They are
+generated now, and `tools/extract.py` writes `generated:window`, so the eight
+windows the tracer finds on the sample sheet arrive at five different widths
+with the same stiles. What is left of phase 5 is the DOOR operations —
+french, bypass, sliding patio, pocket, bifold, barn — and the tracer's slider
+port; both are described above.
+
+**Phase 8a is the exception to its own phase and can be pulled forward to any
+point after 0b.** Maps go into the material library, and the library exists —
+so wood that reads as wood does not wait on lighting, on a composer, or on
+anything in Phase 2 beyond the slots that are already there. The rest of Phase 8
+genuinely does sit after 6: an ambient-occlusion pass on an unlit room is
+measuring nothing, and bloom with no emissive fixture in the scene has nothing
+to bloom.
 
 **Phase 4 was pulled ahead of phase 3, and only one thing was lost by it.** The
 ordering above put appliances after runs because a built-in fridge has to align

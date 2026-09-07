@@ -1,7 +1,8 @@
 // @ts-check
-import {Box3, BoxGeometry, Group, Mesh, Vector3} from 'three';
+import {Box3, Group, Mesh, Vector3} from 'three';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
+import {boxGeometryFor} from '../../core/geometry_builders.js';
 
 /**
  * A cabinet, built from panels.
@@ -69,8 +70,43 @@ const VARIANTS = {
 	tall: {height: 213.36, depth: 61.0, toeKick: true},
 };
 
+/**
+ * The face arrangements you can actually buy, as doors and drawer heights.
+ *
+ * The builder has taken `doors` and `drawers` since it was written - `drawers`
+ * is heights from the top down, and `fitDrawers` scales them into whatever
+ * opening the cabinet turns out to have. What was missing was any way to SAY so:
+ * the schema offered `doors` and nothing else, so every cabinet in the app was a
+ * pair of doors whatever the builder could do.
+ *
+ * Heights are the trade's, in centimetres from inches, and graduated rather than
+ * equal because that is how a bank is built - the shallow one at the top is for
+ * cutlery and the deep one at the bottom is for pans. They are proportions in
+ * practice: `fitDrawers` scales the set to the opening, so what matters is their
+ * ratio and not the absolute numbers.
+ */
+export const CABINET_LAYOUTS = {
+	doors: {doors: null, drawers: []},
+	'drawer-over-doors': {doors: null, drawers: [15.24]},
+	'two-drawers': {doors: 0, drawers: [22.86, 30.48]},
+	'three-drawers': {doors: 0, drawers: [15.24, 22.86, 30.48]},
+	'four-drawers': {doors: 0, drawers: [12.7, 17.78, 22.86, 27.94]},
+	'five-drawers': {doors: 0, drawers: [10.16, 12.7, 15.24, 17.78, 20.32]},
+	// Three shallow over one deep - the pan drawer, and the commonest bank there
+	// is in a modern kitchen.
+	'deep-bottom': {doors: 0, drawers: [15.24, 15.24, 15.24, 35.56]},
+};
+
 const DEFAULTS = {
 	variant: 'base',
+	/**
+	 * Which face arrangement, or `custom` to use `doors` and `drawers` directly.
+	 *
+	 * `custom` is the default so that every design saved before this existed opens
+	 * exactly as it did: those files carry `doors` and `drawers` and no layout, and
+	 * this leaves them alone. A named layout overwrites both.
+	 */
+	layout: 'custom',
 	/** 24in. The snap list in the schema is what you can actually buy. */
 	width: 60.96,
 	/** Carcass stock: 3/4in ply. */
@@ -86,6 +122,16 @@ const DEFAULTS = {
 	toeRecess: 7.62,
 	frame: 'face',
 	front: 'shaker',
+	/**
+	 * How much of the front the sink above has taken, in centimetres.
+	 *
+	 * A farmhouse sink's apron IS the top of this cabinet's face - you buy a sink
+	 * base for one and the drawer that would have been there does not exist. Not
+	 * in the schema, because it is not a choice anybody makes: `items/fitting.js`
+	 * sets it from the sink it finds above, and back to 0 when that sink stops
+	 * being a farmhouse.
+	 */
+	apronCut: 0,
 	/** How many doors across the door area. 0 leaves it open. */
 	doors: 2,
 	/**
@@ -136,6 +182,8 @@ const DEFAULTS = {
  * @property {('face'|'frameless')} [frame]
  * @property {('slab'|'shaker'|'raised')} [front]
  * @property {number} [doors] @property {Array<number>} [drawers]
+ * @property {string} [layout] One of `CABINET_LAYOUTS`, or `custom`.
+ * @property {number} [apronCut]
  * @property {('knob'|'pull'|'none')} [hardware]
  * @property {?boolean} [toeKick]
  * @property {Object} [material]
@@ -143,7 +191,7 @@ const DEFAULTS = {
 
 function box(mat, x0, x1, y0, y1, z0, z1)
 {
-	var mesh = new Mesh(new BoxGeometry(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)), mat);
+	var mesh = new Mesh(boxGeometryFor(mat, Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)), mat);
 	mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
 	return mesh;
 }
@@ -364,7 +412,20 @@ export const CABINET_SCHEMA = {
 			{value: 'shaker', label: 'Shaker'},
 			{value: 'raised', label: 'Raised'},
 		]},
-		{key: 'doors', label: 'Doors', type: 'choice', options: [
+		{key: 'layout', label: 'Face', type: 'choice', options: [
+			{value: 'doors', label: 'Doors'},
+			{value: 'drawer-over-doors', label: 'Drawer over doors'},
+			{value: 'two-drawers', label: '2 drawers'},
+			{value: 'three-drawers', label: '3 drawers'},
+			{value: 'four-drawers', label: '4 drawers'},
+			{value: 'five-drawers', label: '5 drawers'},
+			{value: 'deep-bottom', label: '3 over a pan drawer'},
+			{value: 'custom', label: 'Custom'},
+		]},
+		{key: 'doors', label: 'Doors', type: 'choice',
+			// Only where doors are part of the answer. A drawer bank has none, and
+			// offering the control there is offering a number the layout discards.
+			when: {layout: ['doors', 'drawer-over-doors', 'custom']}, options: [
 			{value: 0, label: 'None'},
 			{value: 1, label: 'One'},
 			{value: 2, label: 'Pair'},
@@ -418,7 +479,7 @@ export const CABINET_SCHEMA = {
  * @param {number} doors How many doors across its opening.
  * @param {Array<number>} drawers Drawer heights, top down.
  */
-function carcassAt(group, s, mats, f, yLo, yHi, doors, drawers)
+function carcassAt(group, s, mats, f, yLo, yHi, doors, drawers, apronCut)
 {
 	var back = -f.z1;
 	var deckAt = yLo;
@@ -458,6 +519,15 @@ function carcassAt(group, s, mats, f, yLo, yHi, doors, drawers)
 		openX0 = -f.x1 + s.stile;
 		openX1 = f.x1 - s.stile;
 		frontZ = fz1;
+	}
+
+	// A farmhouse apron replaces the top of the face. The CARCASS is untouched -
+	// the box is still a box, and the sink sits in it - so this shortens only the
+	// area the fronts are laid out in. Clamped at `openLo` so an apron taller
+	// than the cabinet leaves no fronts rather than inverted ones.
+	if (apronCut > 0)
+	{
+		openHi = Math.max(openLo, openHi - apronCut);
 	}
 
 	// Built into their own group so that making doors open later is a change of
@@ -514,6 +584,17 @@ export function buildCabinet(spec)
 {
 	var s = Object.assign({}, DEFAULTS, spec || {});
 	var mats = materialsForSlots(s.material, SLOTS);
+	// A named layout decides the face; `custom` leaves whatever the spec carries,
+	// which is what keeps older files and the traced plan building as they did.
+	var chosen = CABINET_LAYOUTS[s.layout];
+	if (chosen)
+	{
+		s.drawers = chosen.drawers.slice();
+		if (chosen.doors !== null)
+		{
+			s.doors = chosen.doors;
+		}
+	}
 	var f = shell(s);
 	var group = new Group();
 
@@ -523,7 +604,7 @@ export function buildCabinet(spec)
 	// except a soffit or a stack, which reach the ceiling with something else.
 	var cabinetTop = f.floor + f.carcassHeight;
 
-	carcassAt(group, s, mats, f, lift, cabinetTop, s.doors, s.drawers);
+	carcassAt(group, s, mats, f, lift, cabinetTop, s.doors, s.drawers, s.apronCut);
 
 	// ---- toe kick ---------------------------------------------------------
 	if (f.toe > 0)
@@ -540,7 +621,7 @@ export function buildCabinet(spec)
 			// that break is the whole visual difference between a stack and a 42in
 			// cabinet - which is why this goes through carcassAt again rather than
 			// stretching the one below.
-			carcassAt(group, s, mats, f, cabinetTop, f.y1, Math.max(1, s.doors), []);
+			carcassAt(group, s, mats, f, cabinetTop, f.y1, Math.max(1, s.doors), [], 0);
 		}
 		else
 		{

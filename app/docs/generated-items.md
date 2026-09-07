@@ -33,6 +33,7 @@ export function buildThing(spec)
         materials,   // parallel array, indexed by geometry group
         parts,       // children: anything that must not affect bounds
         onBound,     // optional; called when the item binds to a wall
+        onPlaced,    // optional; called once it has been moved and come to rest
     };
 }
 ```
@@ -117,6 +118,13 @@ centred and the frame moves while the leaf stays behind, by half the item.
 Build centred and that recentring is a no-op, and child transforms mean what
 they say.
 
+For a lining or a carcass that is free. For the one build whose honest geometry
+is **not** symmetric it is not: a barn door's track runs a full leaf width past
+one jamb and stops at the other, because that is the wall a barn door needs.
+There, `opening.js`'s `recentre(geometry, parts)` moves the origin onto the
+geometry instead — **geometry and children together**, which is the whole point.
+Doing it to one of them is the bug this rule is about.
+
 ### 3. Plan axes are not item axes — resolve on binding
 
 The drawing knows things in **plan** coordinates: which end a door is hinged on,
@@ -130,6 +138,14 @@ ended up at world dz **+35.9 and −28.9**.
 
 So: keep plan-space fields in the spec, and convert them in `onBound`, which
 fires from `changeWallEdge` at the only moment the axes are known.
+
+`onPlaced` is the other direction, and exists for the one kind of field that is
+both a parameter and a position: a window's **sill height** is a spec field the
+panel edits *and* is just `position.y`, which a drag sets. `onBound` pushes the
+spec into the item; `onPlaced` — called from `WallItem.moveToPosition` once the
+move has been clamped and the item has come to rest — reads the move back out.
+With only one of the two, the panel and the mouse hold different numbers and the
+next bind silently discards whichever the mouse set.
 
 **Resolve each axis independently.** Rotating by θ sends local +x to
 `(cos, 0, −sin)` and local +z to `(sin, 0, cos)`. On a wall running along world z
@@ -280,6 +296,19 @@ fp.redraw();   // it builds on EVENT_CHANGESET, already fired by the load
 Then walk the scene graph, project the triangles, and z-buffer them into a
 `pngjs` image. About 60 lines. This is what proved the doorways were solid.
 
+**Honour `visible`, ancestors included.** `Edge` builds `phantomPlanes` —
+full-size wall quads with **no hole in them**, kept for mouse picking and marked
+invisible — and a renderer that ignores the flag draws those over every opening
+in the wall. From inside the room that reads exactly like a window with no sashes
+in it, and the geometry under test is entirely correct. Skip a material with
+`visible === false` too, and skip a mesh whose parent chain is hidden: `Item`
+carries two label canvases that are invisible most of the time.
+
+**Put something outside the window.** Clear glass, a white sash and a white
+muntin over a white background all shade to the same value, so an interior shot
+of a window looks like an empty hole for a second reason that is not a bug
+either. One large quad in a mid colour behind the wall is enough.
+
 Mount the plan and an output directory:
 
 ```sh
@@ -427,3 +456,32 @@ not obvious:
    the face" gets the whole object and passes or fails for the wrong reason. Six
    appliance measurements did exactly that. Hand the part under test its own
    material in the spec.
+10. **A part that moves has to be a CHILD of what moves it.** A window's handle
+   authored in the frame's coordinates is left hanging in the middle of the empty
+   opening the moment the casement swings away from it — and every measurement of
+   its position passes, because the triangles are exactly where they were put.
+   The door's knob has always been under the pivot for this reason; the window's
+   handle was not, and only a render aimed at an open sash said so.
+11. **Two things that move relative to each other can cancel out.** Give a double
+   hung's two sashes the full travel and they swap ends: the lower goes to the
+   top, the upper comes to the bottom, and every part of the opening is still
+   covered. `openFraction: 1` rendered identically to shut. A test asserting that
+   each sash *travels* passes; what has to be asserted is that the opening is
+   *open*.
+12. **Hardware is part of the thing it is on, and it collides.** A bypass door's
+   two leaves are offset across the wall by a couple of millimetres of track
+   clearance. Put a finger pull 6mm proud of *both* faces of each leaf and the
+   two leaf assemblies pass 0.8cm through each other — with both leaves correctly
+   placed, correctly offset and correctly sized. This is why real bypass hardware
+   is *recessed*, and a recess is the one thing a box cannot be. Two consequences:
+   fit hardware on the face nothing passes in front of, and measure the leaf's
+   bounds **with its hardware included**, or the test cannot see it. The same trap
+   in its other form: a 24cm barn-door pull set 5cm in from the leading edge like
+   a knob overhangs its own leaf by 7cm, and the leaf is still the right size.
+13. **An item whose host does the hiding cannot be drawn alone.** A pocket door's
+   leaf goes into the wall, and the wall is not the item's — rendered on its own
+   it stands in mid air beside the frame and reads as a door that has fallen off.
+   Its thumbnail carries a cutaway stub of wall: the *far half* of the thickness
+   only, because a whole one swallows the leaf and leaves an empty doorway beside
+   a blank panel. The window shots needing a sky behind the glass are the same
+   limitation of the offline renderer, and of the eye.

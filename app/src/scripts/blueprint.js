@@ -109,9 +109,12 @@ export {HUD} from './three/hud.js';
 export {Lights} from './three/lights.js';
 export {Main} from './three/main.js';
 export {Skybox} from './three/skybox.js';
-// Shared image cache behind every wall and floor texture (RM-002 R-04).
+// Shared image cache behind every wall and floor texture (RM-002 R-04), and
+// since Phase 8a behind every mapped material as well - which is why it moved
+// from `three/` to `core/`: it is renderer-free, and `core/materials.js` needs
+// it from a layer that cannot import out of its own.
 // Exported so an embedder can release it, and so the leak stays assertable.
-export {acquireTexture, releaseTexture, clearTextureCache, textureCacheStats} from './three/texture_cache.js';
+export {acquireTexture, releaseTexture, clearTextureCache, textureCacheStats} from './core/texture_cache.js';
 
 // Re-exported so embedders that reached for BP3DJS.OBJExporter keep working.
 // S4 replaced the vendored copy - a fork old enough to branch on the removed

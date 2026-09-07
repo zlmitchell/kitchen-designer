@@ -75,6 +75,12 @@ export default [
 				// this runs in, jsdom included.
 				fetch: 'readonly',
 				TextEncoder: 'readonly',
+				// Added with the drawing importer. `TextDecoder` is how an SVG or a
+				// DXF becomes text - both are read as bytes, because the file
+				// picker hands over bytes and only the content says which format it
+				// is - and `crypto.randomUUID` is what names a traced corner.
+				TextDecoder: 'readonly',
+				crypto: 'readonly',
 				// The draft store, also A5. `indexedDB` is reached through `window`
 				// everywhere in src/, but the IDB event and cursor types appear in
 				// annotations.
@@ -238,6 +244,10 @@ export default [
 				window: 'readonly',
 				setTimeout: 'readonly',
 				clearTimeout: 'readonly',
+				// The importer suites build drawings as bytes, because that is what
+				// its readers take and what a file picker hands them.
+				TextEncoder: 'readonly',
+				TextDecoder: 'readonly',
 			},
 		},
 		rules: {

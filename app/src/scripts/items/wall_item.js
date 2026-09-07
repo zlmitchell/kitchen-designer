@@ -169,6 +169,66 @@ export class WallItem extends Item
 		return true;
 	}
 
+	/**
+	 * Every wall face this item could reasonably be on, nearest first.
+	 *
+	 * `closestWallEdge` picks one and is right almost always. In a CORNER it is a
+	 * coin toss: two walls meet, both are within a few centimetres of the cabinet
+	 * standing in the angle, and whichever wins decides which way the doors face.
+	 * There was no way to say "the other one" - a wall-bound item turns
+	 * `allowRotate` off, because `changeWallEdge` takes `rotation.y` from the
+	 * edge's normal and would discard anything a rotation control wrote.
+	 *
+	 * So the answer is not to rotate the item, it is to bind it to a different
+	 * face. This is the list to choose from.
+	 *
+	 * @param {number} [reach] How far to look, in centimetres. The default takes
+	 *        in the far side of a wall and the return wall of a corner without
+	 *        reaching across a room.
+	 * @returns {Array<Object>} Wall edges, nearest first.
+	 */
+	nearbyWallEdges(reach)
+	{
+		var limit = (reach === undefined) ? 120 : reach;
+		var itemX = this.position.x;
+		var itemZ = this.position.z;
+		return this.model.floorplan.wallEdges()
+			.map(function (edge) {return {edge: edge, distance: edge.distanceTo(itemX, itemZ)};})
+			.filter(function (entry) {return entry.distance <= limit;})
+			.sort(function (a, b) {return a.distance - b.distance;})
+			.map(function (entry) {return entry.edge;});
+	}
+
+	/**
+	 * Move this item to the next wall face it could be on.
+	 *
+	 * Cycles, so pressing it repeatedly walks the candidates and comes back - in a
+	 * corner that is usually four faces, being two walls with two sides each, and
+	 * the one you want is one or two presses away.
+	 *
+	 * @returns {boolean} Whether there was another face to move to.
+	 */
+	bindToNextWallEdge()
+	{
+		var candidates = this.nearbyWallEdges();
+		if (candidates.length < 2)
+		{
+			return false;
+		}
+		var index = candidates.indexOf(this.currentWallEdge);
+		var next = candidates[(index + 1) % candidates.length];
+		if (!next || next === this.currentWallEdge)
+		{
+			return false;
+		}
+		this.changeWallEdge(next);
+		// The item is on a different plane now, so its position has to come back
+		// onto it - `boundMove` is what holds an item against the wall it is on.
+		this.boundMove(this.position);
+		this.redrawWall();
+		return true;
+	}
+
 	placeInRoom()
 	{
 		var closestWallEdge = this.closestWallEdge();
@@ -206,6 +266,16 @@ export class WallItem extends Item
 		this.boundMove(vec3);
 
 		super.moveToPosition(vec3);
+		// Where the item ENDED UP, which is not what it was asked for: `boundMove`
+		// clamps along the wall and pins the across-wall offset, and
+		// `changeWallEdge` above may have re-handed the item first. A generated
+		// item whose spec holds a position - a window's sill height - has to read
+		// this back or the panel and the mouse disagree, and the next bind throws
+		// away whichever the mouse set. See `Item.onPlaced`.
+		if (this.onPlaced)
+		{
+			this.onPlaced(this);
+		}
 		this.redrawWall();
 	}
 

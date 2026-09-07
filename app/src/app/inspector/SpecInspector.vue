@@ -7,6 +7,7 @@ import {Dimensioning} from '../../scripts/blueprint.js';
 import {schemaForSpec} from '../../scripts/items/generated/index.js';
 import {materialOptions, MATERIAL_GROUPS} from '../../scripts/core/materials.js';
 import {useDisplayUnit} from '../composables/useDisplayUnit.js';
+import {useAssets} from '../composables/useAssets.js';
 
 /**
  * The controls for a generated item, rendered from its builder's schema.
@@ -60,6 +61,7 @@ const props = defineProps({
 const emit = defineEmits(['changed']);
 
 const {unit} = useDisplayUnit();
+const assets = useAssets();
 
 const schema = computed(() => schemaForSpec(props.item.metadata && props.item.metadata.spec));
 
@@ -122,9 +124,27 @@ function targets()
 /** @type {import('vue').Ref<Object>} */
 const spec = ref({});
 
+/**
+ * What the item's HOST refused, if anything.
+ *
+ * A generated item may declare requirements of the thing it sits in, and the
+ * host validates them on binding -- `door.js`'s `applyDoorFit` is the first one
+ * that can answer no, because a pocket door needs a wall thick enough to hold
+ * its leaf and a run of wall to slide into. The refusal has to surface
+ * somewhere: the drawing already shows it, by leaving the door shut, and a door
+ * that ignores its own "how far open" slider with no explanation is worse than
+ * one that cannot be drawn at all.
+ *
+ * Read in `readBack` rather than computed off the item, because the item is a
+ * `Mesh` and not reactive -- and `readBack` runs on selection, on a unit change,
+ * and after every write, which are the three moments the answer can change.
+ */
+const refusals = ref([]);
+
 function readBack()
 {
 	spec.value = props.item.getSpec() || {};
+	refusals.value = props.item.specNotices || [];
 }
 
 /** `material.leaf` reaches into the spec's material block. */
@@ -182,9 +202,67 @@ const visibleFields = computed(() =>
 	return schema.value.fields.filter((field) =>
 	{
 		if (!field.when) {return true;}
-		return Object.keys(field.when).every((key) => valueAt(key) === field.when[key]);
+		return Object.keys(field.when).every((key) =>
+		{
+			var wanted = field.when[key];
+			// An array is a set of values the field is relevant for, which is what a
+			// cabinet's `doors` control needs: it belongs to three of the seven face
+			// layouts and to none of the drawer banks. A scalar is the older form
+			// and still the common one.
+			return Array.isArray(wanted) ? wanted.indexOf(valueAt(key)) !== -1 : valueAt(key) === wanted;
+		});
 	});
 });
+
+/**
+ * How many options a segmented control can hold before it becomes a dropdown.
+ *
+ * A row of pills is the right control for two or three choices and the wrong one
+ * for eight: `.segmented` is an inline flex row, so a cabinet's seven face
+ * layouts ran straight out of the side of the panel. Every choice in the app was
+ * two or three until then, which is why nothing had found it.
+ *
+ * Four, so the sink's five mounts become a dropdown too - "Semi-recessed" beside
+ * four others was the same row about to overflow.
+ */
+const SEGMENT_LIMIT = 4;
+
+/**
+ * Read a choice back from a dropdown, as the type the schema declared.
+ *
+ * A `<select>` deals only in strings, and some of these values are numbers -
+ * `doors` is 0, 1 or 2. Matching on the stringified value and writing back the
+ * ORIGINAL keeps a number a number, rather than storing "2" in a spec and
+ * leaving whoever reads it to guess.
+ *
+ * @param {Object} field
+ * @param {Event} event
+ */
+function onChoice(field, event)
+{
+	const select = /** @type {HTMLSelectElement} */ (event.target);
+	const chosen = field.options.find((option) => String(option.value) === select.value);
+	if (chosen)
+	{
+		write(field.key, chosen.value, field);
+	}
+}
+
+/**
+ * Start fetching the surface maps when a material control is reached.
+ *
+ * A pointer resting on the dropdown is the same signal the catalog palette
+ * already acts on (`CatalogDrawer` -> `prefetchItem`), and it arrives a few
+ * hundred milliseconds before the click, which is most of the fetch. Nothing is
+ * downloaded until then: a design in painted cabinets never asks for any of it.
+ *
+ * Fire and forget - a prefetch that fails costs nothing, and the real load
+ * reports through the ordinary path where somebody is waiting.
+ */
+function warmSurfaces()
+{
+	assets.prefetchSurfaces();
+}
 
 /** Grouped for the picker, so 20 finishes are not one flat list. */
 function optionsFor(field)
@@ -218,6 +296,10 @@ watch(unit, readBack);
 <template>
 	<section v-if="schema" class="inspector-section">
 		<h3 class="inspector-heading">{{ schema.label }}</h3>
+
+		<p v-for="refusal in refusals" :key="refusal" class="inspector-refusal">
+			{{ refusal }}
+		</p>
 
 		<div v-if="hasShared" class="field">
 			<span class="field-label">Style applies to</span>
@@ -260,7 +342,16 @@ watch(unit, readBack);
 
 			<div v-else-if="field.type === 'choice'" class="field">
 				<span class="field-label">{{ field.label }}</span>
-				<div class="segmented">
+				<select
+					v-if="field.options.length > SEGMENT_LIMIT"
+					class="field-input"
+					:value="String(valueAt(field.key))"
+					@change="onChoice(field, $event)">
+					<option v-for="option in field.options" :key="option.value" :value="String(option.value)">
+						{{ option.label }}
+					</option>
+				</select>
+				<div v-else class="segmented">
 					<button
 						v-for="option in field.options" :key="option.value"
 						type="button" class="segment"
@@ -277,6 +368,8 @@ watch(unit, readBack);
 				<select
 					class="field-input"
 					:value="valueAt(field.key)"
+					@pointerenter="warmSurfaces"
+					@focus="warmSurfaces"
 					@change="onSelect(field, $event)">
 					<optgroup
 						v-for="group in optionsFor(field)" :key="group.label" :label="group.label">

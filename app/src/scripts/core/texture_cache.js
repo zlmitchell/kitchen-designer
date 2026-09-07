@@ -44,6 +44,27 @@ import {TextureLoader, Texture} from 'three';
 const loader = new TextureLoader();
 
 /**
+ * Whether an image can be decoded here at all.
+ *
+ * three's `ImageLoader` builds an `<img>` through `document.createElementNS`, so
+ * `TextureLoader.load` throws outright without a DOM. That did not matter while
+ * the only callers were `Edge`, `Floor` and `Skybox` - all of which run in a
+ * browser or a jsdom test - but Phase 8a put a texture behind
+ * `core/materials.js`, and a generated cabinet is built in the default `node`
+ * environment by most of the suite that covers it.
+ *
+ * So: no DOM, no decode, and everything else about the cache behaves normally.
+ * A caller gets its texture, the refcount is real, and release still works - the
+ * texture simply never gains an image, which is exactly what a headless caller
+ * can use. Failing instead would mean every builder had to know whether it was
+ * being run for pixels or for geometry.
+ */
+function canDecode()
+{
+	return typeof document !== 'undefined';
+}
+
+/**
  * @typedef {Object} CacheEntry
  * @property {?import('three').Texture} master The loaded original. Never handed
  *           out. Nullable only for the statement between the object literal and
@@ -79,6 +100,16 @@ export function acquireTexture(url, onLoad)
 	{
 		/** @type {CacheEntry} */
 		var created = {master: null, clones: new Set(), loaded: false, waiting: []};
+		if (!canDecode())
+		{
+			// Headless. Everything below still works - the entry, the clones, the
+			// refcount - there are simply never any pixels, which is the honest
+			// answer when there is nothing to decode into.
+			created.master = new Texture();
+			entry = created;
+			entries.set(url, entry);
+			return handOut(entry, url, onLoad);
+		}
 		created.master = loader.load(url, function ()
 		{
 			created.loaded = true;
@@ -93,6 +124,19 @@ export function acquireTexture(url, onLoad)
 		entries.set(url, entry);
 	}
 
+	return handOut(entry, url, onLoad);
+}
+
+/**
+ * Give a caller its own clone over a cached entry's pixels.
+ *
+ * @param {CacheEntry} entry
+ * @param {string} url
+ * @param {function(): void} [onLoad]
+ * @returns {import('three').Texture}
+ */
+function handOut(entry, url, onLoad)
+{
 	// See CacheEntry.master: an entry in the map always has one. Guarding beats
 	// asserting - if the invariant is ever broken, a caller gets a fresh texture
 	// instead of a TypeError mid-render.

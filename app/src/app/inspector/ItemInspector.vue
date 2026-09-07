@@ -35,6 +35,16 @@ const name = ref('');
 const dimensions = reactive({width: 0, height: 0, depth: 0});
 const rotation = ref(0);
 const canRotate = ref(false);
+/**
+ * Whether there is another wall face this item could sit on.
+ *
+ * The answer to "there is no rotate button on the cabinets", which there is not
+ * and should not be: a wall-bound item takes its facing from the wall, so a
+ * rotation control would write a number the next bind discards. In a corner,
+ * though, two walls are equally close and the automatic pick is a coin toss -
+ * and the thing you actually want is the OTHER face, not a different angle.
+ */
+const canChangeWall = ref(false);
 /** A generated item is sized by its spec, so scaling it is not on offer here. */
 const generated = ref(false);
 const flags = reactive({proportional: false, fixed: false});
@@ -59,6 +69,9 @@ function readBack()
 	// (`WallItem.changeWallEdge` overwrites rotation.y), so offering the control
 	// would be offering a number the next bind discards.
 	canRotate.value = Boolean(props.item.allowRotate) && !props.item.fixed;
+	canChangeWall.value = Boolean(props.item.bindToNextWallEdge)
+		&& !props.item.fixed
+		&& props.item.nearbyWallEdges().length > 1;
 	// Width/height/depth below call `Item.resize`, which SCALES the mesh. For a
 	// generated item that is the wrong operation and a trap: it stretches the
 	// stiles with the box, and it leaves a scale that then multiplies against the
@@ -138,6 +151,22 @@ function nudge(degrees)
 	setRotation(Math.round((current + degrees) / degrees) * degrees);
 }
 
+/**
+ * Put this item on the next wall face that will have it.
+ *
+ * Cycles, because in a corner there are usually four - two walls, two sides each
+ * - and naming them in a dropdown would mean naming walls, which nothing else in
+ * this app does.
+ */
+function nextWall()
+{
+	if (props.item.bindToNextWallEdge())
+	{
+		readBack();
+		emit('changed');
+	}
+}
+
 function setProportional(next)
 {
 	flags.proportional = next;
@@ -185,6 +214,16 @@ onBeforeUnmount(() => {materials.value = [];});
 				label="Depth" :unit="unit" :min="0.1" :step="0.1" :model-value="dimensions.depth"
 				@update:model-value="resize('depth', $event)" />
 		</template>
+
+		<div v-if="canChangeWall" class="field">
+			<span class="field-label">Wall</span>
+			<button
+				type="button" class="btn btn-outline w-full"
+				title="Put this item on the next wall face - the other side, or the return wall in a corner"
+				@click="nextWall">
+				Move to next wall
+			</button>
+		</div>
 
 		<NumberField
 			v-if="canRotate" label="Rotation" unit="degrees" :min="0" :max="360" :step="15"

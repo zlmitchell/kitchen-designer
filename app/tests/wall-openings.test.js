@@ -389,3 +389,131 @@ describe('a generated item is sized by its spec and nothing else', () =>
 		expect(item.getWidth()).toBeCloseTo(20.32, 2);
 	});
 });
+
+describe('a window sits on its sill, and a full-height one on the wall', () =>
+{
+	beforeEach(() =>
+	{
+		resetAll();
+		installCanvas2D(window);
+	});
+
+	/**
+	 * A window in a 250cm room, through the real load path, so it has a builder,
+	 * a wall to bind to, and an Edge drawing the face it is in.
+	 */
+	function windowInRoom(spec, ypos)
+	{
+		const model = new Model('/textures/');
+		model.loadSerialized(JSON.stringify({
+			floorplan: {
+				version: '2.0.0', units: 'cm',
+				corners: {
+					a: {x: 0, y: 0, elevation: 250}, b: {x: 400, y: 0, elevation: 250},
+					c: {x: 400, y: 300, elevation: 250}, d: {x: 0, y: 300, elevation: 250},
+				},
+				walls: [
+					{corner1: 'a', corner2: 'b', thickness: 11.43}, {corner1: 'b', corner2: 'c'},
+					{corner1: 'c', corner2: 'd'}, {corner1: 'd', corner2: 'a'},
+				],
+				rooms: {}, wallTextures: [], floorTextures: {}, newFloorTextures: {},
+			},
+			items: [{
+				id: 'w1', item_name: 'Window', item_type: 3, format: 'generated',
+				model_url: 'generated:window',
+				xpos: 200, ypos: (ypos === undefined) ? 157 : ypos, zpos: 0, rotation: 0,
+				scale_x: 1, scale_y: 1, scale_z: 1, fixed: false,
+				spec: Object.assign({
+					kind: 'window', type: 'double-hung', width: 91.44, height: 152.4,
+					sillHeight: 81.28, wallThickness: 11.43,
+				}, spec),
+			}],
+		}));
+		const item = model.scene.getItems()[0];
+		expect(item, 'the window loaded').toBeTruthy();
+		return {item, drawn: new Edge(new three.Scene(), item.currentWallEdge, stubControls(), null)};
+	}
+
+	it('lands on the sill height its spec asks for, not the ypos in the file', () =>
+	{
+		// A window is the first generated item whose POSITION is part of what it
+		// is. The file's `ypos: 157` is what `extract.py` bakes for every window
+		// on the plan; the spec is what the panel edits, and binding is where the
+		// two are reconciled.
+		const {item} = windowInRoom({sillHeight: 60}, 157);
+		expect(item.position.y).toBeCloseTo(60 + 152.4 / 2, 3);
+	});
+
+	it('cuts a hole through the whole wall when it runs floor to ceiling', () =>
+	{
+		// `docs/generated-items.md` rule 4 says to expect the doorway trap at the
+		// OTHER end of the wall here, and this is it: a full-height window's hole
+		// reaches the contour on the floor edge AND the wall top, and
+		// `ShapeUtils.triangulateShape` discards a hole that strays outside its
+		// contour silently and in full.
+		const {item, drawn} = windowInRoom({fullHeight: true});
+		// The wall is 250 and the liner is 1.9 each end, so the clear opening is
+		// 246.2 and the lining fills the wall exactly.
+		expect(item.getHeight()).toBeCloseTo(250, 2);
+		expect(item.position.y).toBeCloseTo(125, 2);
+		// Through it at the floor, in the middle, and at the head.
+		expect(faceCovers(drawn, new Vector3(200, 3, 0)), 'open at the floor').toBe(false);
+		expect(faceCovers(drawn, new Vector3(200, 125, 0)), 'open in the middle').toBe(false);
+		expect(faceCovers(drawn, new Vector3(200, 247, 0)), 'open at the head').toBe(false);
+		// And still a wall either side, so this cannot pass by drawing nothing.
+		expect(faceCovers(drawn, new Vector3(40, 125, 0)), 'wall left of it').toBe(true);
+		expect(faceCovers(drawn, new Vector3(360, 125, 0)), 'wall right of it').toBe(true);
+	});
+
+	it('cuts the hole even when float error puts the head above the wall top', () =>
+	{
+		// The door's regression, at the other end of the wall, and it has to be
+		// FORCED rather than hoped for: built to exactly the wall height, the
+		// float32 bounding box happened to round the safe way and the hole was cut
+		// with the clamp disabled. Three microns the other way is what removed ten
+		// doorways on the traced plan, and there is nothing to say which way a
+		// given wall height and liner will round.
+		const {item, drawn} = windowInRoom({fullHeight: true});
+		// Measured against the item's OWN half size rather than nudged by a fixed
+		// epsilon: `halfSize` is float32 off a bounding box, so 3e-6 added to a
+		// position that was already a micron short of the top lands back inside.
+		// This puts the head three microns above the wall, deliberately.
+		item.position.y = 250 - item.halfSize.y + 0.000003;
+		const again = new Edge(new three.Scene(), item.currentWallEdge, stubControls(), null);
+		expect(faceCovers(again, new Vector3(200, 125, 0)), 'open in the middle').toBe(false);
+		expect(faceCovers(again, new Vector3(200, 247, 0)), 'open at the head').toBe(false);
+		expect(faceCovers(again, new Vector3(40, 125, 0)), 'wall left of it').toBe(true);
+		expect(drawn).toBeTruthy();
+	});
+
+	it('takes its height from the wall rather than from the spec, once bound', () =>
+	{
+		// The item declares a requirement of its host and the host answers - the
+		// mechanism ROADMAP.md phase 3 wants, in the one place phase 5 needs it.
+		// The saved height is deliberately wrong; the wall is what decides.
+		const {item} = windowInRoom({fullHeight: true, height: 40});
+		expect(item.getSpec().height).toBeCloseTo(246.2, 2);
+	});
+
+	it('writes a dragged sill height back into the spec', () =>
+	{
+		// The other direction. Without `onPlaced` the panel and the mouse hold two
+		// different sill heights, and the next bind - a document load, a wall edit
+		// - throws away whichever one the mouse set.
+		const {item} = windowInRoom({sillHeight: 60}, 157);
+		item.moveToPosition(new Vector3(200, 110, 0), item.currentWallEdge);
+		expect(item.getSpec().sillHeight).toBeCloseTo(110 - 152.4 / 2, 1);
+		// And it survives a re-bind, which is what the write-back is for.
+		item.changeWallEdge(item.currentWallEdge);
+		expect(item.position.y).toBeCloseTo(110, 1);
+	});
+
+	it('leaves a full-height window alone when it is moved', () =>
+	{
+		// Its sill is the floor by definition, and `boundMove` will happily push
+		// it a centimetre up the wall.
+		const {item} = windowInRoom({fullHeight: true});
+		item.moveToPosition(new Vector3(180, 200, 0), item.currentWallEdge);
+		expect(item.getSpec().sillHeight).toBeCloseTo(1.9, 2);
+	});
+});

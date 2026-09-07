@@ -278,6 +278,32 @@ export function useDesignIO(store)
 	}
 
 	/**
+	 * Replace the design with one the importer has just traced.
+	 *
+	 * Goes through `loadDesign` for the parse and the error reporting, then
+	 * through `applyUnderlay` for the backdrop - which is the whole reason this
+	 * exists rather than the dialog calling `loadDesign` itself. The underlay
+	 * block is in plain centimetres and image pixels and has to be converted
+	 * against the display unit that is live right now, and the note on
+	 * `applyUnderlay` records what happens when it is not: the sheet is built a
+	 * hundred times too big and drawn so far outside the viewport that it looks
+	 * like the image never loaded.
+	 *
+	 * @param {object} document A design as `import/trace.js` builds it.
+	 * @param {string} [label]
+	 * @returns {boolean} whether it loaded.
+	 */
+	function loadTraced(document, label)
+	{
+		if (!loadDesign(JSON.stringify(document), label || 'the imported plan'))
+		{
+			return false;
+		}
+		applyUnderlay(document.floorplan ? document.floorplan.underlay : null);
+		return true;
+	}
+
+	/**
 	 * @param {File} file A `.blueprint3d` document.
 	 */
 	async function openDesign(file)
@@ -377,5 +403,8 @@ export function useDesignIO(store)
 		});
 	}
 
-	return {busy, lastError, newDesign, bootDesign, loadDesign, openDesign, saveDesign, saveMesh, saveGLTF};
+	return {
+		busy, lastError, newDesign, bootDesign, loadDesign, loadTraced, openDesign,
+		saveDesign, saveMesh, saveGLTF,
+	};
 }

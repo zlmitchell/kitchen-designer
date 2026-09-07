@@ -15,7 +15,7 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as THREE from 'three';
 import {Main} from '../src/scripts/three/main.js';
-import {acquireTexture, releaseTexture, clearTextureCache, textureCacheStats} from '../src/scripts/three/texture_cache.js';
+import {acquireTexture, releaseTexture, clearTextureCache, textureCacheStats} from '../src/scripts/core/texture_cache.js';
 import {Floorplan3D} from '../src/scripts/three/floorPlan.js';
 import {Lights} from '../src/scripts/three/lights.js';
 import {PointerLockControls} from '../src/scripts/three/pointerlockcontrols.js';

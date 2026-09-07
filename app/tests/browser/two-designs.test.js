@@ -38,7 +38,7 @@ import {Configuration, scale} from '../../src/scripts/core/configuration.js';
 import {DesignRuntime} from '../../src/scripts/core/design_runtime.js';
 import {createRenderProfile, isStudio, RENDER_STUDIO} from '../../src/scripts/core/render_profile.js';
 import {setFloorplannerPalette, floorplannerPalette} from '../../src/scripts/floorplanner/floorplanner_view.js';
-import {textureCacheStats} from '../../src/scripts/three/texture_cache.js';
+import {textureCacheStats} from '../../src/scripts/core/texture_cache.js';
 import {dimCentiMeter, dimMeter} from '../../src/scripts/core/units.js';
 
 const PRISTINE = {...floorplannerPalette};

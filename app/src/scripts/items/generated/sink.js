@@ -1,7 +1,8 @@
 // @ts-check
-import {Box3, BoxGeometry, CylinderGeometry, Group, LatheGeometry, Mesh, Vector2, Vector3} from 'three';
+import {Box3, CylinderGeometry, Group, LatheGeometry, Mesh, Vector2, Vector3} from 'three';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
+import {boxGeometryFor} from '../../core/geometry_builders.js';
 
 /**
  * A sink: a basin, and where it sits relative to the worktop.
@@ -108,7 +109,7 @@ const DEFAULTS = {
 
 function box(mat, x0, x1, y0, y1, z0, z1)
 {
-	var mesh = new Mesh(new BoxGeometry(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)), mat);
+	var mesh = new Mesh(boxGeometryFor(mat, Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)), mat);
 	mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
 	return mesh;
 }
@@ -182,6 +183,31 @@ function roundBowl(mat, radius, top, depth, wall, oval, drainMat, wantDrain)
 }
 
 /**
+ * The footprint a bowl actually occupies, in centimetres.
+ *
+ * Exported because the worktop has to be cut to the bowl and not to the spec: a
+ * round sink's spec says `width` 76.2 and `frontToBack` 47, and the bowl is a
+ * 47cm circle. `items/fitting.js` cuts the hole and would otherwise cut a
+ * rectangle 29cm wider than the thing going into it.
+ *
+ * @param {SinkSpec} spec
+ * @returns {{width: number, depth: number}}
+ */
+export function openingFor(spec)
+{
+	var width = Math.max(10, spec.width === undefined ? DEFAULTS.width : spec.width);
+	var ftb = Math.max(10, spec.frontToBack === undefined ? DEFAULTS.frontToBack : spec.frontToBack);
+	if (spec.shape === 'round')
+	{
+		var diameter = Math.min(width, ftb);
+		return {width: diameter, depth: diameter};
+	}
+	// A rect fills its span, and an oval is squeezed to it - both are `width` by
+	// `frontToBack` at the rim.
+	return {width: width, depth: ftb};
+}
+
+/**
  * Where the bowl's rim sits, given the mount.
  *
  * y = 0 is the top of the worktop throughout, which is what makes these five
@@ -220,6 +246,11 @@ export const SINK_SCHEMA = {
 			{value: 'drop-in', label: 'Drop-in'},
 			{value: 'farmhouse', label: 'Farmhouse'},
 			{value: 'vessel', label: 'Vessel'},
+			// `mounting()` has answered for this one since the builder was written
+			// and nothing could ask for it - the same gap the cabinet's drawers
+			// were in. A bowl that drops part way into the slab and stands part way
+			// proud of it, which is neither of the two either side of it here.
+			{value: 'semi-recessed', label: 'Semi-recessed'},
 		]},
 		{key: 'shape', label: 'Shape', type: 'choice', options: [
 			{value: 'rect', label: 'Rectangular'},
@@ -240,7 +271,7 @@ export const SINK_SCHEMA = {
  * Build a sink.
  *
  * @param {SinkSpec} spec
- * @returns {{geometry: import('three').BufferGeometry, materials: Array, parts: Array}}
+ * @returns {import('./index.js').GeneratedBuild}
  */
 export function buildSink(spec)
 {
@@ -273,7 +304,14 @@ export function buildSink(spec)
 	}
 	else
 	{
-		roundBowl(mats.basin, width / 2, place.rimY, depth, wall,
+		// A ROUND bowl is round, so its diameter is the smaller of the two spans -
+		// not the width. Taking `width` for both was the bug behind "round blows
+		// out the front": a 76cm sink in a 47cm-deep opening came out 76cm deep
+		// as well, which is 29cm of bowl hanging past a 63.5cm worktop and through
+		// the cabinet face. An OVAL is the one that gets to use both, which is
+		// what an oval is for.
+		var diameter = (s.shape === 'oval') ? width : Math.min(width, ftb);
+		roundBowl(mats.basin, diameter / 2, place.rimY, depth, wall,
 			(s.shape === 'oval') ? Math.max(0.3, ftb / width) : 1, mats.basin, s.drain)
 			.forEach(function (mesh) {group.add(mesh);});
 	}
@@ -306,8 +344,12 @@ export function buildSink(spec)
 	}
 
 	// Centred, like every generated part. Which loses the "y = 0 is the worktop"
-	// frame the mounts were reasoned in - that is fine while a sink is placed by
-	// hand, and phase 3's run is what will put it back by reading `mount`.
+	// frame the mounts were reasoned in - so the shift is REPORTED rather than
+	// simply thrown away, and `items/fitting.js` puts the datum back by reading
+	// it. That comment used to end "phase 3's run is what will put it back";
+	// this is the smallest piece of that run, built because three bugs were the
+	// same bug: a drop-in that did not rise above the slab, a cutout that did not
+	// follow the mount, and a cabinet front that ignored an apron.
 	group.updateMatrixWorld(true);
 	var middle = new Box3().setFromObject(group).getCenter(new Vector3());
 	group.children.forEach(function (child) {child.position.sub(middle);});
@@ -316,5 +358,14 @@ export function buildSink(spec)
 	group.updateMatrixWorld(true);
 
 	var merged = mergeMeshes(group);
-	return {geometry: merged.geometry, materials: merged.materials, parts: []};
+	return {
+		geometry: merged.geometry,
+		materials: merged.materials,
+		parts: [],
+		// How far the recentring above moved the builder's origin. Everything in
+		// `mounting()` is expressed against "y = 0 is the top of the worktop", so
+		// this is what a caller needs to put that plane back where it belongs:
+		// the item's centre sits `datum.y` above it.
+		datum: {y: middle.y},
+	};
 }

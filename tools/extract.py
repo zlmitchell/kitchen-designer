@@ -308,6 +308,9 @@ ON_WALL_TOL_IN = 6.0
 # the configured 10cm that was invisible. Measured walls are 7.7 to 19cm, so a
 # 8cm door in a 19cm wall is buried in it and a 14.75cm window in a 7.7cm wall
 # stands proud of both faces.
+# NOTHING USES THIS ANY MORE - windows are generated, see GENERATED_WINDOW
+# below. Kept the way DOOR is kept: the measurements are the argument. 123.0769
+# is the only width this model has, and the plan wants 19 different ones.
 WINDOW = {"model": "models/js-glb/whitewindow.glb", "type": 3,
           "name": "Window", "w": 123.0769, "h": 170.473, "d": 14.75,
           "height_cm": 152.4, "centre_cm": 157.0}   # 60" tall, 32" sill
@@ -329,6 +332,21 @@ DOOR_JAMB_CM = 1.9      # 3/4in jamb stock; the builder's default
 DOOR_OPEN_FRACTION = 0.75   # how far an interior door is drawn open
 GENERATED_DOOR = {"model": "generated:door", "type": 7, "format": "generated",
                   "name": "Door", "height_cm": 203.2}
+# A window is generated for the same reason a door is, one step worse.
+# whitewindow.glb is 123.0769cm wide and there is no other width it has, so
+# every window on this plan was that model scaled -- `scale_x = width / 123.08`
+# stretches the frame, the sash and any muntin along with the glass, and
+# `scale_z = thickness / 14.75` squashes the sash into the wall plane on a thin
+# partition. The plan measures 19 windows and no two of them want the same
+# scale. See app/src/scripts/items/generated/window.js.
+WINDOW_JAMB_CM = 1.9        # the builder's jamb liner, top bottom and sides
+GENERATED_WINDOW = {"model": "generated:window", "type": 3,
+                    "format": "generated", "name": "Window",
+                    # 60in tall on a 32in sill. The plan is a plan: it gives a
+                    # width and says nothing about height, so both of these are
+                    # the standard rather than a measurement, and both are
+                    # editable in the inspector.
+                    "height_cm": 152.4, "sill_cm": 81.28}
 
 
 def diagonals(page, clip, k, colour=ARCHITECTURE):
@@ -648,6 +666,65 @@ def door_item(index, kind, x, y, width, horizontal, thickness_cm,
     }
 
 
+def window_item(index, kind, x, y, width, horizontal, thickness_cm, ox, oy):
+    """A generated window: a spec, not a model and not three scale factors.
+
+    Same argument as `door_item`. Nothing is scaled -- the builder is handed the
+    opening the drawing measured and the wall's own thickness, and makes a
+    lining that fits. The three scale factors this replaces were approximating
+    exactly that, and badly: `scale_x` stretched the stiles with the glass, and
+    `scale_z` was trying to make a 14.75cm model span a 7.7cm wall.
+
+    `sillHeight` is the one thing here the drawing cannot say. A plan view gives
+    a width and nothing else, so the height and the sill are the standard, and
+    they are in the SPEC rather than baked into `ypos` -- which is the whole
+    point of the field. The item applies it when it binds and writes it back
+    when somebody drags the window up the wall, so the panel and the mouse hold
+    one number between them instead of two.
+
+    The type is `double-hung`, because that is what a plan drawing of a window
+    with no further symbol means in a house like this one. The tracer has no
+    evidence for casement or slider and does not guess: `opening_truth.py` reads
+    glazing that connects the two jambs and nothing about how it opens.
+    """
+    height_cm = GENERATED_WINDOW["height_cm"]
+    sill_cm = GENERATED_WINDOW["sill_cm"]
+    spec = {
+        "kind": "window",
+        "type": "double-hung",
+        "width": round(width * CM_PER_INCH, 2),
+        "height": height_cm,
+        "sillHeight": sill_cm,
+        "wallThickness": round(thickness_cm, 2) if thickness_cm else 11.43,
+        "grille": {"pattern": "none", "rows": 2, "cols": 2},
+        "openFraction": 0,
+    }
+    return {
+        "id": f"{kind}-{index}",
+        "item_name": GENERATED_WINDOW["name"],
+        "item_type": GENERATED_WINDOW["type"],
+        "model_url": GENERATED_WINDOW["model"],
+        "format": GENERATED_WINDOW["format"],
+        "xpos": round((x - ox) * CM_PER_INCH, 2),
+        # The item's origin is the middle of its own geometry, and that geometry
+        # is the ROUGH opening -- the clear opening plus a liner top and bottom,
+        # unlike a door, which has none under it. `applyWindowPlacement` sets
+        # this from the spec the moment the window binds; writing it here is
+        # what makes the file agree with itself before anything is loaded.
+        "ypos": round(sill_cm + height_cm / 2.0, 2),
+        "zpos": round((y - oy) * CM_PER_INCH, 2),
+        # Wall orientation only.
+        "rotation": (0 if horizontal else math.pi / 2),
+        "scale_x": 1,
+        "scale_y": 1,
+        "scale_z": 1,
+        "fixed": False,
+        "resizable": True,
+        "material_colors": [],
+        "spec": spec,
+    }
+
+
 def items_for(openings, ox, oy, open_doors=False):
     """architect3d items. Wall items snap to the nearest wall edge on load, so
     an approximate position along the right wall is enough to orient them."""
@@ -666,29 +743,8 @@ def items_for(openings, ox, oy, open_doors=False):
                                    thickness_cm, hinge, swing, exterior,
                                    open_doors, ox, oy))
             continue
-        spec = WINDOW
-        items.append({
-            "id": f"{kind}-{index}",
-            "item_name": spec["name"],
-            "item_type": spec["type"],
-            "model_url": spec["model"],
-            "format": "gltf",
-            "xpos": round((x - ox) * CM_PER_INCH, 2),
-            "ypos": spec["centre_cm"],
-            "zpos": round((y - oy) * CM_PER_INCH, 2),
-            "rotation": (0 if horizontal else math.pi / 2),
-            # Width from the drawing; height from the standard the drawing does
-            # not give in plan view. Both are editable in the inspector.
-            "scale_x": round(width * CM_PER_INCH / spec["w"], 4),
-            "scale_y": round(spec["height_cm"] / spec["h"], 4),
-            # Scaled to span the wall, so the opening reads as a hole through
-            # it rather than a panel stuck on one face.
-            "scale_z": (round(thickness_cm / spec["d"], 4)
-                        if thickness_cm else 1),
-            "fixed": False,
-            "resizable": True,
-            "material_colors": [],
-        })
+        items.append(window_item(index, kind, x, y, width, horizontal,
+                                 thickness_cm, ox, oy))
     return items
 
 

@@ -1,6 +1,7 @@
 // @ts-check
 import {ref, shallowRef} from 'vue';
 import {AssetManifest, AssetResolver} from '../../scripts/blueprint.js';
+import {MATERIALS} from '../../scripts/core/materials.js';
 
 /**
  * Where this deployment's assets actually live (RM-003 A5).
@@ -195,11 +196,42 @@ export function useAssets()
 		await resolver.preload([entry.model], {maxBytes: HOVER_PREFETCH_MAX_BYTES});
 	}
 
+	/**
+	 * Warm every surface map the material library can ask for.
+	 *
+	 * All of them at once, rather than the hovered one, and the reason is the
+	 * numbers: the whole set is six files and 199 KB, because the maps are neutral
+	 * greys shared across a family - one wood grain serves oak, walnut, maple and
+	 * birch. Prefetching per option would be more code to save nothing.
+	 *
+	 * Called when a material control is reached rather than at startup, so a
+	 * design in painted cabinets never fetches any of it. The resolver already
+	 * remembers what it has warmed, so this is cheap to call on every hover.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	async function prefetchSurfaces()
+	{
+		var urls = [];
+		Object.keys(MATERIALS).forEach(function (id)
+		{
+			['map', 'normalMap', 'ormMap'].forEach(function (slot)
+			{
+				var url = MATERIALS[id][slot];
+				if (url && urls.indexOf(url) === -1)
+				{
+					urls.push(url);
+				}
+			});
+		});
+		await resolver.preload(urls, {maxBytes: HOVER_PREFETCH_MAX_BYTES});
+	}
+
 	/** What the resolver has been asked for and what it warmed. */
 	function stats()
 	{
 		return resolver.stats();
 	}
 
-	return {ready, count, errors, load, prefetchItem, stats, resolver};
+	return {ready, count, errors, load, prefetchItem, prefetchSurfaces, stats, resolver};
 }

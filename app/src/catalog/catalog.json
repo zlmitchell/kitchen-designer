@@ -1236,6 +1236,214 @@
 			"format": "gltf"
 		},
 		{
+			"name": "Window - Double Hung",
+			"image": "models/thumbnails_new/window-double-hung.png",
+			"model": "generated:window",
+			"type": 3,
+			"format": "generated",
+			"spec": {
+				"kind": "window",
+				"type": "double-hung",
+				"width": 91.44,
+				"height": 152.4,
+				"sillHeight": 81.28,
+				"wallThickness": 11.43,
+				"grille": {
+					"pattern": "none",
+					"rows": 2,
+					"cols": 2
+				},
+				"openFraction": 0
+			}
+		},
+		{
+			"name": "Window - Casement",
+			"image": "models/thumbnails_new/window-casement.png",
+			"model": "generated:window",
+			"type": 3,
+			"format": "generated",
+			"spec": {
+				"kind": "window",
+				"type": "casement",
+				"width": 60.96,
+				"height": 121.92,
+				"sillHeight": 91.44,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative",
+				"grille": {
+					"pattern": "none",
+					"rows": 2,
+					"cols": 2
+				},
+				"openFraction": 0.35
+			}
+		},
+		{
+			"name": "Window - Picture",
+			"image": "models/thumbnails_new/window-picture.png",
+			"model": "generated:window",
+			"type": 3,
+			"format": "generated",
+			"spec": {
+				"kind": "window",
+				"type": "picture",
+				"width": 182.88,
+				"height": 121.92,
+				"sillHeight": 76.2,
+				"wallThickness": 11.43,
+				"grille": {
+					"pattern": "prairie",
+					"rows": 2,
+					"cols": 2
+				},
+				"openFraction": 0
+			}
+		},
+		{
+			"name": "Door",
+			"image": "models/thumbnails_new/door-swing.png",
+			"model": "generated:door",
+			"type": 7,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "swing",
+				"width": 81.28,
+				"height": 203.2,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative",
+				"leaf": "six-panel",
+				"openFraction": 0
+			}
+		},
+		{
+			"name": "Door - French",
+			"image": "models/thumbnails_new/door-french.png",
+			"model": "generated:door",
+			"type": 7,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "french",
+				"width": 152.4,
+				"height": 203.2,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative",
+				"openFraction": 0.35,
+				"grille": {
+					"pattern": "colonial",
+					"rows": 4,
+					"cols": 2
+				}
+			}
+		},
+		{
+			"name": "Door - Bypass Closet",
+			"image": "models/thumbnails_new/door-bypass.png",
+			"model": "generated:door",
+			"type": 7,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "bypass",
+				"width": 146.05,
+				"height": 203.2,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative",
+				"leaf": "two-panel",
+				"openFraction": 0.6
+			}
+		},
+		{
+			"name": "Door - Sliding Patio",
+			"image": "models/thumbnails_new/door-sliding.png",
+			"model": "generated:door",
+			"type": 7,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "sliding",
+				"width": 182.88,
+				"height": 203.2,
+				"wallThickness": 15.24,
+				"hand": "lo",
+				"swing": "negative",
+				"openFraction": 0.5
+			}
+		},
+		{
+			"name": "Door - Pocket",
+			"image": "models/thumbnails_new/door-pocket.png",
+			"model": "generated:door",
+			"type": 7,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "pocket",
+				"width": 81.28,
+				"height": 203.2,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative",
+				"openFraction": 0.35
+			}
+		},
+		{
+			"name": "Door - Bifold",
+			"image": "models/thumbnails_new/door-bifold.png",
+			"model": "generated:door",
+			"type": 7,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "bifold",
+				"width": 146.05,
+				"height": 203.2,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative",
+				"leaves": 2,
+				"openFraction": 0.5
+			}
+		},
+		{
+			"name": "Door - Barn",
+			"image": "models/thumbnails_new/door-barn.png",
+			"model": "generated:door",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "barn",
+				"width": 91.44,
+				"height": 203.2,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative",
+				"openFraction": 0
+			}
+		},
+		{
+			"name": "Cased Opening",
+			"image": "models/thumbnails_new/door-cased.png",
+			"model": "generated:door",
+			"type": 7,
+			"format": "generated",
+			"spec": {
+				"kind": "door",
+				"operation": "cased",
+				"width": 91.44,
+				"height": 203.2,
+				"wallThickness": 11.43,
+				"hand": "lo",
+				"swing": "negative"
+			}
+		},
+		{
 			"name": "Post",
 			"image": "models/thumbnails_new/post.png",
 			"model": "generated:post",

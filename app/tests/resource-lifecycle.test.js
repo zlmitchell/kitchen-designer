@@ -38,7 +38,7 @@ import {Floor} from '../src/scripts/three/floor.js';
 import {Edge} from '../src/scripts/three/edge.js';
 import {HUD} from '../src/scripts/three/hud.js';
 import {Model} from '../src/scripts/model/model.js';
-import {textureCacheStats} from '../src/scripts/three/texture_cache.js';
+import {textureCacheStats} from '../src/scripts/core/texture_cache.js';
 import {EVENT_ITEM_SELECTED, EVENT_ITEM_UNSELECTED, EVENT_UPDATED} from '../src/scripts/core/events.js';
 import {watchResources, byType} from './helpers/resources.js';
 import {resetAll, buildSquareRoom, buildSharedWallRooms} from './helpers/harness.js';

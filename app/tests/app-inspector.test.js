@@ -477,6 +477,45 @@ describe('SurfaceInspector', () =>
 
 		wrapper.unmount();
 	});
+
+	it('finishes the clicked wall, and shows the finish it has', async () =>
+	{
+		const {floorplan} = buildSquareRoom();
+		const edge = floorplan.wallEdges()[0];
+		const wrapper = mount(SurfaceInspector, {
+			props: {selection: {type: SELECTION_WALL, object: edge}},
+		});
+
+		const select = wrapper.find('.field-select select');
+		expect(select.element.value).toBe('matte');
+
+		await select.setValue('satin');
+		expect(edge.getSheen()).toBe('satin');
+		// Painting does not reach the history stack, so the panel says so.
+		expect(wrapper.emitted('changed')).toHaveLength(1);
+
+		wrapper.unmount();
+	});
+
+	it('finishes every wall in the room when a floor is selected', async () =>
+	{
+		const {floorplan} = buildSquareRoom();
+		const room = floorplan.getRooms()[0];
+		const wrapper = mount(SurfaceInspector, {
+			props: {selection: {type: SELECTION_FLOOR, object: room}},
+		});
+
+		await wrapper.find('.field-select select').setValue('gloss');
+
+		floorplan.wallEdges().forEach((edge) =>
+		{
+			expect(edge.getSheen()).toBe('gloss');
+		});
+		// Unlike the colour beside it, the dropdown reads back what it applied.
+		expect(wrapper.find('.field-select select').element.value).toBe('gloss');
+
+		wrapper.unmount();
+	});
 });
 
 describe('the inspector inside the app', () =>

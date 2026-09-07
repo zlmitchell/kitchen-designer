@@ -30,7 +30,7 @@ import {Object3D} from 'three';
  * `Edge` builds one wall material and hands it to more than one mesh; a shared
  * material disposed by the first mesh to be released leaves the second drawing
  * with a dead handle. So a resource registered twice must be released twice.
- * This is the same design {@link module:three/texture_cache} already uses for
+ * This is the same design {@link module:core/texture_cache} already uses for
  * images, and it is the mitigation for the risk that over-disposal is worse than
  * the leak it replaces.
  *
@@ -44,6 +44,14 @@ import {Object3D} from 'three';
  *
  * `Material.dispose()` in three does not touch the material's maps, so the two
  * schemes cannot collide: releasing a material never disposes a cached image.
+ *
+ * **The one exception, and it is a narrow one.** Since Phase 8a a library
+ * material may borrow its own maps from that cache (`core/materials.js`), and
+ * something has to give them back. Such a material carries
+ * `userData.releaseMaps`, and {@link disposeMaterial} calls it. That releases
+ * only what the material itself acquired - it is the borrower returning its own
+ * handle, not this module reaching into the cache - so the rule above still
+ * holds for every texture a caller acquired elsewhere.
  */
 
 /** Anything with a `dispose()`: BufferGeometry, Material, Texture, RenderTarget. */
@@ -147,7 +155,7 @@ export function disposeObject(object)
 		return;
 	}
 	detach(object);
-	forEachResource(object, function (resource) {resource.dispose();});
+	forEachResource(object, disposeResource);
 }
 
 /**
@@ -159,7 +167,9 @@ export function disposeObject(object)
  * otherwise write it again.
  *
  * Does NOT touch the material's maps: in three a material's textures outlive it,
- * which is what keeps this compatible with the shared texture cache.
+ * which is what keeps this compatible with the shared texture cache. The single
+ * exception is a material that borrowed its own - see `releaseBorrowedMaps` and
+ * the note at the top of this file.
  *
  * @param {?(Disposable|Array<Disposable>)} material
  */
@@ -175,15 +185,52 @@ export function disposeMaterial(material)
 		{
 			if (isDisposable(entry))
 			{
-				entry.dispose();
+				disposeResource(entry);
 			}
 		});
 		return;
 	}
 	if (isDisposable(material))
 	{
-		material.dispose();
+		disposeResource(material);
 	}
+}
+
+/**
+ * Let a material hand back any images it borrowed from the shared cache.
+ *
+ * Duck-typed on purpose. This module knows nothing about the material library
+ * and must not import it - `core/materials.js` builds materials and this file
+ * disposes them, and a dependency either way round would be the wrong shape.
+ * A callback on `userData` is the whole contract.
+ *
+ * Safe on anything: a material with no maps, a plain geometry, a mock.
+ *
+ * @param {*} resource
+ */
+function releaseBorrowedMaps(resource)
+{
+	var release = resource && resource.userData && resource.userData.releaseMaps;
+	if (typeof release === 'function')
+	{
+		release();
+	}
+}
+
+/**
+ * Dispose one resource, giving back anything it borrowed first.
+ *
+ * Every dispose site in this file goes through here, which is the point: the
+ * borrowed-map contract is easy to honour in the path somebody was thinking
+ * about and easy to miss in the other three. `disposeObject`, both registry
+ * release paths and `disposeMaterial` all call it.
+ *
+ * @param {Disposable} resource
+ */
+function disposeResource(resource)
+{
+	releaseBorrowedMaps(resource);
+	resource.dispose();
 }
 
 /**
@@ -265,7 +312,7 @@ export class ResourceRegistry
 			return;
 		}
 		this._handles.delete(owned);
-		owned.dispose();
+		disposeResource(owned);
 	}
 
 	/**
@@ -294,7 +341,7 @@ export class ResourceRegistry
 	 */
 	releaseAll()
 	{
-		this._handles.forEach(function (count, resource) {resource.dispose();});
+		this._handles.forEach(function (count, resource) {disposeResource(resource);});
 		this._handles.clear();
 	}
 

@@ -1,5 +1,6 @@
 // @ts-check
-import {Box3, BoxGeometry, CylinderGeometry, Group, Mesh, Vector3} from 'three';
+import {Box3, CylinderGeometry, Group, Mesh, Vector3} from 'three';
+import {boxGeometryFor} from '../../core/geometry_builders.js';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
 import {frontPanel} from './cabinet.js';
@@ -206,7 +207,7 @@ const DEFAULTS = {
 
 function box(mat, x0, x1, y0, y1, z0, z1)
 {
-	var mesh = new Mesh(new BoxGeometry(Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)), mat);
+	var mesh = new Mesh(boxGeometryFor(mat, Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0)), mat);
 	mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
 	return mesh;
 }

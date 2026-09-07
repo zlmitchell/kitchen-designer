@@ -385,12 +385,14 @@ describe('identity round-trips through a save file', () =>
 		file.walls.forEach((wall) =>
 		{
 			// The point of this assertion is that no ID is here, not that the list
-			// never grows. `frontColor` and `backColor` arrived with paintable
-			// walls; they are per-face properties of the wall, which is exactly
-			// what a file should carry, and neither is a handle.
+			// never grows. `frontColor`/`backColor` arrived with paintable walls
+			// and `frontSheen`/`backSheen` with the finish on that paint; all
+			// four are per-face properties of the wall, which is exactly what a
+			// file should carry, and none is a handle.
 			expect(Object.keys(wall).sort()).toEqual(
-				['a', 'b', 'backColor', 'backTexture', 'corner1', 'corner2',
-					'frontColor', 'frontTexture', 'thickness', 'wallType']);
+				['a', 'b', 'backColor', 'backSheen', 'backTexture', 'corner1',
+					'corner2', 'frontColor', 'frontSheen', 'frontTexture',
+					'thickness', 'wallType']);
 		});
 	});
 });

@@ -1,6 +1,6 @@
 {
 	"version": 1,
-	"_comment": "PBR surfaces for generated items, shaped like textures.json but describing a MATERIAL rather than a picture. textures.json answers 'what image goes on this wall'; this answers 'what is this thing made of', which is a different question with different fields - roughness and metalness rather than stretch and scale. Split by `group` so a panel can offer only the surfaces that make sense for a slot: you paint a cabinet door, you do not paint a hinge. Colours are sRGB hex, exactly as authored; roughness and metalness are linear 0..1 and are the two knobs that decide whether something reads as paint, as stone or as steel. Every id here is stable and is what a saved spec stores, so renaming one is a save-format change and adding one is not.",
+	"_comment": "PBR surfaces for generated items, shaped like textures.json but describing a MATERIAL rather than a picture. textures.json answers 'what image goes on this wall'; this answers 'what is this thing made of', which is a different question with different fields - roughness and metalness rather than stretch and scale. Split by `group` so a panel can offer only the surfaces that make sense for a slot: you paint a cabinet door, you do not paint a hinge. Colours are sRGB hex, exactly as authored; roughness and metalness are linear 0..1 and are the two knobs that decide whether something reads as paint, as stone or as steel. Every id here is stable and is what a saved spec stores, so renaming one is a save-format change and adding one is not. MAPS (Phase 8a): `map` is an albedo that MULTIPLIES `color`, which is why the generated sets are neutral greys - one wood grain tinted by walnut's brown and again by maple's cream is two convincing woods off one image, and eleven mapped entries need three sets rather than eleven. `ormMap` packs occlusion, roughness and metalness into R, G and B the way glTF does, so it is one fetch and one upload where three greyscales would be three of each; its green channel SCALES the `roughness` beside it rather than replacing it. `tile` is what one repeat covers in centimetres - a property of the surface, not of the panel, since walnut does not change grain size because the door did. `boxGeometryFor` reads it and bakes the scale into the UVs, so a 24in door and a 12ft run take the same walnut at the same grain. Rebuild the images with `npm run surfaces`; `npm run surfaces:check` is the gate that they still match the generator.",
 	"groups": {
 		"paint": "Painted and lacquered",
 		"wood": "Wood and stained",
@@ -64,21 +64,30 @@
 			"group": "wood",
 			"color": "#cbb08a",
 			"roughness": 0.6,
-			"metalness": 0
+			"metalness": 0,
+			"map": "rooms/surfaces/wood-grain-albedo.jpg",
+			"ormMap": "rooms/surfaces/wood-grain-orm.png",
+			"tile": 55
 		},
 		"wood-walnut": {
 			"label": "Walnut",
 			"group": "wood",
 			"color": "#6b4c35",
 			"roughness": 0.55,
-			"metalness": 0
+			"metalness": 0,
+			"map": "rooms/surfaces/wood-grain-albedo.jpg",
+			"ormMap": "rooms/surfaces/wood-grain-orm.png",
+			"tile": 60
 		},
 		"wood-maple": {
 			"label": "Maple",
 			"group": "wood",
 			"color": "#d8c3a0",
 			"roughness": 0.6,
-			"metalness": 0
+			"metalness": 0,
+			"map": "rooms/surfaces/wood-grain-albedo.jpg",
+			"ormMap": "rooms/surfaces/wood-grain-orm.png",
+			"tile": 50
 		},
 		"wood-birch-ply": {
 			"label": "Birch ply",
@@ -86,7 +95,10 @@
 			"_comment": "Carcass stock. Nobody looks at it, and it should not read as a finished surface.",
 			"color": "#d9c9ad",
 			"roughness": 0.75,
-			"metalness": 0
+			"metalness": 0,
+			"map": "rooms/surfaces/wood-grain-albedo.jpg",
+			"ormMap": "rooms/surfaces/wood-grain-orm.png",
+			"tile": 45
 		},
 		"stone-quartz-white": {
 			"label": "White quartz",
@@ -100,35 +112,50 @@
 			"group": "stone",
 			"color": "#e4e5e3",
 			"roughness": 0.18,
-			"metalness": 0
+			"metalness": 0,
+			"map": "rooms/surfaces/marble-albedo.jpg",
+			"ormMap": "rooms/surfaces/marble-orm.png",
+			"tile": 120
 		},
 		"stone-soapstone": {
 			"label": "Soapstone",
 			"group": "stone",
 			"color": "#4a4e4d",
 			"roughness": 0.4,
-			"metalness": 0
+			"metalness": 0,
+			"map": "rooms/surfaces/marble-albedo.jpg",
+			"ormMap": "rooms/surfaces/marble-orm.png",
+			"tile": 150
 		},
 		"stone-butcher-block": {
 			"label": "Butcher block",
 			"group": "stone",
 			"color": "#b98f5d",
 			"roughness": 0.6,
-			"metalness": 0
+			"metalness": 0,
+			"map": "rooms/surfaces/wood-grain-albedo.jpg",
+			"ormMap": "rooms/surfaces/wood-grain-orm.png",
+			"tile": 30
 		},
 		"metal-brushed-nickel": {
 			"label": "Brushed nickel",
 			"group": "metal",
 			"color": "#b9bcc0",
 			"roughness": 0.35,
-			"metalness": 1
+			"metalness": 1,
+			"map": "rooms/surfaces/brushed-metal-albedo.jpg",
+			"ormMap": "rooms/surfaces/brushed-metal-orm.png",
+			"tile": 40
 		},
 		"metal-stainless": {
 			"label": "Stainless",
 			"group": "metal",
 			"color": "#c4c7ca",
 			"roughness": 0.3,
-			"metalness": 1
+			"metalness": 1,
+			"map": "rooms/surfaces/brushed-metal-albedo.jpg",
+			"ormMap": "rooms/surfaces/brushed-metal-orm.png",
+			"tile": 40
 		},
 		"metal-matte-black": {
 			"label": "Matte black",

@@ -732,6 +732,12 @@ export class Floorplan extends EventDispatcher
 					// sides of a wall are in different rooms.
 					'frontColor': wall.frontColor,
 					'backColor': wall.backColor,
+					// The finish, as a NAME - `satin`, not the roughness it
+					// currently renders as. Re-tuning what satin looks like then
+					// changes every design instead of leaving old files pinned
+					// to a number. See `WALL_SHEENS`.
+					'frontSheen': wall.frontSheen,
+					'backSheen': wall.backSheen,
 					'wallType': wall.wallType.description,
 					'a':{x: wall.a.x, y:wall.a.y},
 					'b':{x: wall.b.x, y:wall.b.y},
@@ -916,6 +922,16 @@ export class Floorplan extends EventDispatcher
 			if (wall.backColor)
 			{
 				newWall.backColor = wall.backColor;
+			}
+			// Likewise for the finish: a file written before walls had one keeps
+			// the matte its constructor took.
+			if (wall.frontSheen)
+			{
+				newWall.frontSheen = wall.frontSheen;
+			}
+			if (wall.backSheen)
+			{
+				newWall.backSheen = wall.backSheen;
 			}
 			// Control points and wallType arrived with save format 0.0.2a. Whether
 			// a given file carries them is a property of THAT FILE, so ask the

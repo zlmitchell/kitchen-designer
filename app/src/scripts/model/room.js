@@ -9,6 +9,7 @@ import {WallTypes} from '../core/constants.js';
 
 import {Utils} from '../core/utils.js';
 import {HalfEdge} from './half_edge.js';
+import {defaultWallSheen} from './wall.js';
 
 
 /**
@@ -137,36 +138,46 @@ export class Room extends EventDispatcher
 		return tex || defaultRoomTexture;
 	}
 
-	setRoomWallsTexture(textureUrl, textureStretch, textureScale)
+	/**
+	 * Visit every half edge that looks into this room, in cycle order.
+	 *
+	 * Written out once. Retexturing, painting and choosing a finish each need
+	 * exactly this walk, and the third copy of it is what made that worth saying
+	 * once instead of three times.
+	 *
+	 * `edgePointer` is null only for a room with no corners, which
+	 * `Floorplan.update()` does not build - it comes from a cycle in the graph,
+	 * and a cycle has corners. The guard says that rather than assuming it, and
+	 * costs one comparison on a path a user drives (RM-005 C2).
+	 *
+	 * @param {function(HalfEdge): void} apply Called once per face.
+	 */
+	forEachEdge(apply)
 	{
-		// `edgePointer` is null only for a room with no corners, which
-		// `Floorplan.update()` does not build - it comes from a cycle in the graph,
-		// and a cycle has corners. The guard says that rather than assuming it, and
-		// costs one comparison on a path a user drives (RM-005 C2).
 		var edge = this.edgePointer;
 		if (!edge)
 		{
 			return;
 		}
-		var iterateWhile = true;
-		edge.setTexture(textureUrl, textureStretch, textureScale);
-		while (iterateWhile)
+		apply(edge);
+		// `!edge.next` is new (RM-005 C2). `next` is null on an unlinked edge, and
+		// the walk would then assign null and throw on the next line - so the guard
+		// turns a broken DCEL from a TypeError into a short walk. It cannot fire on
+		// a plan `Floorplan.update()` built, where every edge in a cycle has a
+		// successor.
+		while (edge.next && edge.next !== this.edgePointer)
 		{
-			// `!edge.next` is new (RM-005 C2). `next` is null on an unlinked edge,
-			// and the walk would then assign null and throw on the next line - so
-			// the guard turns a broken DCEL from a TypeError into a short walk.
-			// It cannot fire on a plan `Floorplan.update()` built, where every
-			// edge in a cycle has a successor.
-			if (!edge.next || edge.next === this.edgePointer)
-			{
-				break;
-			}
-			else
-			{
-				edge = edge.next;
-			}
-			edge.setTexture(textureUrl, textureStretch, textureScale);
+			edge = edge.next;
+			apply(edge);
 		}
+	}
+
+	setRoomWallsTexture(textureUrl, textureStretch, textureScale)
+	{
+		this.forEachEdge((edge) =>
+		{
+			edge.setTexture(textureUrl, textureStretch, textureScale);
+		});
 	}
 
 	/**
@@ -180,25 +191,49 @@ export class Room extends EventDispatcher
 	 */
 	setRoomWallsColor(color)
 	{
-		var edge = this.edgePointer;
-		if (!edge)
+		this.forEachEdge((edge) => {edge.setColor(color);});
+	}
+
+	/**
+	 * Give every wall face that looks into this room the same finish.
+	 *
+	 * The gesture that matches how paint is bought: one room, one tin, one sheen.
+	 *
+	 * @param {string} sheen One of `WALL_SHEENS`' ids.
+	 */
+	setRoomWallsSheen(sheen)
+	{
+		this.forEachEdge((edge) => {edge.setSheen(sheen);});
+	}
+
+	/**
+	 * The finish this room's walls share.
+	 *
+	 * A room whose faces disagree - because somebody painted one of them on its
+	 * own - has no single answer, and this returns the default rather than
+	 * picking a winner. It exists so the picker can show a room's finish instead
+	 * of claiming one; the colour beside it has no equivalent only because a
+	 * colour swatch is a gesture and a dropdown is a readout.
+	 *
+	 * @returns {string} A `WALL_SHEENS` id.
+	 */
+	getRoomWallsSheen()
+	{
+		var found = null;
+		var mixed = false;
+		this.forEachEdge((edge) =>
 		{
-			return;
-		}
-		var iterateWhile = true;
-		edge.setColor(color);
-		while (iterateWhile)
-		{
-			// The same `!edge.next` guard the texture walk carries: `next` is null
-			// on an unlinked edge, and without it a broken DCEL is a TypeError
-			// rather than a short walk.
-			if (!edge.next || edge.next === this.edgePointer)
+			var sheen = edge.getSheen();
+			if (found === null)
 			{
-				break;
+				found = sheen;
 			}
-			edge = edge.next;
-			edge.setColor(color);
-		}
+			else if (found !== sheen)
+			{
+				mixed = true;
+			}
+		});
+		return (found === null || mixed) ? defaultWallSheen : found;
 	}
 
 	/**

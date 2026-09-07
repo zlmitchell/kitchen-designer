@@ -4,7 +4,9 @@ import {computed, ref, watch} from 'vue';
 import TexturePicker from './TexturePicker.vue';
 import CheckField from './fields/CheckField.vue';
 import ColorField from './fields/ColorField.vue';
+import SelectField from './fields/SelectField.vue';
 import textures from '../../catalog/textures.json';
+import {WALL_SHEENS, defaultWallSheen} from '../../scripts/model/wall.js';
 import {SELECTION_WALL} from '../composables/useSelection.js';
 
 /**
@@ -34,6 +36,11 @@ import {SELECTION_WALL} from '../composables/useSelection.js';
  * Per FACE, like the texture, because the two sides of a wall are in different
  * rooms. With a floor selected it paints the whole room, which is the gesture
  * anybody actually wants.
+ *
+ * The finish sits beside the colour because it is part of the same decision -
+ * you buy one tin, and it is both a colour and a sheen. It is only visible under
+ * the studio render profile: classic draws walls with MeshBasicMaterial, which
+ * has no roughness for a sheen to be.
  */
 
 const props = defineProps({
@@ -101,6 +108,39 @@ function paintRoomWalls(color)
 	emit('changed');
 }
 
+/** The sheen vocabulary, in the shape a `<select>` wants. */
+const sheenOptions = WALL_SHEENS.map((sheen) => ({value: sheen.id, label: sheen.label}));
+
+/**
+ * A dropdown is a readout in a way a colour swatch is not, so unlike the room
+ * paint below this one shows what is actually on the walls. A room whose faces
+ * disagree has no single answer and reports the default - see
+ * `Room.getRoomWallsSheen`.
+ */
+const currentSheen = computed(() =>
+{
+	void revision.value;
+	if (isWall.value)
+	{
+		return target.value.getSheen ? target.value.getSheen() : defaultWallSheen;
+	}
+	return target.value.getRoomWallsSheen ? target.value.getRoomWallsSheen() : defaultWallSheen;
+});
+
+function finishWall(sheen)
+{
+	target.value.setSheen(sheen);
+	revision.value++;
+	emit('changed');
+}
+
+function finishRoomWalls(sheen)
+{
+	target.value.setRoomWallsSheen(sheen);
+	revision.value++;
+	emit('changed');
+}
+
 function pickWallTexture(texture)
 {
 	if (isWall.value)
@@ -125,6 +165,9 @@ watch(() => props.selection, () => {forAllWalls.value = false; revision.value++;
 				@select="pickWallTexture" />
 			<ColorField
 				label="Paint" :model-value="currentColor" @update:model-value="paintWall" />
+			<SelectField
+				label="Finish" :model-value="currentSheen" :options="sheenOptions"
+				@update:model-value="finishWall" />
 		</template>
 
 		<template v-else>
@@ -139,6 +182,9 @@ watch(() => props.selection, () => {forAllWalls.value = false; revision.value++;
 			<ColorField
 				label="Paint this room" :model-value="'#ffffff'"
 				@update:model-value="paintRoomWalls" />
+			<SelectField
+				label="Finish" :model-value="currentSheen" :options="sheenOptions"
+				@update:model-value="finishRoomWalls" />
 		</template>
 	</section>
 </template>

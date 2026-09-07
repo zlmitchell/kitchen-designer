@@ -516,6 +516,13 @@
 	.segmented
 	{
 		display: inline-flex;
+		/* Wrap rather than run off the side. A long choice becomes a dropdown
+		   instead (see SEGMENT_LIMIT in SpecInspector), so this is the backstop
+		   for the three- and four-option rows whose labels happen to be long -
+		   the failure it prevents is silent, because an overflowing inline-flex
+		   row is simply painted outside its panel. */
+		flex-wrap: wrap;
+		max-width: 100%;
 		padding: 2px;
 		background: var(--sunk);
 		border: 1px solid var(--line);
@@ -622,6 +629,24 @@
 		margin: 0;
 		color: var(--ink-faint);
 		line-height: 1.55;
+	}
+
+	/*
+	 * What the item's host said no to.
+	 *
+	 * Louder than `.inspector-note`, because it is not a hint - it is the reason
+	 * the thing on screen is not doing what the spec asks. A pocket door in a
+	 * 3 1/2in partition draws shut, and without this the only clue is that the
+	 * slider does nothing.
+	 */
+	.inspector-refusal
+	{
+		margin: 0;
+		padding: 8px 10px;
+		border-radius: 6px;
+		color: var(--danger);
+		background: var(--danger-wash);
+		line-height: 1.5;
 	}
 
 	.inspector-readout

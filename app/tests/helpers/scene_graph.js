@@ -36,7 +36,7 @@
  * and a wall rebuilt identically does not.
  */
 
-import {textureUrlOf} from '../../src/scripts/three/texture_cache.js';
+import {textureUrlOf} from '../../src/scripts/core/texture_cache.js';
 
 /** @param {number} value */
 function round(value, places = 4)

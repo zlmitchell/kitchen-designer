@@ -355,7 +355,7 @@
     "limits with, which is tight and is left tight on purpose: the next texture",
     "added to the catalog should have to argue for itself.",
     "",
-    "AND THE TREE WAS AUDITED BEFORE ACCEPTING THAT TIGHTNESS, so \u0027no slack\u0027 is a",
+    "AND THE TREE WAS AUDITED BEFORE ACCEPTING THAT TIGHTNESS, so 'no slack' is a",
     "measurement rather than a shrug. Every file under public/ was matched against",
     "the catalogs, all of src/, and the JSON chunk of every .glb: 376 files, 370",
     "named somewhere. The six that are not are draco/ and basis/, which are",
@@ -366,28 +366,91 @@
     "So the next commit that needs room in public-total has to find it in content:",
     "models/gltf is 1.04 MB across 289 catalog entries, models/js-glb 2.10 MB, and",
     "the two thumbnail trees 0.99 MB between them. All three are live. That is a",
-    "sprint with a measurement in front of it, not a limit bump."
+    "sprint with a measurement in front of it, not a limit bump.",
+    "",
+    "THE DRAWING IMPORTER RAISED TWO LIMITS, and they are the only ones it should",
+    "have touched. Reading a PDF's vector geometry in the browser needs a PDF",
+    "parser, and pdf.js is the one there is: a 431 KB parser plus a 2.23 MB worker,",
+    "with their sourcemaps. demo-js-gzip 353 -> 546 KB, demo-total 13.69 -> 18.50 MB.",
+    "",
+    "What that does NOT mean is 190 KB added to first paint. Both chunks are",
+    "dynamically imported and Vite emits them as separate assets, so nothing fetches",
+    "them until somebody opens File -> Import, and the entry bundle is unchanged.",
+    "demo-js-gzip measures every .js in the built tree rather than the entry graph -",
+    "which is the right measure for a budget, since a lazy chunk is still bytes",
+    "somebody eventually downloads, but it is the wrong number to read as a",
+    "page-load regression.",
+    "",
+    "The alternative was a server, and it was rejected rather than overlooked: this",
+    "app is a static site, and PyMuPDF is a C library with no WebAssembly build, so",
+    "no arrangement keeps the Python tracer AND keeps the app static. See",
+    "ROADMAP.md, \"the drawing importer\".",
+    "",
+    "PHASE 8a RAISED public-total, and it is the first raise in this file for",
+    "CONTENT rather than for code or for a decoder. 6,200,000 -> 6,490,000.",
+    "",
+    "What it bought: `public/rooms/surfaces/`, three generated surface sets of an",
+    "albedo and an ORM map each, 195,877 bytes in total. Before them every",
+    "generated item in the app was a flat colour - createMaterial built a",
+    "MeshStandardMaterial from colour, roughness and metalness and nothing else -",
+    "while the walls and floors around them carried images. The room was grained",
+    "and the cabinetry in it was not.",
+    "",
+    "Three sets and not eleven, which is the reason the number is this small. A",
+    "map multiplies the entry's colour, so the images are neutral greys: one wood",
+    "grain tinted by walnut's brown and again by maple's cream is two convincing",
+    "woods off one image. Nine mapped entries, three sets, two decodes for the",
+    "whole wood family. See tools/make-surface-maps.mjs, which regenerates them",
+    "from a seed - `npm run surfaces`, gated by `npm run surfaces:check`.",
+    "",
+    "THE RAISE IS DELIBERATELY TIGHT, at 2.0% rather than the 5% this file sets",
+    "limits with. RM-006 left this line at 1.2% on the argument that the next",
+    "texture added to the catalog should have to argue for itself, and that",
+    "argument is not weakened by this sprint having made one successfully.",
+    "",
+    "WHAT THIS LINE DOES NOT MEASURE, and it matters more here than anywhere else",
+    "it has come up. public-total is the SERVED TREE, not what a visitor",
+    "downloads. Nothing fetches a surface map until a material using it is built,",
+    "the same way none of the 289 catalog models are fetched at first paint - see",
+    "the drawing-importer note above, which made this argument first: 'What that",
+    "does NOT mean is 190 KB added to first paint.' A design in painted white",
+    "cabinets downloads none of these six files.",
+    "",
+    "texture-vram moved 28.71 -> 33.96 MB against an unchanged 47.34 MB ceiling,",
+    "which is 28% headroom and needs no action. Recorded rather than left to be",
+    "noticed: 5.25 MB of GPU memory is what nine mapped entries cost, and it is",
+    "the number to watch if the library grows a fourth set. The albedos are 512",
+    "and the ORM maps 256 on purpose - roughness has no fine detail to lose, and",
+    "halving the edge quarters the upload.",
+    "",
+    "KTX2 would have cut both figures and was not available. core/texture_cache.js",
+    "cannot hold a CompressedTexture: it promises a texture synchronously and",
+    "fills in .source when the load lands, and a KTX2 load returns nothing at call",
+    "time and produces mipmaps rather than a source. encode-textures.mjs already",
+    "documents this at length and calls the redesign a sprint of its own. So these",
+    "six ship as JPEG and PNG, and they are the files that will get smaller for",
+    "free the day that redesign happens."
   ],
   "budgets": {
     "demo-js-gzip": {
-      "limit": 371000,
-      "measured": 353326
+      "limit": 573000,
+      "measured": 545730
     },
     "demo-css-gzip": {
       "limit": 10000,
-      "measured": 7306
+      "measured": 7617
     },
     "demo-total": {
-      "limit": 13860000,
-      "measured": 13685438
+      "limit": 19420000,
+      "measured": 18498387
     },
     "lib-iife-gzip": {
       "limit": 268000,
       "measured": 255002
     },
     "public-total": {
-      "limit": 6200000,
-      "measured": 6121106
+      "limit": 6490000,
+      "measured": 6366940
     },
     "lib-esm-gzip": {
       "limit": 50300,
@@ -407,7 +470,7 @@
     },
     "texture-vram": {
       "limit": 47340000,
-      "measured": 28713163
+      "measured": 33956043
     }
   }
 }

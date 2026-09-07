@@ -1,5 +1,6 @@
 // @ts-check
 import {buildDoor, DOOR_SCHEMA} from './door.js';
+import {buildWindow, WINDOW_SCHEMA} from './window.js';
 import {buildPost, POST_SCHEMA} from './post.js';
 import {buildCabinet, CABINET_SCHEMA} from './cabinet.js';
 import {buildCounter, COUNTER_SCHEMA} from './counter.js';
@@ -37,6 +38,15 @@ import {buildAppliance, APPLIANCE_SCHEMA} from './appliance.js';
  *           Deliberately outside `geometry`; see `door.js`.
  * @property {function(Object): void} [onBound] Called when the item binds to a
  *           wall edge - the only moment its own axes are known.
+ * @property {function(Object): void} [onPlaced] Called once the item has been
+ *           moved and come to rest. The other direction of `onBound`, for a spec
+ *           field that is also a position - a window's sill height. See
+ *           `Item.onPlaced`.
+ * @property {{y: number}} [datum] Where the builder's own origin ended up after
+ *           it centred itself. Only a builder that reasons in a frame worth
+ *           keeping reports one - `buildSink` works with y = 0 at the top of the
+ *           worktop, and every mount is an answer in that frame. See
+ *           `items/fitting.js`, which puts the plane back.
  */
 /**
  * A builder, plus the one optional thing it may declare about itself.
@@ -52,6 +62,7 @@ import {buildAppliance, APPLIANCE_SCHEMA} from './appliance.js';
 /** @type {Record<string, GeneratedBuilder>} */
 export const GENERATED_BUILDERS = {
 	door: buildDoor,
+	window: buildWindow,
 	post: buildPost,
 	cabinet: buildCabinet,
 	counter: buildCounter,
@@ -70,6 +81,7 @@ export const GENERATED_BUILDERS = {
  */
 export const GENERATED_SCHEMAS = {
 	door: DOOR_SCHEMA,
+	window: WINDOW_SCHEMA,
 	post: POST_SCHEMA,
 	cabinet: CABINET_SCHEMA,
 	counter: COUNTER_SCHEMA,

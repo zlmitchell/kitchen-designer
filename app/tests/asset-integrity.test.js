@@ -682,7 +682,7 @@ describe('every texture the library fetches goes through the resolver (RM-005 C1
 		// is that a caller hands it a physical URL, and all three callers resolve
 		// before they do. Exempting it is a statement about that contract, so the
 		// list is asserted below rather than left as a filter nobody re-reads.
-		const PRIMITIVES = ['src/scripts/three/texture_cache.js'];
+		const PRIMITIVES = ['src/scripts/core/texture_cache.js'];
 		const FETCH = /(?:\.load|acquireTexture)\s*\(\s*([^,)]*)/g;
 		const unresolved = [];
 

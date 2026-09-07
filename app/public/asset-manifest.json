@@ -1514,6 +1514,46 @@
 			"hash": "sha256-KlbeHXWTgv+L1omE4HU4Kx4VoXwUx9FiFCmZ6RCL3V0=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/door-barn.png": {
+			"bytes": 1025,
+			"hash": "sha256-LpLS3aF7uWUD0fOExua5jKthQdQE0PY9S5S5mmItvxQ=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/door-bifold.png": {
+			"bytes": 1494,
+			"hash": "sha256-bAAtrM7rJDcxEXguc/Eiy4XHX4ALQwUWR6xDZCVojnc=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/door-bypass.png": {
+			"bytes": 1577,
+			"hash": "sha256-wgTZJAddrGTWDw1ktFMkFsL9KQYF1GJfjFNjj7Cw+LE=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/door-cased.png": {
+			"bytes": 1075,
+			"hash": "sha256-EU9pi7Zs1L1XZtgi4wLXskMTwBtG2vFmIUb+eAhOjG4=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/door-french.png": {
+			"bytes": 2519,
+			"hash": "sha256-MtaOevbB9t3zgMiFiYwN6MaE+W/3NqHKy5MsOkCKxxI=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/door-pocket.png": {
+			"bytes": 1225,
+			"hash": "sha256-X2os/nu985bAlI18Jq9yOffX1N6C8Yq7+J5gxFQWGbY=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/door-sliding.png": {
+			"bytes": 2085,
+			"hash": "sha256-XLamIl7g4DTlu/+3/lyUKGbzjxXVSEIAAFOOKjs6PKM=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/door-swing.png": {
+			"bytes": 1344,
+			"hash": "sha256-C7suVRQb7xYVCYZG3ses6RE5ZoW/UYjigZkNfjmEvTk=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/doorway.png": {
 			"bytes": 5930,
 			"hash": "sha256-90nAbEFlNvg3htV3Y7NTUpmn2jDC6RN7Mi7BUBL3QNs=",
@@ -2038,6 +2078,51 @@
 			"bytes": 9219,
 			"hash": "sha256-VYI2XSVu4oH9zPzcIOJBa3hM3aArjgUughQ+U+gzsZw=",
 			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/window-casement.png": {
+			"bytes": 1686,
+			"hash": "sha256-TxVX2BE4bHjnhrTCaoa/urfuxd3xgktrR/hVvTPH7uw=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/window-double-hung.png": {
+			"bytes": 2626,
+			"hash": "sha256-N3eTGuczNaruAvuecM5JbUq+3ZD64HaBS/UfUceedY4=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/window-picture.png": {
+			"bytes": 4234,
+			"hash": "sha256-AMxjbOC+xo6nPrZgCofdAz2HRwoBByyTFFzFAqw4kO0=",
+			"kind": "thumbnail"
+		},
+		"rooms/surfaces/brushed-metal-albedo.jpg": {
+			"bytes": 25819,
+			"hash": "sha256-3YpS4uhkVxmJPmTqoNnCWoPwVhP+vdUhHJlV5DroEyU=",
+			"kind": "texture"
+		},
+		"rooms/surfaces/brushed-metal-orm.png": {
+			"bytes": 14703,
+			"hash": "sha256-TvtQensU91Dhax0EO1yfDe2IPZsM0aX05t4jUiCmD3k=",
+			"kind": "texture"
+		},
+		"rooms/surfaces/marble-albedo.jpg": {
+			"bytes": 48642,
+			"hash": "sha256-oTtbHHQhS9ZZvn8X2T4V7h0/44lxIkg/0C3WV2vNVj4=",
+			"kind": "texture"
+		},
+		"rooms/surfaces/marble-orm.png": {
+			"bytes": 30530,
+			"hash": "sha256-HFD2lbekfRiUSIjKv0f/o7Qp/6nGJiwVk1BPR+CZ/Ps=",
+			"kind": "texture"
+		},
+		"rooms/surfaces/wood-grain-albedo.jpg": {
+			"bytes": 45660,
+			"hash": "sha256-LAnlOBoaQ+ycJRzOa3Y0SA0YyeEX9NR7N8GcYqqyu8I=",
+			"kind": "texture"
+		},
+		"rooms/surfaces/wood-grain-orm.png": {
+			"bytes": 34333,
+			"hash": "sha256-Hfk4p/yfO2qtfzkrkqQ0q42Q0+bhvtzAhmqB6nYPimY=",
+			"kind": "texture"
 		},
 		"rooms/textures/Ground_4K.jpg": {
 			"bytes": 10401,

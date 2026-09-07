@@ -2,7 +2,7 @@
 import {EventDispatcher, RepeatWrapping, MeshBasicMaterial, MeshPhongMaterial, MeshStandardMaterial, FrontSide, DoubleSide, Vector2, Vector3, Shape, ShapeGeometry, Mesh, SRGBColorSpace} from 'three';
 import {polygonGeometry} from '../core/geometry_builders.js';
 import {EVENT_CHANGED} from '../core/events.js';
-import {acquireTexture, releaseTexture} from './texture_cache.js';
+import {acquireTexture, releaseTexture} from '../core/texture_cache.js';
 import {disposeObject} from '../core/resource_registry.js';
 import {Configuration, configWallHeight} from '../core/configuration.js';
 import {renderProfile, isStudio} from '../core/render_profile.js';

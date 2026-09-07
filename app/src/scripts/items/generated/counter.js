@@ -1,7 +1,8 @@
 // @ts-check
-import {Box3, BoxGeometry, ExtrudeGeometry, Group, Mesh, Path, Shape, Vector3} from 'three';
+import {Box3, ExtrudeGeometry, Group, Mesh, Path, Shape, Vector3} from 'three';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
+import {boxGeometryFor} from '../../core/geometry_builders.js';
 
 /**
  * A countertop: a slab with holes in it.
@@ -63,6 +64,16 @@ const DEFAULTS = {
 
 /**
  * @typedef {Object} CounterCutout
+ * @property {('front')} [open] Which edge this cutout breaks through, if any. A
+ *           farmhouse sink's apron replaces the front of the run, so its cutout
+ *           is a NOTCH in the outline rather than a hole in the middle - see
+ *           `frontNotches`, and note that a hole touching the outline is
+ *           discarded rather than clipped.
+ * @property {string} [owner] Which item asked for this hole, when something did.
+ *           A sink's cutout is derived from its mount and re-derived whenever it
+ *           changes, so `items/fitting.js` needs to replace its own and leave a
+ *           hand-authored hole - a hob, a tap - where it is. Absent on anything
+ *           somebody wrote by hand or `tools/fitout.py` baked in.
  * @property {number} x Centre of the hole along the counter, from its middle.
  * @property {number} [z] Centre front-to-back, from the middle. 0 is centred,
  *           which is where a sink goes; a hob usually sits forward.
@@ -96,6 +107,39 @@ function bevelFor(edge, thickness)
 	return 0.2;
 }
 
+/**
+ * The bites taken out of the front edge, left to right.
+ *
+ * A farmhouse sink is not a hole in a worktop. Its apron IS the front of the
+ * run, so the slab stops either side of it and the sink fills the gap - which
+ * means the OUTLINE changes, not the holes. `ShapeUtils.triangulateShape`
+ * discards a hole that touches the contour rather than clipping it, silently, so
+ * an apron cutout expressed as a hole either vanished or was clamped a finger's
+ * width inside the front edge and left a lip of stone in front of the sink.
+ *
+ * @returns {Array<{x0: number, x1: number, back: number}>} In shape space.
+ */
+function frontNotches(cutouts, halfW, halfD)
+{
+	var margin = 2.0;
+	return (cutouts || [])
+		.filter(function (cut) {return cut.open === 'front' && cut.width > 1 && cut.depth > 1;})
+		.map(function (cut)
+		{
+			var cx = cut.x || 0;
+			var cz = cut.z || 0;
+			return {
+				x0: Math.max(-halfW + margin, cx - cut.width / 2),
+				x1: Math.min(halfW - margin, cx + cut.width / 2),
+				// How far back the bite reaches. The front end is the edge itself,
+				// which is the whole point, so only this end is clamped.
+				back: Math.min(halfD - margin, -cz + cut.depth / 2),
+			};
+		})
+		.filter(function (notch) {return notch.x1 - notch.x0 > 1 && notch.back > -halfD;})
+		.sort(function (a, b) {return a.x0 - b.x0;});
+}
+
 /** The slab outline, inset so the bevel does not grow it. */
 function slabShape(width, depth, inset, cutouts)
 {
@@ -104,7 +148,16 @@ function slabShape(width, depth, inset, cutouts)
 	// No seed points: a Shape's constructor takes Vector2, and the outline is
 	// drawn with moveTo/lineTo immediately below anyway.
 	var shape = new Shape();
+	// The front edge, left to right, detouring around any apron sink on the way.
+	// Shape y is the world's -z, so the front of the run is -halfD.
 	shape.moveTo(-halfW, -halfD);
+	frontNotches(cutouts, halfW, halfD).forEach(function (notch)
+	{
+		shape.lineTo(notch.x0, -halfD);
+		shape.lineTo(notch.x0, notch.back);
+		shape.lineTo(notch.x1, notch.back);
+		shape.lineTo(notch.x1, -halfD);
+	});
 	shape.lineTo(halfW, -halfD);
 	shape.lineTo(halfW, halfD);
 	shape.lineTo(-halfW, halfD);
@@ -112,6 +165,11 @@ function slabShape(width, depth, inset, cutouts)
 
 	(cutouts || []).forEach(function (cut)
 	{
+		// Already taken out of the outline above.
+		if (cut.open === 'front')
+		{
+			return;
+		}
 		// Not clamped up to a minimum: that turned a 2mm request into a 1cm hole,
 		// which is inventing a cutout rather than declining one. Anything under a
 		// centimetre is rejected below instead - the smallest real hole in a
@@ -170,7 +228,7 @@ export const COUNTER_SCHEMA = {
  * Build a countertop.
  *
  * @param {CounterSpec} spec
- * @returns {{geometry: import('three').BufferGeometry, materials: Array, parts: Array}}
+ * @returns {import('./index.js').GeneratedBuild}
  */
 export function buildCounter(spec)
 {
@@ -198,7 +256,14 @@ export function buildCounter(spec)
 	geometry.rotateX(-Math.PI / 2);
 
 	var group = new Group();
-	group.add(new Mesh(geometry, mats.counter));
+	var slab = new Mesh(geometry, mats.counter);
+	group.add(slab);
+	// The work surface, before anything moves. This is the plane a counter IS -
+	// the height a worktop is at - and it has to survive the recentring below,
+	// which a backsplash otherwise drags down by half its own height. Measured
+	// off the slab rather than computed from `thickness`, because the bevel
+	// decides where the extrusion actually starts.
+	var surfaceY = new Box3().setFromObject(slab).max.y;
 
 	if (s.backsplash > 0)
 	{
@@ -207,7 +272,7 @@ export function buildCounter(spec)
 		// decision as the surface.
 		var splashThickness = 1.9;
 		var splash = new Mesh(
-			new BoxGeometry(width, s.backsplash, splashThickness), mats.splash);
+			boxGeometryFor(mats.splash, width, s.backsplash, splashThickness), mats.splash);
 		// ON the slab, not through it. The extrusion runs from y=0 upward, so a
 		// splash centred on `backsplash / 2` starts at the slab's underside and
 		// passes through it - which measured as a counter 10.36cm tall instead of
@@ -231,5 +296,15 @@ export function buildCounter(spec)
 	group.updateMatrixWorld(true);
 
 	var merged = mergeMeshes(group);
-	return {geometry: merged.geometry, materials: merged.materials, parts: []};
+	return {
+		geometry: merged.geometry,
+		materials: merged.materials,
+		parts: [],
+		// Where the work surface went. Adding a backsplash grows the bounding box
+		// upward, and centring on it then drops the whole counter by half the
+		// splash - so the worktop sank into the cabinets and the splash appeared
+		// to do nothing. `Item.setSpec` keeps this plane still instead of the
+		// centre, and `items/fitting.js` measures a sink against it.
+		datum: {y: middle.y - surfaceY},
+	};
 }

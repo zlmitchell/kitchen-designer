@@ -144,6 +144,39 @@ data/      saved designs, extracted geometry [gitignored -- personal]
 Anything identifying the house -- the drawings, the extracted floor plan, the
 saved designs -- stays out of git by design. Keep it that way.
 
+## Importing a drawing
+
+**File → Import**, or `Ctrl+I`. Takes a **PDF, SVG or DXF** and traces it into a
+design: walls at their real measured thicknesses, and the windows and doors as
+items in those walls. The drawing goes underneath as a carbon sheet, so what was
+traced can be checked against what was drawn.
+
+Three things have to be settled, and the dialog asks for exactly those:
+
+1. **Which page.** A set of construction documents is many sheets and one of
+   them is the floor plan.
+2. **Which region.** Drag a box round the plan. A sheet also carries a title
+   block, a schedule and often several plans, and the tracer decides which *pen*
+   drew the structure by judging everything inside the region — so handing it a
+   whole sheet lets the dimension strings compete with the walls.
+3. **What scale.** Nothing can detect a wrong one: a plan traced at half scale
+   is a perfectly consistent plan of a house half the size. **A DXF is not
+   asked** — it states its own units, which is the one real advantage that
+   format has here.
+
+Check the size it reports before accepting it. `19' 6" x 14' 6"` against the
+drawing is the whole test, and it is the one number a wrong scale always gets
+wrong.
+
+If the walls come out as something else — cabinet fronts, dimension lines — use
+**Show pens** and pick the layer by hand. The ranking is deliberately not tuned
+to any one drawing, and `tools/layer_check.py` answers the same question on the
+command line.
+
+This is the same tracer as `tools/build.py`, ported to JavaScript so it runs in
+the browser with no server: see ROADMAP.md, "the drawing importer", for what
+that cost and how the two implementations were held against each other.
+
 ## What this adds to architect3d
 
 Upstream is a floor planner. These are the gaps it leaves, in build order.

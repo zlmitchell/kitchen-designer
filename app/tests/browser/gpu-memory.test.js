@@ -32,7 +32,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {BlueprintJS} from '../../src/scripts/blueprint.js';
 import {Configuration, configDimUnit} from '../../src/scripts/core/configuration.js';
 import {dimCentiMeter} from '../../src/scripts/core/units.js';
-import {textureCacheStats} from '../../src/scripts/three/texture_cache.js';
+import {textureCacheStats} from '../../src/scripts/core/texture_cache.js';
 
 /** A four-metre room, as a saved design. */
 const DESIGN = JSON.stringify({

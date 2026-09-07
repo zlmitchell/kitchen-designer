@@ -64,8 +64,13 @@ describe('the unified catalog', () =>
 		// 27 legacy entries + 142 glTF entries, less the one that pointed at a
 		// cabinet.json that has never existed in this repository. Plus the
 		// generated ones, which name a builder rather than a file - see below: a
-		// post, three cabinets, a countertop, three sinks and six appliances.
-		expect(CATALOG.items.length).toBe(182);
+		// post, three cabinets, a countertop, three sinks, six appliances, three
+		// windows and eight doors.
+		//
+		// Eight doors for one builder, because `operation` is what a door IS - a
+		// bypass and a pocket door share every field and nothing about what moves -
+		// and the palette is where somebody chooses one.
+		expect(CATALOG.items.length).toBe(193);
 	});
 
 	it('has dropped the entry whose model file was never in the repository', () =>

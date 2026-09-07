@@ -8,7 +8,7 @@
  */
 import {describe, it, expect} from 'vitest';
 import {Box3, Vector3} from 'three';
-import {buildCabinet} from '../src/scripts/items/generated/cabinet.js';
+import {buildCabinet, CABINET_LAYOUTS} from '../src/scripts/items/generated/cabinet.js';
 
 const size = (built) =>
 {
@@ -319,5 +319,82 @@ describe('a wall cabinet decides what happens above it', () =>
 		const plain = buildCabinet({variant: 'base'});
 		const asked = buildCabinet({variant: 'base', topTreatment: 'to-ceiling'});
 		expect(size(asked).y).toBeCloseTo(size(plain).y, 3);
+	});
+});
+
+describe('face layouts', () =>
+{
+	/**
+	 * Vertices, with SLAB fronts on purpose.
+	 *
+	 * A shaker front collapses to a single box when it is too short for two rails
+	 * and a panel - deliberately, because nothing is made that way - so counting
+	 * vertices on the default style measures the STYLE each front fell back to
+	 * rather than how many fronts there are. A slab is one box every time, so the
+	 * difference between two layouts is exactly the fronts.
+	 */
+	const verts = (spec) => buildCabinet(Object.assign(
+		{kind: 'cabinet', width: 91.44, front: 'slab'}, spec))
+		.geometry.attributes.position.count;
+
+	it('builds a drawer bank instead of doors', () =>
+	{
+		// The builder has taken `drawers` since it was written; nothing could SAY
+		// so, because the schema offered `doors` and nothing else - so every
+		// cabinet in the app was a pair of doors whatever the builder could do.
+		expect(verts({layout: 'three-drawers'})).not.toBe(verts({layout: 'doors'}));
+	});
+
+	it('gives one more front for each extra drawer', () =>
+	{
+		const three = verts({layout: 'three-drawers'});
+		const four = verts({layout: 'four-drawers'});
+		const five = verts({layout: 'five-drawers'});
+		expect(four - three).toBeGreaterThan(0);
+		// Evenly spaced: the same front, one more of it.
+		expect(five - four).toBe(four - three);
+	});
+
+	it('builds a drawer over a pair of doors', () =>
+	{
+		// Three fronts where a plain pair is two.
+		expect(verts({layout: 'drawer-over-doors'}) - verts({layout: 'doors'}))
+			.toBe(verts({layout: 'four-drawers'}) - verts({layout: 'three-drawers'}));
+	});
+
+	it('builds all four of a pan bank', () =>
+	{
+		// The one the drawer heights overflow a base opening on, so it is also the
+		// one that would silently come out short if `fitDrawers` stopped scaling.
+		expect(verts({layout: 'deep-bottom'})).toBe(verts({layout: 'four-drawers'}));
+	});
+
+	it('makes the pan drawer the deepest of its bank', () =>
+	{
+		const heights = CABINET_LAYOUTS['deep-bottom'].drawers;
+		expect(heights).toHaveLength(4);
+		expect(heights[3]).toBeGreaterThan(heights[0]);
+		// And the three above it are equal, which is what makes it read as three
+		// over one rather than as a graduated bank.
+		expect(heights[0]).toBe(heights[1]);
+		expect(heights[1]).toBe(heights[2]);
+	});
+
+	it('graduates a plain bank, shallow at the top', () =>
+	{
+		// How a bank is actually built: cutlery at the top, pans at the bottom.
+		const heights = CABINET_LAYOUTS['four-drawers'].drawers;
+		for (let i = 1; i < heights.length; i++)
+		{
+			expect(heights[i]).toBeGreaterThan(heights[i - 1]);
+		}
+	});
+
+	it('leaves a spec with no layout exactly as it was', () =>
+	{
+		// Every design saved before this existed carries `doors` and `drawers` and
+		// no layout. `custom` is the default so those open unchanged.
+		expect(verts({layout: 'custom', doors: 0, drawers: [15, 20, 25]}))
+			.toBe(verts({doors: 0, drawers: [15, 20, 25]}));
 	});
 });

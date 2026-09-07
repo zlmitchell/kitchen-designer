@@ -2,6 +2,7 @@
 import {inject, provide, markRaw, shallowRef} from 'vue';
 import {BlueprintJS} from '../../scripts/blueprint.js';
 import {assetResolver} from './useAssets.js';
+import {setMaterialAssetResolver} from '../../scripts/core/materials.js';
 
 /**
  * Owns the one BlueprintJS instance and its lifetime.
@@ -86,6 +87,15 @@ export function createBlueprintStore()
 			// picks up the indirection when it arrives.
 			assets: assetResolver(),
 		}));
+
+		// And the same resolver for material maps (Phase 8a). A material is built
+		// by a builder that has no runtime to ask, so `core/materials.js` holds one
+		// pointer rather than threading a resolver through six builder signatures.
+		// Set here, beside the line above, because these two must never disagree:
+		// a wall resolving through the manifest while the cabinet in front of it
+		// resolves through identity is the kind of split that only shows up on a
+		// deployment with an asset base.
+		setMaterialAssetResolver(assetResolver());
 
 		instance.value = blueprint;
 		model.value = markRaw(blueprint.model);

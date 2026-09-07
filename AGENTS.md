@@ -3,6 +3,47 @@
 This covers `tools/` — turning a scaled architectural PDF into an architect3d
 design. For the app itself see `README.md`.
 
+**There is now a second implementation of this pipeline**, in JavaScript, at
+`app/src/app/import/`. It is what the app's File → Import runs, because a
+browser cannot call any of this: PyMuPDF is a C library with no WebAssembly
+build. It is a port of `layers.py`, `walls.py`, `opening_truth.py`, `spaces.py`
+and `build.py`, constant for constant, and it was verified against them stage by
+stage - see ROADMAP.md, "the drawing importer".
+
+**So a change here needs the same change there, and vice versa.** The window
+spec is the live example: `extract.window_item` and `design.js`'s `windowItem`
+write the same object, and a field added to one is a field the other has to
+grow. Two known differences today:
+
+- `opening_truth.find` matches a box's face lines with a tolerance of `1e-6`
+  against values `walls.coalesce` rounded to three decimals. That only succeeds
+  by luck, and when it fails it fails silently: `find` returns no gaps and the
+  structural half of the opening detection is dead while the trace still
+  succeeds. On the sample sheet it finds 0 openings where the JS finds 17. The
+  JS uses `1e-3`; **this side should follow**, and has not been changed only
+  because it changes what the tracer finds on the kitchen plan it is scored
+  against.
+- `extract.find_openings` WELDS adjacent window spans into one opening, on the
+  grounds that a mullion between two sashes is drawn as a jamb. The spans it
+  discards are the units the window is built from. Measured on the kitchen
+  sheet: the 63.17in window at y=302.83 is really 31.61 + 31.56, a twin, and
+  the 91.17in one at y=588.01 is 20.11 + 51.00 + 20.06 - a picture pane between
+  two flankers, reported as a single 91in sash. The JS does not merge, so each
+  sash gets its own frame and the mullions appear where they were drawn.
+  `data/opening_truth.json` carries the merged widths and would need
+  regenerating if this side follows.
+- The JS reads DXF directly, which nothing here does.
+
+`generated:window` was a third and is closed. This side moved to a spec first,
+the way `door_item` writes `generated:door`, and for a while the JS still wrote
+a scaled `whitewindow.glb` - 123.0769cm wide and no other width, so `scale_x`
+stretched the stiles with the glass and `scale_z` squashed the sash into the
+wall plane on a thin partition, and the sample sheet's eight windows wanted five
+different widths. `design.js` now writes the same spec: `type`, `width`,
+`height`, `sillHeight`, `wallThickness`, `grille`, `openFraction`, all three
+scale factors at 1, and `ypos` at `sillHeight + height / 2` so the file agrees
+with itself before `applyWindowPlacement` runs.
+
 **Working on the app instead?** Read `app/docs/generated-items.md` first. It
 covers how a parametric part is built and — the part that is expensive to
 rediscover — how to test one: which of the two containers to run in and why,

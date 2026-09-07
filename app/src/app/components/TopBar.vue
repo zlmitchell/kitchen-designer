@@ -3,7 +3,7 @@
 import {PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent} from 'reka-ui';
 import {
 	FilePlus2, FolderOpen, Save, Undo2, Redo2, Box, Share2,
-	Moon, Sun, Keyboard, PanelRight, ChevronDown, Ruler,
+	Moon, Sun, Keyboard, PanelRight, ChevronDown, Ruler, Scan,
 } from '@lucide/vue';
 
 import AppTip from './AppTip.vue';
@@ -65,8 +65,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits([
-	'new-design', 'open-design', 'save-design', 'save-mesh', 'save-gltf',
-	'undo', 'redo', 'set-layout', 'set-unit', 'toggle-theme',
+	'new-design', 'open-design', 'import-drawing', 'save-design', 'save-mesh',
+	'save-gltf', 'undo', 'redo', 'set-layout', 'set-unit', 'toggle-theme',
 	'toggle-inspector', 'show-shortcuts',
 ]);
 
@@ -128,6 +128,11 @@ function onUnitChange(event)
 					<FolderOpen :size="15" />
 					<input type="file" accept=".blueprint3d,application/json" aria-label="Open layout" @change="onFile">
 				</label>
+			</AppTip>
+			<AppTip label="Import a drawing" keys="mod+i">
+				<button type="button" class="btn btn-icon" title="Import a PDF, SVG or DXF" @click="emit('import-drawing')">
+					<Scan :size="15" />
+				</button>
 			</AppTip>
 			<AppTip label="Save layout" keys="mod+s">
 				<button type="button" class="btn btn-icon" title="Save layout" @click="emit('save-design')">

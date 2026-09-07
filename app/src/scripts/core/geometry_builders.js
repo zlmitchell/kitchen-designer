@@ -1,5 +1,5 @@
 // @ts-check
-import {BufferAttribute, BufferGeometry, ShapeUtils, Vector2} from 'three';
+import {BoxGeometry, BufferAttribute, BufferGeometry, ShapeUtils, Vector2} from 'three';
 
 /**
  * The hand-built meshes this app makes, as BufferGeometry.
@@ -173,4 +173,94 @@ export function faceIndices(geometry)
 			: [i, i + 1, i + 2]);
 	}
 	return faces;
+}
+
+
+/**
+ * How a box's six faces map onto its three dimensions.
+ *
+ * three builds them in this order, four vertices each, and each face's UVs span
+ * 0..1 whatever size the face is - which is exactly the problem: a 12ft counter
+ * run and a 24in door both get one repeat, so the same walnut comes out with a
+ * grain six times coarser on one than the other.
+ *
+ * The pair is (what u runs along, what v runs along), read out of three's own
+ * `buildPlane` calls in BoxGeometry.
+ */
+const BOX_FACE_SPANS = [
+	['depth', 'height'],  // +X
+	['depth', 'height'],  // -X
+	['width', 'depth'],   // +Y
+	['width', 'depth'],   // -Y
+	['width', 'height'],  // +Z
+	['width', 'height'],  // -Z
+];
+
+/**
+ * Rewrite a box's UVs so one repeat covers `tile` centimetres of real surface.
+ *
+ * ## Why the UVs and not `Texture.repeat`
+ *
+ * `repeat` lives on the texture, and `mergeMeshes` pools materials by name so a
+ * cabinet draws one material per slot - a door and a side panel finished in the
+ * same walnut are one material and one draw call. Setting `repeat` per panel
+ * would mean a material per panel, which gives that up for something the UVs can
+ * express for free. Baking it here also means the scale is fixed at build time,
+ * where the panel's real size is known and nothing downstream has to be told.
+ *
+ * A no-op without a tile size, so an unmapped material - which is most of the
+ * library - pays nothing and keeps the 0..1 UVs it had.
+ *
+ * @param {BufferGeometry} geometry A `BoxGeometry`, unsegmented.
+ * @param {number} width
+ * @param {number} height
+ * @param {number} depth Centimetres, matching the model's units.
+ * @param {number} [tile] Centimetres one repeat covers. Zero or absent: no-op.
+ * @returns {BufferGeometry} The same geometry, for chaining.
+ */
+export function scaleBoxUVs(geometry, width, height, depth, tile)
+{
+	var uv = geometry && geometry.attributes ? geometry.attributes.uv : null;
+	// 24 is the unsegmented box - six faces of four. A segmented one has a
+	// different layout and this would silently scramble it, so it is left alone.
+	if (!tile || tile <= 0 || !uv || uv.count !== 24)
+	{
+		return geometry;
+	}
+
+	var spans = {width: width, height: height, depth: depth};
+	for (var face = 0; face < 6; face++)
+	{
+		var u = Math.abs(spans[BOX_FACE_SPANS[face][0]]) / tile;
+		var v = Math.abs(spans[BOX_FACE_SPANS[face][1]]) / tile;
+		for (var corner = 0; corner < 4; corner++)
+		{
+			var i = face * 4 + corner;
+			uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+		}
+	}
+	uv.needsUpdate = true;
+	return geometry;
+}
+
+/**
+ * A box sized in centimetres, with its UVs already scaled to its material.
+ *
+ * The five generated builders each had their own `box()` helper wrapping
+ * `new BoxGeometry(...)`, and every one of them needs the same UV pass now that
+ * a material can carry a picture. This is that pass, written once, reading the
+ * tile size off the material the panel is about to be given - see
+ * `core/materials.js`, which puts it there.
+ *
+ * @param {?Object} material Anything with `userData.tile`, or null.
+ * @param {number} width
+ * @param {number} height
+ * @param {number} depth
+ * @returns {BufferGeometry}
+ */
+export function boxGeometryFor(material, width, height, depth)
+{
+	var geometry = new BoxGeometry(width, height, depth);
+	var tile = (material && material.userData) ? material.userData.tile : 0;
+	return scaleBoxUVs(geometry, width, height, depth, tile);
 }

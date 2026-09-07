@@ -219,6 +219,25 @@ export class Item extends Mesh
 		this.onBound = null;
 
 		/**
+		 * Called after this item has been moved and come to rest, if a generated
+		 * builder supplied one.
+		 *
+		 * The other direction of `onBound`. `onBound` pushes what the SPEC knows
+		 * into the item; this reads back what the MOVE decided, for the one kind of
+		 * field that is both - a position that is also a parameter.
+		 *
+		 * A window is why it exists. Its sill height is a spec field, shown in the
+		 * panel and applied whenever it binds, and it is also just `position.y`,
+		 * which a drag sets. Without a way back, the two hold different numbers and
+		 * the next bind - a document load, a wall edit - silently discards the
+		 * drag. A door needs nothing of the sort: it stands on the floor, and
+		 * `WallItem.resized` puts it there.
+		 *
+		 * @type {?function(Item): void}
+		 */
+		this.onPlaced = null;
+
+		/**
 		 * The builder that made this item, if it was generated.
 		 *
 		 * Held so `setSpec` can ask for the object again at a new size instead of
@@ -226,9 +245,25 @@ export class Item extends Mesh
 		 * registry lookup already happens - the item does not import the registry,
 		 * so the model layer keeps one direction of dependency.
 		 *
-		 * @type {?function(Object): {geometry: Object, materials: Array, parts: Array, onBound?: function}}
+		 * @type {?function(Object): {geometry: Object, materials: Array, parts: Array, onBound?: function, onPlaced?: function, datum?: {y: number}}}
 		 */
 		this._specBuilder = null;
+
+		/**
+		 * Where this item's builder put its own origin when it centred itself.
+		 *
+		 * Only generated items have one, and only builders that reason in a frame
+		 * worth keeping report it. `buildSink` is the case that forced it: every
+		 * mount is an answer to "where is the rim relative to the worktop", so the
+		 * builder works with y = 0 at the slab's top face and then centres on its
+		 * bounding box like every other generated part - which throws that plane
+		 * away. `datum.y` is how far it moved, so the worktop plane is at
+		 * `position.y - specDatum.y` in world terms, and `items/fitting.js` uses
+		 * that to sit a sink against the counter it is in.
+		 *
+		 * @type {?{y: number}}
+		 */
+		this.specDatum = null;
 
 		this.scene = this.model.scene;
 		this._freePosition = true;
@@ -716,9 +751,33 @@ export class Item extends Mesh
 		(built.parts || []).forEach((part) => {this.add(part);});
 		this.generatedParts = built.parts || [];
 		this.metadata.spec = spec;
+		// Keep the builder's own reference plane still, rather than the bounding
+		// box's centre.
+		//
+		// A generated item is recentred on its bounds every rebuild, so anything
+		// that changes those bounds moves everything else. For most items that is
+		// exactly right - a wider cabinet grows either side of where it stands.
+		// For an item whose datum IS its meaning it is wrong: a counter's work
+		// surface is a HEIGHT, and adding a 10cm backsplash grew the box upward
+		// and dropped the worktop 5cm into the cabinets, which read as "the
+		// backsplash does nothing". Same shape of bug as a sink whose mount stops
+		// meaning anything once the frame it was reasoned in is gone.
+		//
+		// Only builders that report a datum are affected; everything else keeps
+		// the centring it has always had.
+		var previousDatum = this.specDatum;
+		this.specDatum = built.datum || null;
+		if (previousDatum && this.specDatum)
+		{
+			this.position.y += this.specDatum.y - previousDatum.y;
+		}
 		if (built.onBound)
 		{
 			this.onBound = /** @type {function(Item): void} */ (built.onBound);
+		}
+		if (built.onPlaced)
+		{
+			this.onPlaced = /** @type {function(Item): void} */ (built.onPlaced);
 		}
 		// The item may already be on a wall, in which case its axes are known and
 		// the freshly built parts are still in the builder's plan-space guess.
@@ -745,6 +804,14 @@ export class Item extends Mesh
 		if (this.bhelper)
 		{
 			this.bhelper.update();
+		}
+		// What this item sits in may now be wrong: a sink that changed mount needs
+		// a different hole in the worktop above it and a different front on the
+		// cabinet below, and until this call nothing told either of them. See
+		// `items/fitting.js`.
+		if (this.scene && this.scene.refit)
+		{
+			this.scene.refit(this);
 		}
 		this.scene.needsUpdate = true;
 		return true;
