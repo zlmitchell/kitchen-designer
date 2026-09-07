@@ -1112,9 +1112,10 @@ Phase 5's **windows** were pulled ahead of phase 3 for exactly the reason this
 note gave: every window in the traced plan was a stretched mesh. They are
 generated now, and `tools/extract.py` writes `generated:window`, so the eight
 windows the tracer finds on the sample sheet arrive at five different widths
-with the same stiles. What is left of phase 5 is the DOOR operations —
-french, bypass, sliding patio, pocket, bifold, barn — and the tracer's slider
-port; both are described above.
+with the same stiles. The door operations — french, bypass, sliding patio,
+pocket, bifold, barn — and the tracer's slider port both landed after it, so
+**phase 5 is closed**. Next is phase 3 (runs) or phase 6 (lighting); the
+dependency note below is the argument for which.
 
 **Phase 8a is the exception to its own phase and can be pulled forward to any
 point after 0b.** Maps go into the material library, and the library exists —

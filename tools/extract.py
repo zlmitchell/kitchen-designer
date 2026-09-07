@@ -475,6 +475,24 @@ def bracket(marks, a, b, slack=8.0):
 CONNECTED = 0.92     # a window's glazing runs jamb to jamb
 GLAZING_TOL_IN = 4.0
 
+# A bypass slider, measured the way the drafter draws one.
+#
+# Ported from the superseded lattice tracer (`openings.py:55 thin_pairs` and
+# `openings.py:72 sliders`), which held the only test that actually separates a
+# bypass from a window and was not carried forward. `spans_linework` cannot make
+# the distinction, because it collapses the ACROSS coordinate: it takes every
+# run within `GLAZING_TOL_IN` of the wall centreline and merges them along the
+# wall, which is exactly the axis a bypass is offset on.
+#
+# The signature is two facts together, and neither alone is enough. A window's
+# glazing lies ON the centreline and runs jamb to jamb; a bypass is two leaves
+# sitting where they really sit - offset across the wall so they can pass each
+# other, and overlapping along it so no daylight shows down the middle.
+PANEL_GAP_IN = (0.8, 2.6)      # thickness of a drawn leaf, face to face
+PANEL_MIN_IN = 16.0            # and it is at least this long
+SLIDER_OFFSET_IN = (1.2, 4.5)  # how far the two leaves sit apart across the wall
+SLIDER_OVERLAP_IN = 6.0        # and how far they lap along it
+
 
 def spans_linework(runs, coord, a, b, tol=GLAZING_TOL_IN):
     """How the drawing fills the opening: (covered fraction, piece count).
@@ -507,6 +525,50 @@ def spans_linework(runs, coord, a, b, tol=GLAZING_TOL_IN):
         else:
             merged.append([lo, hi])
     return sum(hi - lo for lo, hi in merged) / width, len(merged)
+
+
+def bypass_leaves(runs, coord, a, b, tol=GLAZING_TOL_IN):
+    """Are two leaves drawn in this opening, offset across and lapping along?
+
+    Two passes, because a leaf is not a line. A drawn leaf is a PAIR of parallel
+    lines a panel thickness apart -- `PANEL_GAP_IN` -- and it is the pair's own
+    centre that then has to be offset from the other leaf's by
+    `SLIDER_OFFSET_IN`. Testing the raw lines instead finds the two faces of a
+    single leaf and calls every door a slider.
+
+    Measured on this sheet: the closet openings are 77% covered in two pieces
+    with an 11in gap, where the window beside one of them is 100% in one.
+    """
+    near = []
+    for c, lo, hi in runs:
+        if abs(c - coord) > tol:
+            continue
+        lo, hi = max(lo, a), min(hi, b)
+        if hi > lo:
+            near.append((c, lo, hi))
+    near.sort()
+
+    # Pass one: the leaves.
+    panels = []
+    for i, (c1, a1, b1) in enumerate(near):
+        for c2, a2, b2 in near[i + 1:]:
+            gap = c2 - c1
+            if gap > PANEL_GAP_IN[1]:
+                break          # sorted by coord, so nothing later is closer
+            if gap < PANEL_GAP_IN[0]:
+                continue
+            lo, hi = max(a1, a2), min(b1, b2)
+            if hi - lo >= PANEL_MIN_IN:
+                panels.append(((c1 + c2) / 2.0, lo, hi))
+
+    # Pass two: two leaves that pass each other.
+    for i, (c1, a1, b1) in enumerate(panels):
+        for c2, a2, b2 in panels[i + 1:]:
+            if not SLIDER_OFFSET_IN[0] <= abs(c2 - c1) <= SLIDER_OFFSET_IN[1]:
+                continue
+            if min(b1, b2) - max(a1, a2) >= SLIDER_OVERLAP_IN:
+                return True
+    return False
 
 
 def find_openings(walls, perpendicular, symbol, architecture, swings, horizontal):
@@ -568,7 +630,18 @@ def find_openings(walls, perpendicular, symbol, architecture, swings, horizontal
             if not swung and covered < 0.25:
                 continue
             connected = covered >= CONNECTED and pieces == 1
-            found.append(["window" if connected and not swung else "door", a, b])
+            # Order matters. A bypass is asked about FIRST, because the two
+            # leaves are drawn inside the opening while the swing test reaches
+            # `ON_WALL_TOL_IN` and 8in past each jamb for an arc - a closet
+            # beside a bedroom door can borrow its neighbour's. Nothing that
+            # swings is a bypass, so the two cannot both be true.
+            if not swung and bypass_leaves(symbol, coord, a, b):
+                kind = "slider"
+            elif connected and not swung:
+                kind = "window"
+            else:
+                kind = "door"
+            found.append([kind, a, b])
 
         merged = []
         for kind, a, b in found:
@@ -635,11 +708,20 @@ def door_item(index, kind, x, y, width, horizontal, thickness_cm,
         # their leaves ended up at world dz +35.9 and -28.9.
         "hand": hinge if hinge in ("lo", "hi") else "lo",
         "swing": swing if swing in ("positive", "negative") else "negative",
-        # No swing arc means no leaf. A bypass slider or a cased opening drawn
-        # as one slab filling the hole is worse than drawing nothing: the three
-        # 48.7in closet openings on this plan came out as solid 48.7in doors,
-        # and an opening that should read as open read as a wall.
-        "operation": "swing" if hinge else "cased",
+        # What the drawing showed, in the builder's own vocabulary.
+        #
+        # A bypass is now told apart from an empty opening rather than lumped
+        # in with it: `bypass_leaves` finds the two offset, overlapping leaves
+        # the drafter drew, and `door.js` builds them on a track. Before this
+        # the closet openings reached the app as `cased` - a lined hole with
+        # nothing in it - which is better than the solid slab they were before
+        # that, and still not a closet.
+        #
+        # An opening with no swing arc and no leaves stays `cased`. Drawing one
+        # slab across it is worse than drawing nothing: an opening that should
+        # read as open reads as a wall.
+        "operation": ("bypass" if kind == "slider"
+                      else ("swing" if hinge else "cased")),
         "openFraction": (DOOR_OPEN_FRACTION
                          if (open_doors and hinge and not exterior) else 0),
     }

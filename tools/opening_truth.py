@@ -72,6 +72,11 @@ SWING_ACROSS_IN = 48.0
 COLOUR = {
     "window": (0.10, 0.35, 0.95),
     "door": (0.85, 0.10, 0.70),
+    # A bypass slider. Green, because the whole point of separating it from
+    # `door` is being able to see at a glance which openings got leaves on a
+    # track and which got a hinged slab - and magenta next to magenta cannot
+    # show that. `extract.bypass_leaves` is what decides.
+    "slider": (0.05, 0.70, 0.30),
     "cased": (0.95, 0.60, 0.05),
     "unknown": (0.45, 0.45, 0.45),
 }
@@ -379,7 +384,8 @@ def main():
         summary = ", ".join(f"{n} {k}" for k, n in sorted(kinds.items()))
         print(f"proposal: {len(found)} openings ({summary or 'none'})")
         print(f"  -> {args.fixture}  (edit this)")
-        print(f"  -> {args.render}  (blue window, magenta door, orange cased)")
+        print(f"  -> {args.render}  (blue window, magenta door, "
+              f"green slider, orange cased)")
         print("  NOT ground truth until you have corrected it.")
         return
 

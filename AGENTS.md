@@ -32,6 +32,14 @@ grow. Two known differences today:
   sash gets its own frame and the mullions appear where they were drawn.
   `data/opening_truth.json` carries the merged widths and would need
   regenerating if this side follows.
+- `extract.bypass_leaves` tells a bypass slider from a window by the offset test
+  ported back from `openings.py` - two leaves offset ACROSS the wall and lapping
+  ALONG it - and `find_openings` emits a `slider` kind that `door_item` turns
+  into `operation: "bypass"`. The JS has no slider case, so a closet still
+  arrives there as a cased opening: a lined hole with nothing in it. **This side
+  is ahead; the JS should follow.** Note the two-pass shape when porting - a leaf
+  is a PAIR of lines a panel thickness apart, and testing the raw lines finds the
+  two faces of a single leaf and calls every door a slider.
 - The JS reads DXF directly, which nothing here does.
 
 `generated:window` was a third and is closed. This side moved to a spec first,
