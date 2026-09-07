@@ -5,6 +5,10 @@ first person, try cabinet styles and colours, and light it properly -- recessed,
 under-cabinet, in-cabinet and pendant fixtures with real colour temperature --
 then get a cabinet takeoff and price it.
 
+**[Try it &rarr; zlmitchell.github.io/kitchen-designer](https://zlmitchell.github.io/kitchen-designer/)**
+&mdash; the demo opens the stock room, because the traced plan is gitignored and
+never reaches the build.
+
 Built as a fork of [architect3d](https://github.com/amitukind/architect3d)
 (ISC, three.js r185, Vue 3 + Vite), which supplies the 2D floorplan editor, the
 wall/room model, the GLTF item pipeline and a first-person walkthrough. See
@@ -19,7 +23,7 @@ container needs no GPU.
 ```sh
 docker compose up dev              # http://localhost:5173  -- vite + HMR, source bind-mounted
 docker compose up app              # http://localhost:8088  -- the real production build
-docker compose run --build --rm test   # the full suite (1323 tests)
+docker compose run --build --rm test   # the full suite (1841 tests)
 docker compose run --build --rm test npx eslint . --max-warnings 0
 ```
 
@@ -180,29 +184,63 @@ that cost and how the two implementations were held against each other.
 ## What this adds to architect3d
 
 Upstream is a floor planner. These are the gaps it leaves, in build order.
+`ROADMAP.md` tracks all of it; this is the short version of where it stands.
 
-**1. Parametric cabinets.** Cabinets are data, not meshes -- carcass, face frame,
-door style, drawer split, shelves -- generated procedurally. Everything else
-depends on this: style swaps become free, and the cabinet schedule *is* the
-model, so the takeoff needs no separate step.
+**1. Parametric cabinets.** &#10003; Built. Cabinets are data, not meshes --
+carcass, face frame, door style, drawer split -- generated procedurally, along
+with counters, sinks, appliances, windows and doors. Style swaps are free and
+the cabinet schedule *is* the model, so the takeoff will need no separate step.
+Fronts are slab, shaker or raised, and any door can be **glazed**: clear or
+frosted glass in the door's own rails, plain or divided by muntins.
 
-**2. A real lighting system.** Upstream's entire lighting is three lights: one
-hemisphere, one overhead directional key, one weak fill. There is no concept of
+**2. A real lighting system.** &#10003; Built. Upstream's entire lighting is
+three lights: one hemisphere, one overhead key, one weak fill, and no concept of
 a light you place in the room. Replaced with placeable, persisted fixtures:
 
-- recessed cans, under-cabinet strips, in-cabinet, pendants, toe-kick
-- colour temperature per fixture and per group (2200K-5000K)
+- recessed cans, pendants, ceiling fittings and wall sconces, placed as objects
+  you can select and drag
+- **under-cabinet and toe-kick strips as a property of the cabinet** -- switch
+  one on and it is the cabinet's width, at its front edge, and it moves with it
+- colour temperature per fixture (2200K-5000K), and real photometry: lumens and
+  beam angle rather than an arbitrary intensity
+- **switches**, by bank rather than by lamp -- overheads, wall lights, under
+  cabinet, accent -- so a room can be walked with some of them off
 - exposure control, so comparisons are not confounded by tone mapping
-- day/night, and window daylight with correct direction for the time of day
+- day/night, and window daylight with the right direction for the time of day
 
-**3. Cabinet run configuration.** A run of uppers is one object with a width
-split, so you can compare `[24,21,30,24]` against `[36,36,27]` and see the
-interior divisions appear and disappear. Also: centre-stile toggle, frameless vs
-face-frame, shelf count, glass fronts, door open/closed, and height-to-ceiling
-options (to-ceiling / open gap / soffit / stacked uppers).
+**3. Cabinet run configuration.** Next up, and not built yet. A run of uppers
+becomes one object with a width split, so `[24,21,30,24]` can be compared
+against `[36,36,27]` and the interior divisions appear and disappear. With it
+come the things that belong to a run rather than to a cabinet: counter depth and
+overhang, blind corners, exposed end panels, and appliance slots that reserve
+width without being a cabinet.
 
-**4. Takeoff and pricing.** BOM out of the model, in stock cabinet nomenclature,
-against more than one cabinet system so layouts can be compared on price.
+**4. Takeoff and pricing.** Not built. BOM out of the model, in stock cabinet
+nomenclature, against more than one cabinet system so layouts can be compared on
+price.
+
+## Walking the room
+
+`F`, or the footprints on the tool rail. Pointer lock, so the mouse looks and
+the screen is the viewport.
+
+| | |
+|---|---|
+| `W` `A` `S` `D` or the arrows | walk |
+| `Space` | jump |
+| `Ctrl` (held) | crouch |
+| `Esc` | back out |
+
+The eye is at **5'10"** standing and **3'** crouched -- the height somebody
+squats to look into a base cabinet, and roughly a child's eye line. Those
+numbers are the point rather than a detail: the reason to walk a kitchen instead
+of orbiting it is to answer "can I reach that, and can I see over this", and
+both answers are wrong if the eye is at the wrong height.
+
+There is **no collision yet** -- you walk through walls -- and nothing in the
+room can be operated from inside it. Doors already carry an open fraction and
+every fixture already carries a switch, so both are reachable; see ROADMAP.md
+phase 9 for what that needs.
 
 ## Adding parametric parts
 
