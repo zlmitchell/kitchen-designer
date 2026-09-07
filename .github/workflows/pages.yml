@@ -1,0 +1,109 @@
+# Publish the kitchen designer to GitHub Pages.
+#
+# Adapted from the vendored upstream workflow at app/.github/workflows/deploy.yml,
+# which GitHub never runs: workflows are read from .github/workflows at the
+# REPOSITORY root, and the fork put architect3d's copy one directory down. Three
+# things differ from it beyond the location:
+#
+#   - `main`, not `master`.
+#   - every step runs in app/, which is where package.json lives.
+#   - no test/lint/budget gate. Upstream re-ran its whole suite here because a
+#     push to master could arrive by a route CI never saw; this fork has no CI
+#     at all yet, so a failing gate would only mean nothing ever deploys. Add
+#     `npm ci && npm test` back once the suite is green on main.
+#
+# BEFORE THE FIRST RUN: Settings -> Pages -> Build and deployment -> Source must
+# be set to "GitHub Actions", or this fails at the configure-pages step.
+#
+# NOTE ON WHAT GETS PUBLISHED: a Pages site is world-readable even from a
+# private repository. That is safe here only because the traced plan is
+# gitignored -- data/ and plans/ never reach the runner, so the deployed
+# application 404s on plan/design.json and falls back to the default design.
+# Committing a real plan would publish the house.
+name: Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# One live deployment, and half-published is worse than late.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        env:
+          # simple-git-hooks writes a pre-commit hook from its own postinstall
+          # and honours only this variable, not CI. A runner makes no commits.
+          SKIP_INSTALL_SIMPLE_GIT_HOOKS: '1'
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the application
+        # --base carries the repository sub-path into the hashed asset URLs.
+        # It does NOT affect the model and texture URLs: those are bare relative
+        # strings composed at runtime and resolve against the page. See the
+        # comment in app/index.html.
+        run: npm run build:demo -- --base=/${{ github.event.repository.name }}/
+
+      - name: Assemble the site
+        # .nojekyll stops Pages running the artifact through Jekyll, which drops
+        # every path beginning with an underscore -- a silent 404 rather than a
+        # build error.
+        run: touch dist-demo/.nojekyll
+
+      - name: Report what is being published
+        run: |
+          echo "### Deploy contents" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist-demo >> "$GITHUB_STEP_SUMMARY"
+          du -sh dist-demo/* >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist-demo
+
+  deploy:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
