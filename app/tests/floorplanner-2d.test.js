@@ -859,3 +859,130 @@ describe('drawing onto a corner that is already there', () =>
 		planner.dispose();
 	});
 });
+
+describe('a drawn wall snaps to a preferred direction', () =>
+{
+	/**
+	 * The axis snap beside this one works in CENTIMETRES, so it gets weaker the
+	 * longer the wall: at 10m a 25cm tolerance is 1.4 degrees. That is why a long
+	 * wall was hard to get exactly horizontal, and it is what an angular
+	 * tolerance fixes - an angle does not care how far away the far end is.
+	 */
+
+	/** A planner in DRAW mode with one click already made, at 0,0. */
+	function drawingFromOrigin(options)
+	{
+		const {canvas} = buildFloorplannerDom(window, {width: 900, height: 700});
+		const floorplan = new Floorplan();
+		const planner = new Floorplanner2D(canvas, floorplan);
+		planner.setMode(floorplannerModes.DRAW);
+		planner.lastNode = floorplan.newCorner(0, 0);
+		if (options && options.grid) {Configuration.setValue('snapToGrid', 1);}
+		return {canvas, floorplan, planner};
+	}
+
+	/** Aim `length` cm from the origin at `degrees`, and report where it landed. */
+	function aim(planner, degrees, length)
+	{
+		const radians = degrees * Math.PI / 180;
+		planner.mouseX = Math.cos(radians) * length;
+		planner.mouseY = Math.sin(radians) * length;
+		planner.updateTarget();
+		return Math.atan2(planner.targetY, planner.targetX) * 180 / Math.PI;
+	}
+
+	afterEach(() => {Configuration.setValue('snapToGrid', 0);});
+
+	it('pulls a nearly-square wall exactly square', () =>
+	{
+		const {planner} = drawingFromOrigin();
+		expect(aim(planner, 87, 500)).toBeCloseTo(90, 6);
+		expect(planner.targetAngle).toBe(90);
+		planner.dispose();
+	});
+
+	it('holds a long wall as tightly as a short one', () =>
+	{
+		// The whole reason the tolerance is angular. 3 degrees off at 10m is 52cm
+		// off-axis - twice the 25cm the distance-based snap would allow, so the
+		// old rule let go of exactly the wall that most needed holding.
+		const {planner} = drawingFromOrigin();
+		expect(aim(planner, 3, 1000)).toBeCloseTo(0, 6);
+		expect(aim(planner, 3, 40)).toBeCloseTo(0, 6);
+		planner.dispose();
+	});
+
+	it('offers 45 and 30, not just the axes', () =>
+	{
+		const {planner} = drawingFromOrigin();
+		expect(aim(planner, 43, 400)).toBeCloseTo(45, 6);
+		expect(aim(planner, 28, 400)).toBeCloseTo(30, 6);
+		expect(aim(planner, 179, 400)).toBeCloseTo(180, 6);
+		planner.dispose();
+	});
+
+	it('leaves an angle nobody could have meant alone', () =>
+	{
+		// Two thirds of the circle stays free, or the tool decides what you drew.
+		const {planner} = drawingFromOrigin();
+		expect(aim(planner, 37, 400)).toBeCloseTo(37, 6);
+		expect(planner.targetAngle).toBe(null);
+		planner.dispose();
+	});
+
+	it('keeps the length the pointer asked for', () =>
+	{
+		// It ROTATES rather than projects, so the far end follows the pointer out
+		// and back. Projecting would shorten the wall as the pointer drifts off
+		// the ray, which reads as the wall shrinking for no reason.
+		const {planner} = drawingFromOrigin();
+		aim(planner, 87, 500);
+		const length = Math.sqrt(planner.targetX ** 2 + planner.targetY ** 2);
+		expect(length).toBeCloseTo(500, 6);
+		planner.dispose();
+	});
+
+	it('survives the grid, which runs before it and would undo it', () =>
+	{
+		// A square grid only preserves the angles that happen to land on it. Snap
+		// the angle first and a 30 degree wall is immediately pulled back off.
+		const {planner} = drawingFromOrigin({grid: true});
+		expect(aim(planner, 28, 400)).toBeCloseTo(30, 6);
+		planner.dispose();
+	});
+
+	it('does not fire before there is a direction to snap', () =>
+	{
+		// Every direction is within tolerance when the two points are on top of
+		// each other, so the first millimetre of every wall would jump to a
+		// multiple of 15 degrees.
+		const {planner} = drawingFromOrigin();
+		planner.mouseX = 0.2;
+		planner.mouseY = 0.1;
+		planner.updateTarget();
+		expect(planner.targetAngle).toBe(null);
+		// And the axis snap has already pulled it onto the last node, which is
+		// what `snapTolerance` is for at this range - so there is genuinely no
+		// direction here to have an opinion about.
+		expect(planner.targetX).toBe(0);
+		expect(planner.targetY).toBe(0);
+		planner.dispose();
+	});
+
+	it('gives way to a corner, because that is a position', () =>
+	{
+		// There is no angle more important than landing on the junction somebody
+		// aimed at.
+		const {canvas, floorplan, planner} = drawingFromOrigin();
+		const corner = floorplan.newCorner(400, 37);
+		planner.mouseX = 402;
+		planner.mouseY = 38;
+		planner.updateTarget();
+		expect(planner.targetCorner).toBe(corner);
+		expect(planner.targetAngle).toBe(null);
+		expect(planner.targetX).toBe(400);
+		expect(planner.targetY).toBe(37);
+		expect(canvas).toBeTruthy();
+		planner.dispose();
+	});
+});

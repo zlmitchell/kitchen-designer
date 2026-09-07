@@ -618,41 +618,64 @@ export class FloorplannerView2D
 		if (this.viewmodel.mode == floorplannerModes.DRAW)
 		{
 			this.drawTarget(this.viewmodel.targetX, this.viewmodel.targetY, this.viewmodel.lastNode);
-			//Enable the below lines for measurement while drawing, still needs work as it is crashing the whole thing
 			if(this.viewmodel.lastNode != null && this.viewmodel.lastNode != undefined)
 			{
 				var a = new Vector2(this.viewmodel.lastNode.x,this.viewmodel.lastNode.y);
 				var b = new Vector2(this.viewmodel.targetX, this.viewmodel.targetY);
 				var abvector = b.clone().sub(a);
-				var midPoint = abvector.multiplyScalar(0.5).add(a);
-				this.drawTextLabel(this.dimensioning.cmToMeasure(a.distanceTo(b)), this.viewmodel.convertX(midPoint.x), this.viewmodel.convertY(midPoint.y));
-				
-				//Show angle to the nearest wall
-				var vector = b.clone().sub(a);
-				var sAngle = (vector.angle()*180) / Math.PI;
-				var result = this.viewmodel.lastNode.closestAngle(sAngle);				
-				var eAngle = result['angle'];
-				var closestVector = result['point'].sub(a);
-				
-				var textDistance = 60;
-				var radius = Math.min(textDistance, vector.length());
-				var location = vector.normalize().add(closestVector.normalize()).multiplyScalar(textDistance).add(a);
-				
-				var ox = this.viewmodel.convertX(this.viewmodel.lastNode.x);
-				var oy = this.viewmodel.convertY(this.viewmodel.lastNode.y);
-				var angle = Math.abs(eAngle - sAngle);
-				angle = (angle > 180) ? 360 - angle : angle;
-				angle = Math.round(angle * 10) / 10;				
-				
-				sAngle = (sAngle * Math.PI) / 180;
-				eAngle = (eAngle * Math.PI) / 180;				
-				
-				this.context.strokeStyle = floorplannerPalette.angleGuide;
-				this.context.lineWidth = 4;
-				this.context.beginPath();
-				this.context.arc(ox, oy, radius*0.5, Math.min(sAngle, eAngle), Math.max(sAngle, eAngle), false);
-				this.context.stroke();
-				this.drawTextLabel(`${angle}°`, this.viewmodel.convertX(location.x), this.viewmodel.convertY(location.y));
+				var midPoint = abvector.clone().multiplyScalar(0.5).add(a);
+				// The length, and the direction it is going, together. A length on
+				// its own does not tell you whether the wall you are drawing is
+				// square, and "is it square" is the question being asked.
+				var bearing = (abvector.angle() * 180) / Math.PI;
+				var snapped = this.viewmodel.targetAngle;
+				var reading = `${this.dimensioning.cmToMeasure(a.distanceTo(b))}  ${Math.round(bearing)}°`;
+				this.drawTextLabel(reading,
+					this.viewmodel.convertX(midPoint.x), this.viewmodel.convertY(midPoint.y),
+					// A snap nobody can see is indistinguishable from a shaky hand,
+					// so a snapped wall says so in the guide colour and in bold.
+					(snapped === null || snapped === undefined) ? null : floorplannerPalette.angleGuide,
+					null,
+					(snapped === null || snapped === undefined) ? 'normal' : 'bold');
+
+				// The angle back to whatever else meets this corner - the INTERIOR
+				// angle, which is the one a builder reads off a plan.
+				//
+				// Only when something else does meet it. `closestAngle` has no
+				// neighbours to search on the first segment of a run, and returns
+				// `{angle: 0, point: (0, 0)}` - the plan's origin, not a wall. The
+				// arc was then drawn from the wall's bearing to zero and the label
+				// placed along a vector pointing at the origin, which put a number
+				// nobody asked for at a spot nothing was happening.
+				var neighbours = this.viewmodel.lastNode.adjacentCorners();
+				if (neighbours.length > 0 && abvector.length() > 1)
+				{
+					var vector = b.clone().sub(a);
+					var sAngle = (vector.angle()*180) / Math.PI;
+					var result = this.viewmodel.lastNode.closestAngle(sAngle);
+					var eAngle = result['angle'];
+					var closestVector = result['point'].sub(a);
+
+					var textDistance = 60;
+					var radius = Math.min(textDistance, vector.length());
+					var location = vector.normalize().add(closestVector.normalize()).multiplyScalar(textDistance).add(a);
+
+					var ox = this.viewmodel.convertX(this.viewmodel.lastNode.x);
+					var oy = this.viewmodel.convertY(this.viewmodel.lastNode.y);
+					var angle = Math.abs(eAngle - sAngle);
+					angle = (angle > 180) ? 360 - angle : angle;
+					angle = Math.round(angle * 10) / 10;
+
+					sAngle = (sAngle * Math.PI) / 180;
+					eAngle = (eAngle * Math.PI) / 180;
+
+					this.context.strokeStyle = floorplannerPalette.angleGuide;
+					this.context.lineWidth = 4;
+					this.context.beginPath();
+					this.context.arc(ox, oy, radius*0.5, Math.min(sAngle, eAngle), Math.max(sAngle, eAngle), false);
+					this.context.stroke();
+					this.drawTextLabel(`${angle}°`, this.viewmodel.convertX(location.x), this.viewmodel.convertY(location.y));
+				}
 			}
 		}
 		this.floorplan.getWalls().forEach((wall) => {this.drawWallLabels(wall);});

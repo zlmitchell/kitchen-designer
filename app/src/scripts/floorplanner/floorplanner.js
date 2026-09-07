@@ -44,6 +44,28 @@ import {FloorplannerView2D, floorplannerModes} from './floorplanner_view.js';
  *        nothing, so the value passes through untouched.
  * @returns {number}
  */
+/**
+ * The directions a drawn wall prefers, in degrees.
+ *
+ * 15 gives 24 of them, which includes every angle a house is actually built at
+ * - 90 for the square corners, 45 for a bay or a cut corner, 30 and 60 for a
+ * hipped return - without pretending 7 degrees is a thing somebody meant.
+ */
+const ANGLE_SNAP_DEGREES = 15;
+
+/**
+ * How far off one of those before it stops being what you meant, in degrees.
+ *
+ * Angular rather than a distance, and that is the point. The axis snap beside
+ * it uses `snapTolerance`, which is in CENTIMETRES - so it gets weaker the
+ * longer the wall. At 10m a 25cm tolerance is 1.4 degrees, which is why a long
+ * wall was so hard to get exactly horizontal and a short one snapped whether
+ * you wanted it to or not. An angle does not care how far away the far end is.
+ *
+ * 5 of every 15 degrees snap, so two thirds of the circle is still free.
+ */
+const ANGLE_SNAP_TOLERANCE = 5;
+
 function snapToPitch(value, pitch)
 {
 	if (!pitch)
@@ -136,6 +158,12 @@ export class Floorplanner2D extends EventDispatcher
 		 * @type {?Object}
 		 */
 		this.targetCorner = null;
+		/**
+		 * The preferred direction the drawn wall snapped to, in degrees, or null.
+		 *
+		 * @type {?number}
+		 */
+		this.targetAngle = null;
 		// Initialization:
 
 		this.setMode(floorplannerModes.MOVE);
@@ -466,7 +494,64 @@ export class Floorplanner2D extends EventDispatcher
 			this.targetY = snapToPitch(this.targetY, this.configuration.getNumericValue(gridSpacing));
 		}
 
+		// LAST, so the angle survives. Run before the grid and a 15 or 30 degree
+		// wall is immediately pulled off it again - a square grid only preserves
+		// the angles that happen to land on it, which is 0, 90 and whichever
+		// diagonals the pitch allows. Run after, and the grid decides roughly how
+		// LONG the wall is while the angle stays exact, which is the priority
+		// somebody drawing at an angle is expressing.
+		this.snapTargetAngle();
+
 		this.view.invalidate();
+	}
+
+	/**
+	 * Turn the target onto the nearest preferred direction from the last node.
+	 *
+	 * Rotates rather than projects: the distance from the last node to the
+	 * pointer is kept and only the DIRECTION is corrected, so the far end follows
+	 * the pointer out and back the way it looks like it should. Projecting onto
+	 * the ray would shorten the wall as the pointer drifts off it, which reads as
+	 * the wall shrinking for no reason. Within the tolerance the two differ by
+	 * under half a percent of the length anyway.
+	 *
+	 * Records the angle it chose in `targetAngle` so the view can say which one -
+	 * a snap nobody can see is indistinguishable from a shaky hand.
+	 */
+	snapTargetAngle()
+	{
+		this.targetAngle = null;
+		if (this.mode != floorplannerModes.DRAW || !this.lastNode || this.targetCorner)
+		{
+			// A corner the pointer is already on wins outright: it is a POSITION,
+			// and there is no angle that could be more important than landing on
+			// the junction somebody aimed at.
+			return;
+		}
+
+		var dx = this.targetX - this.lastNode.x;
+		var dy = this.targetY - this.lastNode.y;
+		var length = Math.sqrt(dx * dx + dy * dy);
+		// Nothing to aim yet. Every direction is within tolerance of a snap when
+		// the two points are on top of each other, and snapping then would make
+		// the first millimetre of every wall jump to a multiple of 15 degrees.
+		if (length < 1)
+		{
+			return;
+		}
+
+		var degrees = Math.atan2(dy, dx) * 180 / Math.PI;
+		var nearest = Math.round(degrees / ANGLE_SNAP_DEGREES) * ANGLE_SNAP_DEGREES;
+		if (Math.abs(degrees - nearest) > ANGLE_SNAP_TOLERANCE)
+		{
+			return;
+		}
+
+		var radians = nearest * Math.PI / 180;
+		this.targetX = this.lastNode.x + Math.cos(radians) * length;
+		this.targetY = this.lastNode.y + Math.sin(radians) * length;
+		// Normalised to 0..360 for display; -90 and 270 are the same wall.
+		this.targetAngle = (nearest + 360) % 360;
 	}
 
 	/** */
