@@ -223,10 +223,15 @@ material, which is a Phase 2 material question rather than a geometry one. And
 
 ### Phase 2 — cabinets and counters
 
-**Cabinets and counters are built.** `generated:cabinet` (base / wall / tall,
-face-frame or frameless, slab / shaker / raised fronts, doors and drawer banks,
-knob or pull) and `generated:counter` (slab, edge profile, backsplash, cutouts).
-Sinks and appliances are what remain.
+**Cabinets, counters and sinks are built.** `generated:cabinet` (base / wall /
+tall, face-frame or frameless, slab / shaker / raised fronts, doors and drawer
+banks, knob or pull), `generated:counter` (slab, edge profile, backsplash,
+cutouts) and `generated:sink` (five mounts, rect / round / oval, bowl splits,
+material-driven wall thickness). Appliances are what remain.
+
+The sink confirmed the design the audit argued for: **five mounts are one
+builder**, differing only in where the rim sits against the slab plus at most one
+extra piece — a flange for a drop-in, an apron for a farmhouse. Nothing else.
 
 Four things the work turned up, all of which a triangle count would have missed:
 

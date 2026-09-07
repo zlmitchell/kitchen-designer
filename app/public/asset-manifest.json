@@ -1819,6 +1819,21 @@
 			"hash": "sha256-uPQYKe7He6/sICQKb0xon4muhdx9FITtssPFDxYtBzY=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/sink-farmhouse.png": {
+			"bytes": 3216,
+			"hash": "sha256-5k0wCsc13efCaPDuClMwX3OHS5PJr86pN9LG2LBXVFM=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/sink-undermount.png": {
+			"bytes": 2946,
+			"hash": "sha256-VQg/0rQdim+MtXqGLsiSpdReZpBortoGufFZ8ibwjuI=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/sink-vessel.png": {
+			"bytes": 3617,
+			"hash": "sha256-AKE4sP1wuItx24ED9FnaEsAcWObnij4B+zoEY9u5dGY=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/speaker.png": {
 			"bytes": 3209,
 			"hash": "sha256-64VZp5lZuQjPVv/cu6vNOSoMC2C9a8gSNiT/G9LlX9k=",

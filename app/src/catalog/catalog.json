@@ -1318,6 +1318,58 @@
 				"backsplash": 10.16,
 				"cutouts": []
 			}
+		},
+		{
+			"name": "Sink - Undermount",
+			"image": "models/thumbnails_new/sink-undermount.png",
+			"model": "generated:sink",
+			"type": 0,
+			"format": "generated",
+			"spec": {
+				"mount": "undermount",
+				"shape": "rect",
+				"width": 76.2,
+				"frontToBack": 47,
+				"depth": 24.1,
+				"kind": "sink"
+			}
+		},
+		{
+			"name": "Sink - Farmhouse",
+			"image": "models/thumbnails_new/sink-farmhouse.png",
+			"model": "generated:sink",
+			"type": 0,
+			"format": "generated",
+			"spec": {
+				"mount": "farmhouse",
+				"shape": "rect",
+				"width": 76.2,
+				"frontToBack": 47,
+				"depth": 25.4,
+				"material": {
+					"basin": "paint-white",
+					"apron": "paint-white"
+				},
+				"kind": "sink"
+			}
+		},
+		{
+			"name": "Sink - Vessel",
+			"image": "models/thumbnails_new/sink-vessel.png",
+			"model": "generated:sink",
+			"type": 0,
+			"format": "generated",
+			"spec": {
+				"mount": "vessel",
+				"shape": "round",
+				"width": 41,
+				"frontToBack": 41,
+				"depth": 14,
+				"material": {
+					"basin": "paint-white"
+				},
+				"kind": "sink"
+			}
 		}
 	]
 }
