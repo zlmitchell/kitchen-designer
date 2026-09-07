@@ -36,10 +36,11 @@ meshes. Every "no" below comes back to the same two root causes.
 | Ceiling fans | `Ceilingfan` is type 4 (`ceilingFan.gltf`) — emits nothing, and does not turn | No |
 | Fan: hugger vs downrod, light kit | — | No |
 | Anything animated | The render loop is continuous (`three/main.js:513`) but there is **no clock** — no `AnimationMixer`, no `Clock`, no `getDelta` in `src/` | No |
-| Base cabinets | `Kitchencabinet` (Kenney, fixed width) | No |
-| Cabinet width, parametric | `Item.resize()` → `setScale(x,y,z)` (`items/item.js:436`) | No — cause A |
-| Cabinet material | Per-material **colour tint only** (`setMaterialColor`) | No |
-| Door front style | — | No |
+| Base cabinets | `generated:cabinet` — base / wall / tall, face-frame or frameless, built from panels | **Done** |
+| Cabinet width, parametric | `width` in the spec, on 3in stock increments. Nothing is scaled | **Done** |
+| Cabinet material | A material per face group — carcass, frame, front, hardware — off the library | **Done** |
+| Door front style | `front: slab \| shaker \| raised`, as a profile and not a model | **Done** |
+| Glass cabinet doors | `glazing: none \| glass \| mullion` — a pane in the door's own rails, clear or frosted, divided or not | **Done** |
 | Counter depth / cabinet depth | Mesh stretch | No |
 | Upper cabinet depth / height | 4 fixed Kenney uppers | No |
 | Countertops | `generated:counter` — slab, edge profile, backsplash, cutouts | **Done** |
@@ -234,6 +235,13 @@ cutouts) and `generated:sink` (five mounts, rect / round / oval, bowl splits,
 material-driven wall thickness). **Appliances too** - see phase 4, which was
 built here rather than after runs, because only the built-in fridge's face
 alignment actually waited on a run and the other four did not.
+
+**And a front can be glazed.** `glazing` is a property of the centre panel
+rather than a fourth style, because what changes between a shaker door and the
+glass one beside it in the same run is the panel and nothing else — so it
+composes with slab, shaker and raised instead of competing with them for one
+dropdown. Doors only: a glass drawer front is not a thing you buy, and a bank
+of them would be a view of the inside of a drawer box.
 
 The sink confirmed the design the audit argued for: **five mounts are one
 builder**, differing only in where the rim sits against the slab plus at most one
@@ -844,6 +852,24 @@ Three things came out of rendering it rather than measuring it:
   day/night work below**, and it is why that item is worth doing sooner rather
   than last: the fixtures cannot pay off fully until the globals come down.
 
+**And the panel is a fitting, not a form.** A light in the document's top-level
+`lights: []` block is a position and a temperature with no geometry: it worked
+and was, as far as the interface was concerned, invisible — you could place one
+from a script and never find it again. `generated:fixture` is the answer, and it
+is the nesting path used against itself. Being an item it is selected, dragged,
+duplicated, saved and inspected by machinery that already exists; being a
+`RoofItem` it snaps to the ceiling, which is where a can goes. **The spec IS the
+fixture**, so `SpecInspector` edits a real lamp's colour temperature with no new
+UI at all — it renders whatever schema a builder exports, and the schema is the
+fixture's. Three catalog entries place one: a can, a pendant and a ceiling light.
+
+That is also what turned up the one defect in it. The drawn strip took its
+length from `diameter * 6` while `emittersFor` spread its sources over `length`,
+so the bar you could see and the light it cast were two different fixtures. They
+agreed only by coincidence — 4in of trim times six is 61cm, which is the 60cm
+default to within a rounding error — so the default looked right and every other
+value did not. One field now, asked of the mounts that have one.
+
 Also decided, and cheap because it was decided as data: `castShadow` is **per
 mount**, not global. Most of these should never cast — a strip 40cm from the
 worktop it lights buys nothing from a shadow map and costs a whole render of the
@@ -926,9 +952,6 @@ ends up shaped like its test.
   that needs 0d. The clock is built and idle (`three/frame_clock.js`); nothing
   turns yet. The two clearances, the blade-beat frequencies, the
   no-shadow-casting rule and the parametric blades are all still ahead.
-- **A panel.** `FIXTURE_SCHEMA` is exported in the shape `SpecInspector` already
-  renders, and nothing mounts it yet — a fixture can only arrive from a file or
-  from a catalog lamp that carries one, and there is no way to place a bare can.
 - **Windows do not admit light as glass**, only as a hole. A closed casement is
   an opening in the shadow map exactly like an open one, because the sash is a
   child and children do not cast. Right for now, wrong once 8b's `transmission`
@@ -1254,8 +1277,14 @@ generated now, and `tools/extract.py` writes `generated:window`, so the eight
 windows the tracer finds on the sample sheet arrive at five different widths
 with the same stiles. The door operations — french, bypass, sliding patio,
 pocket, bifold, barn — and the tracer's slider port both landed after it, so
-**phase 5 is closed**. Next is phase 3 (runs) or phase 6 (lighting); the
-dependency note below is the argument for which.
+**phase 5 is closed**. Phase 6 was taken next of the two, and is closed but for
+the ceiling fan — which is the whole of the animation story — and for glass that
+admits light, which waits on 8b. **So the next phase is 3 (runs)**, and it is
+the last unbuilt phase in the spine: four finished phases are already deferring
+to it. Phase 2 parked the farmhouse sink, the built-in fridge and the vessel
+sink there; phase 4's panel-ready front is matched to its neighbours by hand
+until it arrives; and phase 7 falls out with no new model work only because its
+method is to walk the runs, of which there are none.
 
 **Phase 8a is the exception to its own phase and can be pulled forward to any
 point after 0b.** Maps go into the material library, and the library exists —
