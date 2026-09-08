@@ -43,6 +43,8 @@ const props = defineProps({
 	zoom: {type: Number, default: 100},
 	mode: {type: Number, required: true},
 	layout: {type: String, required: true},
+	/** Whether the pointer is locked and the camera is a person in the room. */
+	walkthrough: {type: Boolean, default: false},
 	unitLabel: {type: String, default: ''},
 });
 
@@ -54,6 +56,15 @@ const props = defineProps({
  */
 const hint = computed(function ()
 {
+	// Walking comes first, because it is the one mode where the controls are not
+	// discoverable: the pointer is locked, so there is no cursor to hover with and
+	// no tooltip to find. Crouch especially -- nobody guesses a key they cannot
+	// see, and it is the control that answers "what does this look like from a
+	// child's height, and can I see into that base cabinet".
+	if (props.walkthrough)
+	{
+		return 'W A S D to walk · hold Shift to crouch · Space to jump · Esc to exit';
+	}
 	if (props.layout !== LAYOUT_PLAN && props.layout !== 'split')
 	{
 		return 'Drag to orbit · scroll to zoom · click an item to select it';

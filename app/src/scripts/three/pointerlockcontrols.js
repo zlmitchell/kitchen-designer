@@ -42,19 +42,24 @@ import {PointerLockControls as PointerLockControlsAddon} from 'three/addons/cont
  *     no longer exists.
  */
 /**
- * Eye height standing, in centimetres. 5ft 10in.
+ * Eye height standing, in centimetres. 5ft 5in.
  *
- * Not the top of the head -- the EYE, which is what a camera is. The fork walked
- * at 125cm and `Main` overrode it to 160, and both are wrong in the same
- * direction: 160cm of eye height is a person of about 5ft 5in, so every wall
- * cabinet in the app looked taller than it is and the 18in splash above a
- * worktop read as a shelf at chin height. The whole point of walking the model
- * is to answer "can I reach that", and the answer is wrong if the eye is wrong.
+ * The EYE, which is what a camera is, and not the top of the head -- a
+ * distinction this constant got right in prose and then wrong in the number. It
+ * was 177.8, which is 5ft 10in, and 5ft 10in is how tall somebody IS: the eye
+ * sits about four and a half inches below that. So the camera was walking around
+ * with its lens where a 6ft 2in person's eyes would be, and every wall cabinet
+ * read as lower than it is -- the same error the fork's 125 and `Main`'s 160
+ * made in the other direction, and just as visible.
+ *
+ * 165.1 is the eye of somebody 5ft 10in tall. The whole point of walking the
+ * model is to answer "can I reach that, and can I see over this", and the answer
+ * is wrong whichever way the eye is wrong.
  */
-export const EYE_HEIGHT = 177.8;
+export const EYE_HEIGHT = 165.1;
 
 /**
- * Eye height crouching, in centimetres. 3ft.
+ * Eye height crouching, in centimetres. 2ft 7in.
  *
  * Held on SHIFT, and not on Ctrl. Ctrl was the first choice and it is a trap:
  * pointer lock does not take the browser's own shortcuts away, so a walker who
@@ -64,9 +69,11 @@ export const EYE_HEIGHT = 177.8;
  *
  * The height a base cabinet is looked into from, which is the reason to crouch
  * in a kitchen at all: it is roughly the eye of somebody squatting at an open
- * drawer, and it is also a child's eye line.
+ * drawer, and it is also a child's eye line. Dropped by the same five inches as
+ * the standing height, for the same reason -- it was measured from a head and
+ * not from an eye.
  */
-export const CROUCH_HEIGHT = 91.44;
+export const CROUCH_HEIGHT = 78.74;
 
 /** How fast the eye moves between the two. Seconds are `delta * this`. */
 const CROUCH_EASE = 12;

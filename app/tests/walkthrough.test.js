@@ -5,8 +5,10 @@
  * The eye height is not a preference. The whole reason to walk a kitchen rather
  * than orbit it is to answer "can I reach that, and what can I see over" -- and
  * both answers are wrong if the eye is at the wrong height. It walked at 125cm
- * in the class and 160cm after `Main` overrode it, which is a person of about
- * 5ft 5in, so every wall cabinet read as taller than it is.
+  * in the class and 160cm after `Main` overrode it, then briefly at 177.8, which
+ * is a PERSON's height and not an eye's: the lens ended up where a 6ft 2in
+ * person's eyes are. An eye is about four and a half inches below the top of
+ * the head, and that is the difference between the two numbers below.
  */
 import {describe, it, expect, afterEach} from 'vitest';
 import {PerspectiveCamera} from 'three';
@@ -50,11 +52,13 @@ describe('a walker is 5ft 10in at the eye', () =>
 		const controls = walker();
 		settle(controls, 3);
 		expect(controls.getObject().position.y).toBeCloseTo(EYE_HEIGHT, 3);
-		// 5ft 10in, stated as the number a person would give.
-		expect(EYE_HEIGHT / 2.54 / 12).toBeCloseTo(5 + 10 / 12, 3);
+		// 5ft 5in at the eye, which is a person about 5ft 10in tall. Stated as the
+		// number somebody would give, because that is the check: the constant is an
+		// EYE and the temptation is always to type a height.
+		expect(EYE_HEIGHT / 2.54 / 12).toBeCloseTo(5 + 5 / 12, 3);
 	});
 
-	it('crouches to 3ft while Shift is held, and stands again when it is let go', () =>
+	it('crouches while Shift is held, and stands again when it is let go', () =>
 	{
 		// Roughly the eye of somebody squatting at an open drawer, which is the
 		// reason to crouch in a kitchen at all.
@@ -64,7 +68,10 @@ describe('a walker is 5ft 10in at the eye', () =>
 		key(controls, 'ShiftLeft', true);
 		settle(controls, 3);
 		expect(controls.getObject().position.y).toBeCloseTo(CROUCH_HEIGHT, 1);
-		expect(CROUCH_HEIGHT / 2.54 / 12).toBeCloseTo(3, 3);
+		// 2ft 7in: an eye, five inches under the standing one, and low enough to
+		// look into a base cabinet.
+		expect(CROUCH_HEIGHT / 2.54 / 12).toBeCloseTo(2 + 7 / 12, 3);
+		expect(EYE_HEIGHT - CROUCH_HEIGHT).toBeCloseTo(86.36, 2);
 
 		key(controls, 'ShiftLeft', false);
 		settle(controls, 3);
@@ -82,8 +89,8 @@ describe('a walker is 5ft 10in at the eye', () =>
 
 	it('moves the eye rather than teleporting it', () =>
 	{
-		// A snap from 178 to 91 reads as the room jumping, not as crouching. So
-		// one frame must not do the whole distance.
+		// A snap of the best part of a metre reads as the room jumping, not as
+		// crouching. So one frame must not do the whole distance.
 		const controls = walker();
 		settle(controls, 3);
 

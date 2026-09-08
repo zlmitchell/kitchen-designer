@@ -741,7 +741,8 @@ useShortcuts(() => bindings.value);
 				:cursor="stats.cursor.value"
 				:zoom="zoom.percent.value"
 				:mode="editor.mode.value"
-				:layout="workspace.layout.value" />
+				:layout="workspace.layout.value"
+				:walkthrough="walkthrough" />
 		</div>
 
 		<CatalogDrawer
