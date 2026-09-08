@@ -32,6 +32,7 @@ import {paint, regions} from '../src/app/import/spaces.js';
 import {pyRound} from '../src/app/import/round.js';
 import {regionCanvas} from '../src/app/import/raster.js';
 import {DesignDocument} from '../src/scripts/model/document.js';
+import {bridgeOpenings, itemsFor} from '../src/app/import/design.js';
 
 const require = createRequire(import.meta.url);
 const DRAWINGS = join(import.meta.dirname, 'drawings');
@@ -413,5 +414,106 @@ describe('regionCanvas', () =>
 		const region = regionCanvas([0, 0, 2592, 3456], 150, 4096);
 		expect(Math.max(region.width, region.height)).toBeLessThanOrEqual(4096);
 		expect(region.width / region.height).toBeCloseTo(2592 / 3456, 3);
+	});
+});
+
+
+/*
+ * A wide opening is drawn as the sashes it is made of, and both of these are
+ * what that costs if the tracer treats them as separate windows.
+ *
+ * Measured on the real sheet before either was fixed: the kitchen's twin left
+ * the north wall in two pieces with an end dangling in mid air at each side of
+ * it, no corner loop could close through it, and the kitchen and great room -
+ * 421 sqft between them - had no floor at all. The three sashes of the great
+ * room's window each carried their own jamb liner and casing and lapped their
+ * neighbours by 16.5cm.
+ */
+describe('a gap is bridged by everything in it, not by one opening', () =>
+{
+	/** Two collinear boxes with a gap between them, on a 7.33in wall. */
+	const pieces = () => [
+		{horizontal: true, centre: 302.83, thickness: 7.33, drawn_lo: 1050.6, drawn_hi: 1390.5},
+		{horizontal: true, centre: 302.83, thickness: 7.33, drawn_lo: 1454.5, drawn_hi: 1507.4},
+	];
+	const sash = (lo, hi) => ({horizontal: true, centre: 302.83, lo: lo, hi: hi});
+
+	it('joins a wall across the twin window the drawing draws', () =>
+	{
+		// 64in of gap, two 31.6in sashes: 49% each and 99% together. Asked one at
+		// a time, neither reaches the 60% the rule wants and the wall stays broken.
+		const joined = bridgeOpenings(pieces(), [sash(1390.8, 1422.4), sash(1422.4, 1454.0)]);
+		expect(joined).toHaveLength(1);
+		expect(joined[0].drawn_lo).toBeCloseTo(1050.6, 1);
+		expect(joined[0].drawn_hi).toBeCloseTo(1507.4, 1);
+	});
+
+	it('still joins it across a single opening of the same size', () =>
+	{
+		// What `tools/` sees, because it welds the two spans before this runs.
+		expect(bridgeOpenings(pieces(), [sash(1390.8, 1454.0)])).toHaveLength(1);
+	});
+
+	it('leaves a gap nothing fills alone', () =>
+	{
+		// The rule still has to say no. A 20in opening in a 64in gap is a wall
+		// that stops, not a wall drawn round a hole.
+		expect(bridgeOpenings(pieces(), [sash(1400.0, 1420.0)])).toHaveLength(2);
+	});
+
+	it('does not bridge across an opening on another wall', () =>
+	{
+		expect(bridgeOpenings(pieces(), [
+			{horizontal: true, centre: 588.01, lo: 1390.8, hi: 1454.0},
+		])).toHaveLength(2);
+	});
+});
+
+describe('sashes side by side are one window made of lights', () =>
+{
+	// [kind, x, y, width, horizontal, thicknessIn, hinge, swing, exterior]
+	const window = (along, width) => ['window', along, 302.83, width, true, 7.33, null, null, true];
+
+	it('collects a twin into one item, spanning both', () =>
+	{
+		const items = itemsFor([window(1406.6, 31.61), window(1438.2, 31.56)], 1050.6, 302.83);
+		expect(items).toHaveLength(1);
+		expect(items[0].spec.width).toBeCloseTo((31.61 + 31.56) * 2.54, 1);
+		expect(items[0].spec.units.map((u) => u.width))
+			.toEqual([expect.closeTo(31.61 * 2.54, 1), expect.closeTo(31.56 * 2.54, 1)]);
+		// Centred on the whole opening, not on either sash.
+		expect(items[0].xpos).toBeCloseTo((1422.4 - 1050.6) * 2.54, 0);
+	});
+
+	it('leaves a lone window with no lights at all', () =>
+	{
+		// Absent, not `[{...}]` of one: every window in most houses is this, and
+		// a field that is always there is a field that changes every file.
+		const items = itemsFor([window(1406.6, 35.17)], 1050.6, 302.83);
+		expect(items).toHaveLength(1);
+		expect(items[0].spec.units).toBeUndefined();
+	});
+
+	it('keeps two windows with a pier between them apart', () =>
+	{
+		// A foot of wall is not a mullion.
+		const items = itemsFor([window(1100.0, 35.17), window(1150.0, 35.17)], 1050.6, 302.83);
+		expect(items).toHaveLength(2);
+		expect(items[0].spec.units).toBeUndefined();
+	});
+
+	it('keeps windows on different walls apart', () =>
+	{
+		const other = ['window', 1406.6, 588.01, 31.56, true, 6.1, null, null, true];
+		const items = itemsFor([window(1406.6, 31.61), other], 1050.6, 302.83);
+		expect(items).toHaveLength(2);
+	});
+
+	it('leaves doors alone, because two doors are two doors', () =>
+	{
+		// A pair of them is `french` or `bypass`, which the symbol decides.
+		const door = (along) => ['door', along, 445.15, 30.83, true, 4.59, 'lo', 'negative', false];
+		const items = itemsFor([door(1200.4), door(1240.4)], 1050.6, 302.83);
+		expect(items).toHaveLength(2);
 	});
 });

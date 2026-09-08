@@ -31,7 +31,14 @@ grow. Two known differences today:
   two flankers, reported as a single 91in sash. The JS does not merge, so each
   sash gets its own frame and the mullions appear where they were drawn.
   `data/opening_truth.json` carries the merged widths and would need
-  regenerating if this side follows.
+  regenerating if this side follows. **The JS no longer needs the weld for its
+  own sake**: `bridgeOpenings` there sums the coverage of every opening in a
+  gap rather than asking each one whether it covers 60% of it, so a twin bridges
+  its wall without being welded first. Before that it did not - the kitchen's
+  north wall came back in two pieces with an end dangling either side of the
+  window, no corner loop closed through it, and 421 sqft of kitchen and great
+  room had no floor. Adjacent sashes are collected into one window with `units`
+  at the item stage instead, which is where a mullion belongs.
 - `extract.bypass_leaves` tells a bypass slider from a window by the offset test
   ported back from `openings.py` - two leaves offset ACROSS the wall and lapping
   ALONG it - and `find_openings` emits a `slider` kind that `door_item` turns

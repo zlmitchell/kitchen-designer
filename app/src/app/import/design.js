@@ -168,17 +168,40 @@ export function bridgeOpenings(boxes, openings)
 				{
 					continue;
 				}
-				// By how much of the gap the opening COVERS, not by whether it
-				// lines up with it. A wall's face stops short of its own jamb,
-				// so requiring the two to coincide within a couple of inches
-				// never fired: the stretch beyond was left unbridged, the
+				// By how much of the gap the openings COVER, not by whether one of
+				// them lines up with it. A wall's face stops short of its own
+				// jamb, so requiring the two to coincide within a couple of
+				// inches never fired: the stretch beyond was left unbridged, the
 				// length filter dropped it, and the door was then placed on a
 				// wall that no longer existed.
-				const spanned = openings.some((opening) =>
-					opening.horizontal === one.horizontal
-					&& Math.abs(opening.centre - one.centre) <= Math.max(one.thickness, 6.0)
-					&& Math.min(opening.hi, hi) - Math.max(opening.lo, lo) >= (hi - lo) * 0.6);
-				if (!spanned)
+				//
+				// TOGETHER, and that is the whole of the second fix. A wide
+				// opening is drawn as the sashes it is made of - the kitchen's
+				// is a twin, two 31.6in windows either side of a mullion - and
+				// asking each one on its own whether it covers 60% of a 64in gap
+				// gets 49% twice and bridges nothing. The wall was then left in
+				// two pieces with an end dangling in mid air at each side of the
+				// window, the room's corner loop could not close through it, and
+				// the whole kitchen and great room - 421 sqft of it - had no
+				// floor. `tools/` does not have this bug because `find_openings`
+				// WELDS adjacent spans into one opening before it gets here; the
+				// JS deliberately does not, because a mullion belongs where it
+				// was drawn. So the coverage is summed instead.
+				//
+				// Summing is safe: openings on one wall line do not overlap each
+				// other, so no stretch of the gap is counted twice.
+				let covered = 0;
+				for (const opening of openings)
+				{
+					if (opening.horizontal !== one.horizontal
+						|| Math.abs(opening.centre - one.centre) > Math.max(one.thickness, 6.0))
+					{
+						continue;
+					}
+					covered += Math.max(0,
+						Math.min(opening.hi, hi) - Math.max(opening.lo, lo));
+				}
+				if (covered < (hi - lo) * 0.6)
 				{
 					continue;
 				}
@@ -499,7 +522,7 @@ function doorItem(index, kind, x, y, width, horizontal, thicknessCm,
  */
 export function itemsFor(openings, ox, oy, openDoors = false)
 {
-	return openings.map((opening, index) =>
+	return groupSashes(openings).map((opening, index) =>
 	{
 		const [kind, x, y, width, horizontal] = opening;
 		const thicknessCm = opening.length > 5 && opening[5] ? opening[5] * CM_PER_INCH : null;
@@ -512,8 +535,110 @@ export function itemsFor(openings, ox, oy, openDoors = false)
 			return doorItem(index, kind, x, y, width, horizontal, thicknessCm,
 				hinge, swing, exterior, openDoors, ox, oy);
 		}
-		return windowItem(index, kind, x, y, width, horizontal, thicknessCm, ox, oy);
+		return windowItem(index, kind, x, y, width, horizontal, thicknessCm, ox, oy,
+			opening.length > 9 ? opening[9] : null);
 	});
+}
+
+/**
+ * How close two sashes have to be to be one window, in inches.
+ *
+ * They touch: a mullion is drawn as ONE member and the openings either side of
+ * it are measured to its faces, so the gap between two sashes of one window is
+ * the mullion and nothing else. Three quarters of an inch is generous for that
+ * and far short of any real pier between two separate windows.
+ */
+const SASH_GAP_IN = 0.75;
+
+/**
+ * Adjacent window openings on one wall line, as one window made of lights.
+ *
+ * The drawing draws a wide opening as the sashes it is made of, and this used
+ * to become one ITEM PER SASH. Each of those carries a jamb liner and a casing,
+ * and neighbouring ones lap: measured at 16.5cm of overlap per join, which
+ * renders as the frames clipping through each other. No spacing fixes it,
+ * because the geometry that overlaps is the geometry that says where the wall
+ * stops - and it would also be wrong, since the mullion is one member and not
+ * two jambs back to back.
+ *
+ * So they are collected into one opening carrying the widths it is divided at,
+ * and `buildWindow` puts the mullions back where they were drawn. One rough
+ * opening, one hole in the wall, one casing round the lot.
+ *
+ * Doors are left alone. Two doors side by side are two doors - a pair of them
+ * is `french` or `bypass`, which `openings.js` already decides from the symbol.
+ *
+ * @param {Array<any[]>} openings
+ * @returns {Array<any[]>} the same shape, with a tenth element on any window
+ * that is more than one light: the widths, in order along the wall.
+ */
+function groupSashes(openings)
+{
+	// Along the wall and across it. A horizontal opening carries its along
+	// coordinate first, a vertical one second - the same swap `itemsFor` reads.
+	const along = (o) => (o[4] ? o[1] : o[2]);
+	const across = (o) => (o[4] ? o[2] : o[1]);
+
+	const windows = openings
+		.map((opening, index) => ({opening, index}))
+		.filter((entry) => entry.opening[0] === 'window')
+		.sort((a, b) => (a.opening[4] - b.opening[4])
+			|| (across(a.opening) - across(b.opening))
+			|| (along(a.opening) - along(b.opening)));
+
+	/**
+	 * @typedef {{horizontal: boolean, across: number, first: number,
+	 *            begin: number, end: number, widths: number[]}} SashRun
+	 */
+	/** @type {Map<number, SashRun>} The grouped window, by its first sash's index. */
+	const grouped = new Map();
+	/** @type {Set<number>} Sashes folded into an earlier one. */
+	const folded = new Set();
+
+	/** @type {?SashRun} */
+	let run = null;
+	for (const entry of windows)
+	{
+		const one = entry.opening;
+		const width = one[3];
+		const start = along(one) - width / 2;
+		if (run
+			&& run.horizontal === one[4]
+			&& Math.abs(run.across - across(one)) <= 1.0
+			&& Math.abs(start - run.end) <= SASH_GAP_IN)
+		{
+			run.widths.push(width);
+			run.end = along(one) + width / 2;
+			folded.add(entry.index);
+			continue;
+		}
+		run = {
+			horizontal: one[4], across: across(one), first: entry.index,
+			begin: start, end: along(one) + width / 2, widths: [width],
+		};
+		grouped.set(entry.index, run);
+	}
+
+	return openings.map((opening, index) =>
+	{
+		if (folded.has(index))
+		{
+			return null;
+		}
+		const run2 = grouped.get(index);
+		if (!run2 || run2.widths.length < 2)
+		{
+			return opening;
+		}
+		// One opening spanning the lot, and the widths it is divided at.
+		const middle = (run2.begin + run2.end) / 2;
+		const whole = opening.slice();
+		whole[1] = run2.horizontal ? middle : opening[1];
+		whole[2] = run2.horizontal ? opening[2] : middle;
+		whole[3] = run2.end - run2.begin;
+		whole[9] = run2.widths;
+		return whole;
+	}).filter((opening) => opening !== null);
 }
 
 /**
@@ -530,7 +655,7 @@ export function itemsFor(openings, ox, oy, openDoors = false)
  * evidence for casement or slider and does not guess: `openings.js` reads
  * glazing that connects the two jambs and nothing about how it opens.
  */
-function windowItem(index, kind, x, y, width, horizontal, thicknessCm, ox, oy)
+function windowItem(index, kind, x, y, width, horizontal, thicknessCm, ox, oy, units)
 {
 	const heightCm = GENERATED_WINDOW.height_cm;
 	const sillCm = GENERATED_WINDOW.sill_cm;
@@ -566,6 +691,12 @@ function windowItem(index, kind, x, y, width, horizontal, thicknessCm, ox, oy)
 			wallThickness: thicknessCm ? pyRound(thicknessCm, 2) : 11.43,
 			grille: {pattern: 'none', rows: 2, cols: 2},
 			openFraction: 0,
+			// The lights it is divided into, when it is more than one. Absent on
+			// a single sash, which is every window in most houses - so nothing
+			// that opened before this carries the field or changes shape.
+			...(units && units.length > 1
+				? {units: units.map((w) => ({width: pyRound(w * CM_PER_INCH, 2)}))}
+				: {}),
 		},
 	};
 }
