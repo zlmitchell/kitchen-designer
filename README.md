@@ -228,7 +228,7 @@ the screen is the viewport.
 |---|---|
 | `W` `A` `S` `D` or the arrows | walk |
 | `Space` | jump |
-| `Ctrl` (held) | crouch |
+| `Shift` (held) | crouch |
 | `Esc` | back out |
 
 The eye is at **5'10"** standing and **3'** crouched -- the height somebody

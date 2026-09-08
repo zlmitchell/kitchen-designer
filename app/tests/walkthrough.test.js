@@ -54,28 +54,28 @@ describe('a walker is 5ft 10in at the eye', () =>
 		expect(EYE_HEIGHT / 2.54 / 12).toBeCloseTo(5 + 10 / 12, 3);
 	});
 
-	it('crouches to 3ft while Ctrl is held, and stands again when it is let go', () =>
+	it('crouches to 3ft while Shift is held, and stands again when it is let go', () =>
 	{
 		// Roughly the eye of somebody squatting at an open drawer, which is the
 		// reason to crouch in a kitchen at all.
 		const controls = walker();
 		settle(controls, 3);
 
-		key(controls, 'ControlLeft', true);
+		key(controls, 'ShiftLeft', true);
 		settle(controls, 3);
 		expect(controls.getObject().position.y).toBeCloseTo(CROUCH_HEIGHT, 1);
 		expect(CROUCH_HEIGHT / 2.54 / 12).toBeCloseTo(3, 3);
 
-		key(controls, 'ControlLeft', false);
+		key(controls, 'ShiftLeft', false);
 		settle(controls, 3);
 		expect(controls.getObject().position.y).toBeCloseTo(EYE_HEIGHT, 1);
 	});
 
-	it('takes the right Ctrl as well, because keyboards have two', () =>
+	it('takes the right Shift as well, because keyboards have two', () =>
 	{
 		const controls = walker();
 		settle(controls, 3);
-		key(controls, 'ControlRight', true);
+		key(controls, 'ShiftRight', true);
 		settle(controls, 3);
 		expect(controls.getObject().position.y).toBeCloseTo(CROUCH_HEIGHT, 1);
 	});
@@ -87,25 +87,25 @@ describe('a walker is 5ft 10in at the eye', () =>
 		const controls = walker();
 		settle(controls, 3);
 
-		key(controls, 'ControlLeft', true);
+		key(controls, 'ShiftLeft', true);
 		controls.update(1 / 60);
 		const afterOneFrame = controls.getObject().position.y;
 		expect(afterOneFrame).toBeLessThan(EYE_HEIGHT);
 		expect(afterOneFrame).toBeGreaterThan(CROUCH_HEIGHT + 20);
 	});
 
-	it('does not stay crouched after walk mode is left with Ctrl down', () =>
+	it('does not stay crouched after walk mode is left with Shift down', () =>
 	{
 		// A key going up is honoured even with the controls disabled. Leaving walk
 		// mode mid-crouch used to leave the flag set, so you came back crouching -
 		// the same stuck-key shape that WASD had.
 		const controls = walker();
 		settle(controls, 3);
-		key(controls, 'ControlLeft', true);
+		key(controls, 'ShiftLeft', true);
 		settle(controls, 1);
 
 		controls.enabled = false;
-		key(controls, 'ControlLeft', false);
+		key(controls, 'ShiftLeft', false);
 		controls.enabled = true;
 		settle(controls, 3);
 
@@ -119,7 +119,7 @@ describe('a walker is 5ft 10in at the eye', () =>
 		const controls = walker();
 		settle(controls, 3);
 		controls.enabled = false;
-		key(controls, 'ControlLeft', true);
+		key(controls, 'ShiftLeft', true);
 		controls.enabled = true;
 		settle(controls, 3);
 

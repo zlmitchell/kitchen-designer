@@ -56,6 +56,12 @@ export const EYE_HEIGHT = 177.8;
 /**
  * Eye height crouching, in centimetres. 3ft.
  *
+ * Held on SHIFT, and not on Ctrl. Ctrl was the first choice and it is a trap:
+ * pointer lock does not take the browser's own shortcuts away, so a walker who
+ * held Ctrl and touched W closed the tab and lost the design. Shift has no
+ * combination that does anything destructive here, and it is the key every game
+ * that has a crouch already uses.
+ *
  * The height a base cabinet is looked into from, which is the reason to crouch
  * in a kitchen at all: it is roughly the eye of somebody squatting at an open
  * drawer, and it is also a child's eye line.
@@ -78,9 +84,9 @@ export class PointerLockControls extends PointerLockControlsAddon
 
 		/** Eye height standing, in centimetres. The floor the walker cannot fall through. */
 		this.characterHeight = EYE_HEIGHT;
-		/** Eye height with Ctrl held. */
+		/** Eye height with Shift held. */
 		this.crouchHeight = CROUCH_HEIGHT;
-		/** Whether Ctrl is down right now. */
+		/** Whether Shift is down right now. */
 		this._crouching = false;
 		/**
 		 * The eye height in force this frame, eased between the two.
@@ -134,7 +140,7 @@ export class PointerLockControls extends PointerLockControlsAddon
 		return this.object;
 	}
 
-	/** WASD, the arrows, Space and Ctrl, by physical key so the layout does not matter. */
+	/** WASD, the arrows, Space and Shift, by physical key so the layout does not matter. */
 	_setKey(event, down)
 	{
 		// A key going UP is always honoured, even with the controls disabled.
@@ -147,8 +153,8 @@ export class PointerLockControls extends PointerLockControlsAddon
 		}
 		switch (event.code)
 		{
-		case 'ControlLeft':
-		case 'ControlRight':
+		case 'ShiftLeft':
+		case 'ShiftRight':
 			this._crouching = down;
 			break;
 		case 'ArrowUp':

@@ -1176,7 +1176,7 @@ which is thin enough that the pass list is a budget decision, not a taste one.
 
 Not a fourth root cause either. Phases 2–6 build a room that is right and Phase
 8 makes it look right; this is about a room you can only look AT. Walk mode
-exists — pointer lock, WASD, jump, and now Ctrl to crouch — and once you are
+exists — pointer lock, WASD, jump, and now Shift to crouch — and once you are
 inside it the house is a photograph: no door opens, no switch works, nothing can
 be moved. Everything below is already expressible in a spec. **None of this
 needs a new model; it needs a way to reach the model from inside it.**
