@@ -36,16 +36,53 @@ import {TIMES_OF_DAY, clockOf, sunAt} from '../../scripts/core/daylight.js';
  *
  * @param {{three: import('vue').Ref<?Object>}} store The app store, for the viewer.
  */
+/**
+ * What the app opens with.
+ *
+ * Not what the LIBRARY opens with. `Main.mood` is still
+ * `{ambient: 1, daylight: null}` -- the neutral state every earlier build drew
+ * and the one `npm run parity` captures -- and this composable pushes these onto
+ * it once the viewer exists. So the render profile's own behaviour is unchanged
+ * and only the application's opening view moves, which is the difference between
+ * a default and a change to what the renderer does.
+ *
+ * **Ambient at 0.3, and the sun on**, because full studio fill puts a white
+ * floor at or over 1.0 before a single lamp is switched on -- so a placed
+ * fixture adds a lift you have to look for, and the room reads as lit by
+ * nothing in particular. Turning the fill down is what makes the light in the
+ * design the light in the picture, and it is the argument phase 6 makes for
+ * pulling the daylight work forward at all. Opening with it already down means
+ * the first thing anybody sees is the kitchen lit, rather than a flat one they
+ * have to know to fix.
+ *
+ * 09:00 at a heading of 70 degrees is a morning sun coming in at a shallow
+ * angle, which is when a window is most obviously a window: the patch it throws
+ * is long, it lands well inside the room, and it moves visibly if the time is
+ * touched. Noon is the one hour that would show none of that, being exactly the
+ * state the grid already captures.
+ *
+ * Exported so `LightingMenu` can tell "moved off the default" from "equal to 1",
+ * which is what lights the dot on its trigger. Two copies of these numbers and
+ * the dot would be lit on a fresh page.
+ */
+export const LIGHTING_DEFAULTS = {
+	ambient: 0.3,
+	daylight: true,
+	hour: 9,
+	heading: 70,
+	exposure: 1,
+};
+
 export function useLighting(store)
 {
 	/** 0..1. 1 is the scene exactly as every earlier build drew it. */
-	const ambient = ref(1);
-	const daylightOn = ref(false);
-	/** Hours, fractional. Late afternoon, because that is when a window shows. */
-	const hour = ref(16);
+	const ambient = ref(LIGHTING_DEFAULTS.ambient);
+	const daylightOn = ref(LIGHTING_DEFAULTS.daylight);
+	/** Hours, fractional. */
+	const hour = ref(LIGHTING_DEFAULTS.hour);
 	/** Degrees. Which way the building faces under the sun. */
-	const heading = ref(0);
-	const exposure = ref(1);
+	const heading = ref(LIGHTING_DEFAULTS.heading);
+	const exposure = ref(LIGHTING_DEFAULTS.exposure);
 	/**
 	 * Circuits the viewer has switched OFF, by id.
 	 *
@@ -140,14 +177,22 @@ export function useLighting(store)
 	function setHeading(value) {heading.value = value;}
 	function setExposure(value) {exposure.value = value;}
 
-	/** Everything back to the scene as it was before any of this existed. */
+	/**
+	 * Back to the defaults above -- which is what the button says, and is no
+	 * longer the same thing as "the scene before any of this existed".
+	 *
+	 * That state is still reachable and is still what the library does on its
+	 * own: ambient 1, no sun. It is simply not where the app starts any more, so
+	 * a control offering to go there would be offering a fourth opinion rather
+	 * than undoing an edit.
+	 */
 	function reset()
 	{
-		ambient.value = 1;
-		daylightOn.value = false;
-		hour.value = 16;
-		heading.value = 0;
-		exposure.value = 1;
+		ambient.value = LIGHTING_DEFAULTS.ambient;
+		daylightOn.value = LIGHTING_DEFAULTS.daylight;
+		hour.value = LIGHTING_DEFAULTS.hour;
+		heading.value = LIGHTING_DEFAULTS.heading;
+		exposure.value = LIGHTING_DEFAULTS.exposure;
 		switchedOff.value = [];
 	}
 

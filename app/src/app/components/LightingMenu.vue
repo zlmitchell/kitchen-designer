@@ -2,6 +2,7 @@
 // @ts-check
 import {computed} from 'vue';
 import {PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent} from 'reka-ui';
+import {LIGHTING_DEFAULTS} from '../composables/useLighting.js';
 import {Lightbulb, ChevronDown, Sunrise, RotateCcw} from '@lucide/vue';
 
 /**
@@ -66,8 +67,12 @@ const emit = defineEmits([
 const isOff = (id) => props.switchedOff.indexOf(id) !== -1;
 
 /** Anything moved off its default, which is what the trigger dot reports. */
-const touched = computed(() => props.ambient !== 1 || props.daylight
-	|| props.exposure !== 1 || props.switchedOff.length > 0);
+const touched = computed(() => props.ambient !== LIGHTING_DEFAULTS.ambient
+	|| props.daylight !== LIGHTING_DEFAULTS.daylight
+	|| props.hour !== LIGHTING_DEFAULTS.hour
+	|| props.heading !== LIGHTING_DEFAULTS.heading
+	|| props.exposure !== LIGHTING_DEFAULTS.exposure
+	|| props.switchedOff.length > 0);
 
 const number = (event) => Number(/** @type {HTMLInputElement} */ (event.target).value);
 </script>

@@ -27,6 +27,8 @@ import {
 	EVENT_CORNER_2D_CLICKED, EVENT_GLTF_READY, EVENT_FPS_EXIT,
 } from '../src/scripts/core/events.js';
 import {VIEW_TOP} from '../src/scripts/core/constants.js';
+import {LIGHTING_DEFAULTS, useLighting} from '../src/app/composables/useLighting.js';
+import {TIMES_OF_DAY} from '../src/scripts/core/daylight.js';
 
 import {createBlueprintStore} from '../src/app/composables/useBlueprint.js';
 import {useSelection, SELECTION_ITEM, SELECTION_WALL, SELECTION_FLOOR, SELECTION_CORNER_2D} from '../src/app/composables/useSelection.js';
@@ -761,5 +763,77 @@ describe('the display unit is not reset by mounting', () =>
 		// dimMeter, so anything set before construction is discarded and saved
 		// coordinates are in metres unless the app changes the unit afterwards.
 		expect(Configuration.getStringValue(configDimUnit)).toBe('m');
+	});
+});
+
+describe('useLighting opens the room already lit', () =>
+{
+	it('starts at the stated defaults, and they are the ones the menu shows', () =>
+	{
+		// Pinned so a change is deliberate. These are what somebody sees on a fresh
+		// page, and the argument for each is in LIGHTING_DEFAULTS: the fill down so
+		// the light in the design is the light in the picture, and a morning sun at
+		// a shallow angle so a window is obviously a window.
+		expect(LIGHTING_DEFAULTS).toEqual({
+			ambient: 0.3, daylight: true, hour: 9, heading: 70, exposure: 1,
+		});
+
+		const lighting = run(() => useLighting(store));
+		expect(lighting.ambient.value).toBe(0.3);
+		expect(lighting.daylightOn.value).toBe(true);
+		expect(lighting.hour.value).toBe(9);
+		expect(lighting.heading.value).toBe(70);
+	});
+
+	it('opens on a named time rather than between two of them', () =>
+	{
+		// The menu offers times as pills. A default of 9 lands on "Morning", so the
+		// panel opens with one of them pressed instead of showing a value that
+		// belongs to none.
+		expect(TIMES_OF_DAY.some((time) => time.hour === LIGHTING_DEFAULTS.hour)).toBe(true);
+	});
+
+	it('leaves the LIBRARY neutral, and pushes the defaults onto it', () =>
+	{
+		// The distinction that keeps the parity grid meaningful: `Main.mood` is
+		// still ambient 1 and no sun -- the state every earlier build drew and the
+		// one the grid captures -- and the app is what asks for something else. A
+		// default that lived in the viewer would have changed what the renderer
+		// does rather than what this application opens with.
+		mountStore();
+		const three = store.three.value;
+		expect(three.mood.ambient).toBe(1);
+		expect(three.mood.daylight).toBeNull();
+
+		const lighting = run(() => useLighting(store));
+		lighting.apply();
+
+		expect(three.mood.ambient).toBeCloseTo(0.3, 6);
+		expect(three.mood.daylight).toEqual({hour: 9, heading: 70});
+	});
+
+	it('resets to those defaults rather than to the state before they existed', () =>
+	{
+		// The button says "Back to defaults", and the defaults moved. Going back to
+		// ambient 1 with no sun would be a fourth opinion rather than an undo.
+		const lighting = run(() => useLighting(store));
+		lighting.setAmbient(1);
+		lighting.setDaylight(false);
+		lighting.setHour(21);
+		expect(lighting.ambient.value).toBe(1);
+
+		lighting.reset();
+
+		expect(lighting.ambient.value).toBe(LIGHTING_DEFAULTS.ambient);
+		expect(lighting.daylightOn.value).toBe(LIGHTING_DEFAULTS.daylight);
+		expect(lighting.hour.value).toBe(LIGHTING_DEFAULTS.hour);
+		expect(lighting.heading.value).toBe(LIGHTING_DEFAULTS.heading);
+	});
+
+	it('is not dark on arrival, which is the state that reads as a broken app', () =>
+	{
+		const lighting = run(() => useLighting(store));
+		expect(lighting.dark.value).toBe(false);
+		expect(lighting.sun.value.intensity).toBeGreaterThan(0);
 	});
 });
