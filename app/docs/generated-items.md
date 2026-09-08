@@ -256,6 +256,85 @@ glass. All seven builders did it.
 
 ---
 
+## The thumbnail is generated too
+
+A catalog row needs a picture, and for a generated item that picture comes from
+the same spec the geometry does. **`npm run thumbnails`** draws it.
+
+```sh
+docker compose run --rm --no-deps dev npm run thumbnails -- --list
+docker compose run --rm --no-deps dev npm run thumbnails -- "Vent Hood - Cabinet Front"
+docker compose run --rm --no-deps dev npm run thumbnails -- --all
+```
+
+The `dev` service, not `test` — this writes a file, and see 3b. Output goes to
+whatever `image` the catalog row names, at 300x225 to match every thumbnail
+already there.
+
+Every one of those files used to be made by hand, once, by something nobody
+wrote down. So a new entry either borrowed somebody else's picture or showed
+nothing, and changing what a builder DRAWS left its thumbnail quietly showing the
+old shape. That is what this replaces, and it is why it is worth a tool rather
+than a screenshot.
+
+**Give each row its own `image`.** Several rows share one on purpose — a gas
+range and a slide-in are the same box — and the tool refuses `--all` rather than
+letting two entries overwrite each other in an order nobody chose. If it
+complains, either split the image or name the single row you meant.
+
+### Reaching `src/` from a plain script
+
+This is the part worth stealing. `core/materials.js` does
+
+```js
+import catalog from '../../catalog/materials.json';
+```
+
+which Vite resolves and bare node rejects with `ERR_IMPORT_ATTRIBUTE_MISSING` —
+so **every builder is unreachable from an ordinary node script**, which is why
+§3b tells you to put scratch code in a vitest file. That advice is right for a
+scratch test and wrong for a tool: a tool that is a test is a tool nobody can
+run, and `npm run thumbnails` has to be runnable.
+
+Vite's own Node API is the answer:
+
+```js
+const server = await createServer({
+    root: ROOT, logLevel: 'error',
+    server: {middlewareMode: true}, appType: 'custom',
+});
+const {GENERATED_BUILDERS} = await server.ssrLoadModule(
+    '/src/scripts/items/generated/index.js');
+// ... use it ...
+await server.close();
+```
+
+`ssrLoadModule` resolves the module graph exactly as the application does, JSON
+imports included, with no bundle step and no test runner. Any future tool that
+needs to reach into `src/` should do this rather than rediscovering the problem.
+
+### It rasterises in software, for the reason §3 gives
+
+There is no GPU in the container, so the tool projects the triangles, z-buffers
+them and shades each by its material's own colour — the same approach §3
+describes for looking at geometry, with an output you can commit. A generated
+build is already one merged geometry plus a material list, so there is no scene
+graph to walk: `mergeMeshes` has baked every transform by the time this sees it.
+
+What it cannot show is a texture or a shadow. Neither reads at 300x225.
+
+The view and the light are matched to the thumbnails that already existed rather
+than chosen — three-quarter from front-right and above, orthographic, framed to
+the item's own bounds. A palette where one row is lit differently or seen from
+another angle reads as a mistake, because the whole value of a grid of
+thumbnails is that the shapes can be compared down a column.
+
+The ambient level was tuned by looking, between two failures: too low and a white
+cabinet came out grey, so the picture was about the lighting; too high and the
+top, front and side of a box were three shades of one thing and the shape stopped
+reading. It sits where all three faces separate and white paint still looks
+white.
+
 ## How to test
 
 Four levels. Use the cheapest one that can answer your question, and do not stop

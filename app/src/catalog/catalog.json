@@ -1976,7 +1976,7 @@
 		},
 		{
 			"name": "Vent Hood - Cabinet Front",
-			"image": "models/thumbnails_new/appliance-hood.png",
+			"image": "models/thumbnails_new/appliance-hood-cabinet.png",
 			"model": "generated:appliance",
 			"type": 2,
 			"format": "generated",
@@ -1992,7 +1992,7 @@
 		},
 		{
 			"name": "Vent Hood - Cupboard Above",
-			"image": "models/thumbnails_new/appliance-hood.png",
+			"image": "models/thumbnails_new/appliance-hood-cupboard.png",
 			"model": "generated:appliance",
 			"type": 2,
 			"format": "generated",

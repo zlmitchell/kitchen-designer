@@ -648,17 +648,27 @@ describe('a cabinet hood is millwork, not an appliance in a run', () =>
 			.reduce((sum, group) => sum + group.count, 0);
 	}
 
+	/**
+	 * Boxes drawn in the cabinet finish.
+	 *
+	 * The box AND its front, because a cabinet hood is one piece of millwork:
+	 * unlike a panel-ready dishwasher, whose dark carcass is buried in the run,
+	 * this thing's sides and top are in the room and are the same painted stock
+	 * as its face.
+	 */
+	const boxes = (built) => partVerts(built, 'wood-walnut') / 36;
+
 	it('wears the run door front, built by the run own builder', () =>
 	{
 		// The whole claim. Not a colour that matches - a front built by
 		// `cabinet.js`'s `frontPanel`, which is the same call a panel-ready
 		// dishwasher makes and the reason that function is exported. So a shaker
 		// kitchen gets a shaker hood without anybody keeping the two in step.
-		const shaker = partVerts(hood({front: 'shaker'}), 'wood-walnut');
-		const slab = partVerts(hood({front: 'slab'}), 'wood-walnut');
-		expect(slab).toBeGreaterThan(0);
-		// A slab is one box per section and a shaker is five.
-		expect(shaker).toBe(slab * 5);
+		//
+		// A section is its own box plus its front: one more box for a slab, five
+		// for a shaker. Two sections in a plain cabinet hood.
+		expect(boxes(hood({front: 'slab'}))).toBe(2 * (1 + 1));
+		expect(boxes(hood({front: 'shaker'}))).toBe(2 * (1 + 5));
 	});
 
 	it('is panel-ready whatever the finish says', () =>
@@ -704,12 +714,9 @@ describe('a cabinet hood is millwork, not an appliance in a run', () =>
 	{
 		// Same box, one more front, with a reveal between them - which is what
 		// makes a cupboard read as a cupboard rather than as more mantel.
-		const plain = partVerts(hood({style: 'cabinet-front'}), 'wood-walnut');
-		const over = partVerts(hood({style: 'cabinet-over'}), 'wood-walnut');
-		expect(over).toBeGreaterThan(plain);
-		// Two sections against three, at five boxes a shaker front.
-		expect(plain / 36 / 5).toBe(2);
-		expect(over / 36 / 5).toBe(3);
+		// Two sections against three, at six boxes a shaker section.
+		expect(boxes(hood({style: 'cabinet-front'}))).toBe(2 * 6);
+		expect(boxes(hood({style: 'cabinet-over'}))).toBe(3 * 6);
 	});
 
 	it('runs the mantel on rather than fitting a cupboard nobody can use', () =>

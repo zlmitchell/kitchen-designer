@@ -46,6 +46,7 @@
 		"fixtures": "node tools/make-fixtures.mjs",
 		"parity": "node tools/capture-parity.mjs",
 		"favicon": "node tools/make-favicon.mjs",
+		"thumbnails": "node tools/make-thumbnails.mjs",
 		"manifest": "node tools/make-asset-manifest.mjs",
 		"manifest:check": "node tools/make-asset-manifest.mjs --check",
 		"encode": "node tools/encode-assets.mjs",

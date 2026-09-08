@@ -788,7 +788,14 @@ function cladSection(group, s, mats, f, y0, y1, z0, z1)
 	{
 		return;
 	}
-	group.add(box(mats.body, -f.width / 2, f.width / 2, y0, y1, z0, z1));
+	// `face`, not `body`. The panel-ready finish darkens the body on purpose --
+	// "on a panel-ready machine you never see it: the cabinet panel covers the
+	// whole face and the sides are buried in the run" -- and a cabinet hood is
+	// the one place that is false. It stands proud of the uppers with both sides
+	// and its top in the room, and it is one piece of millwork: the box and the
+	// front are the same stock, painted together. Drawn in `body` it came out a
+	// black carcass wearing a white door.
+	group.add(box(mats.face, -f.width / 2, f.width / 2, y0, y1, z0, z1));
 	var r = HOOD_REVEAL;
 	frontPanel({front: mats.face}, s.front,
 		-f.width / 2 + r, f.width / 2 - r, y0 + r, y1 - r, z1, s.faceThickness)

@@ -1279,6 +1279,16 @@
 			"hash": "sha256-aKmG/XlIJcpqTStLKIau1xUjEHjjiYysMI+LCxP+FC0=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/appliance-hood-cabinet.png": {
+			"bytes": 3127,
+			"hash": "sha256-ky8y2FQZX7KGyvpw1BDnNc+u8aZWurFE8vg3xTDq4SI=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-hood-cupboard.png": {
+			"bytes": 3529,
+			"hash": "sha256-3h2j6w5AitHM7DQbg1gOB7wCUF3swKBB4eAo4WJh314=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/appliance-hood.png": {
 			"bytes": 1925,
 			"hash": "sha256-3VeqDquXyL1VK4TFg+UbLrAGzyTtLI3HamOCr+ni2rk=",
