@@ -145,7 +145,8 @@
 			"metalness": 1,
 			"map": "rooms/surfaces/brushed-metal-albedo.jpg",
 			"ormMap": "rooms/surfaces/brushed-metal-orm.png",
-			"tile": 40
+			"fit": true,
+			"_comment": "Fits the face rather than tiling. A brushed finish is a DIRECTION, not a grain size: the lines run the length of whatever they are on, and they do not start again halfway down a fridge door. Tiled at 40cm it repeated twice across a 75cm door and four times down it, which is the one thing a brushed surface never does. Wood is the opposite case and keeps its tile - see the note on `tile` in core/materials.js."
 		},
 		"metal-stainless": {
 			"label": "Stainless",
@@ -155,7 +156,8 @@
 			"metalness": 1,
 			"map": "rooms/surfaces/brushed-metal-albedo.jpg",
 			"ormMap": "rooms/surfaces/brushed-metal-orm.png",
-			"tile": 40
+			"fit": true,
+			"_comment": "Fits the face rather than tiling. A brushed finish is a DIRECTION, not a grain size: the lines run the length of whatever they are on, and they do not start again halfway down a fridge door. Tiled at 40cm it repeated twice across a 75cm door and four times down it, which is the one thing a brushed surface never does. Wood is the opposite case and keeps its tile - see the note on `tile` in core/materials.js."
 		},
 		"metal-matte-black": {
 			"label": "Matte black",

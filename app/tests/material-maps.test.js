@@ -48,13 +48,64 @@ describe('the material library points at real images', () =>
 		expect(missing).toEqual([]);
 	});
 
-	it('gives every mapped entry a tile size', () =>
+	it('has every mapped entry answer how it is laid out', () =>
 	{
-		// A map with no tile size repeats once per panel face, which is the exact
-		// failure `tile` exists to prevent - a 12ft run and a 24in door wearing the
-		// same walnut at six times the grain.
-		const untiled = MAPPED.filter((id) => !MATERIALS[id].tile);
-		expect(untiled).toEqual([]);
+		// Either a tile size or `fit`, and never neither. What a surface wants is
+		// what the surface IS: wood has a grain SIZE and must not change it with
+		// the panel, which is what `tile` is for; a brushed metal has a grain
+		// DIRECTION and no size, so it fits the face and a repeat halfway down a
+		// fridge door is the one thing it must not do.
+		const unanswered = MAPPED.filter((id) => !MATERIALS[id].tile && !MATERIALS[id].fit);
+		expect(unanswered).toEqual([]);
+		// And never both, because they are two answers to one question.
+		expect(MAPPED.filter((id) => MATERIALS[id].tile && MATERIALS[id].fit)).toEqual([]);
+	});
+
+	it('fits the brushed metals and tiles the woods', () =>
+	{
+		// The distinction, pinned on the two cases that made it.
+		expect(MATERIALS['metal-stainless'].fit).toBe(true);
+		expect(MATERIALS['metal-brushed-nickel'].fit).toBe(true);
+		expect(MATERIALS['wood-walnut'].tile).toBeGreaterThan(0);
+		expect(createMaterial('metal-stainless').userData.tile).toBeUndefined();
+		expect(createMaterial('metal-stainless').userData.fitToFace).toBe(true);
+	});
+
+	it('leaves a fitted face at one repeat, whatever its size', () =>
+	{
+		// The claim, measured. Two faces, wildly different sizes, one repeat each -
+		// where the same pair under a tile would read 2 repeats and 9.
+		const steel = createMaterial('metal-stainless');
+		for (const [w, h] of [[75, 180], [30, 30]])
+		{
+			const uv = boxGeometryFor(steel, w, h, 60).attributes.uv;
+			let widest = 0;
+			for (let i = 0; i < uv.count; i++)
+			{
+				widest = Math.max(widest, Math.abs(uv.getX(i)), Math.abs(uv.getY(i)));
+			}
+			expect(widest, `${w}x${h} steel face`).toBeCloseTo(1, 6);
+		}
+	});
+
+	it('holds the grain size still while the panel changes, for anything tiled', () =>
+	{
+		// What `tile` is for, and why the woods keep it: a 12ft run and a 24in door
+		// must wear the same walnut at the same grain, not the same picture at six
+		// times the size. Measured as repeats per centimetre, which is the thing
+		// that has to stay constant.
+		const walnut = createMaterial('wood-walnut');
+		const repeatsPerCm = (span) =>
+		{
+			const uv = boxGeometryFor(walnut, span, 90, 60).attributes.uv;
+			let widest = 0;
+			for (let i = 0; i < uv.count; i++)
+			{
+				widest = Math.max(widest, Math.abs(uv.getX(i)));
+			}
+			return widest / span;
+		};
+		expect(repeatsPerCm(366)).toBeCloseTo(repeatsPerCm(61), 6);
 	});
 });
 

@@ -61,6 +61,21 @@ import {defaultAssetResolver} from './asset_resolver.js';
  * @property {number} [tile] What one repeat of the maps covers, in centimetres.
  *           A material property rather than a mesh one: walnut has a grain size,
  *           and it does not change because the panel did. See `scaleBoxUVs`.
+ * @property {boolean} [fit] One repeat per face instead, whatever the face is.
+ *           The opposite of `tile`, and the two are exclusive.
+ *
+ *           Which one a surface wants is not a preference, it is what the surface
+ *           IS. Wood has a grain SIZE: a 12ft run and a 24in door have to show the
+ *           same grain, which is the whole reason `tile` exists. A brushed metal
+ *           has a grain DIRECTION and no size at all - the lines run the length of
+ *           whatever they are on and they do not begin again halfway down a fridge
+ *           door. Tiled at 40cm, stainless repeated twice across a 75cm door and
+ *           four times down it, which is the one thing brushed steel never does.
+ *
+ *           Expressed as a flag rather than as an absent `tile` so the decision is
+ *           in the data. Absent-and-meant and absent-and-forgotten look identical,
+ *           and `tests/material-maps.test.js` is what would otherwise have to tell
+ *           them apart.
  */
 
 /** @type {Record<string, MaterialEntry>} */
@@ -186,6 +201,13 @@ export function createMaterial(id)
 	if (entry.tile)
 	{
 		material.userData.tile = entry.tile;
+	}
+	// No tile, and said so. `boxGeometryFor` leaves a face's UVs at 0..1 whenever
+	// there is no tile size, so fitting needs no code of its own downstream - this
+	// only records that it was chosen.
+	if (entry.fit)
+	{
+		material.userData.fitToFace = true;
 	}
 	attachMaps(material, entry);
 	return material;
