@@ -1256,12 +1256,17 @@ describe('RoofItem on a design with no ceiling (RM-005 C2, J-5)', () =>
 			model: {floorplan: {wallEdges: () => []}},
 			position: new three.Vector3(1, 2, 3),
 			position_set: false,
+			// Empty, so nothing names a wall face and the fall-through to geometry
+			// is the path under test. A real item always has one.
+			metadata: {},
+			namedWallEdge: WallItem.prototype.namedWallEdge,
 			closestWallEdge: WallItem.prototype.closestWallEdge,
 			// Present so a regression fails LOUDLY rather than by another missing
 			// method: if placeInRoom stops guarding, it reaches this and throws on
 			// `wallEdge.wall`, which is the original defect.
 			changeWallEdge: WallItem.prototype.changeWallEdge,
 		};
+		expect(WallItem.prototype.namedWallEdge.call(item)).toBe(null);
 		expect(WallItem.prototype.closestWallEdge.call(item)).toBe(null);
 		expect(() => WallItem.prototype.placeInRoom.call(item)).not.toThrow();
 	});

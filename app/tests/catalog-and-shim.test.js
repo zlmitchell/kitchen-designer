@@ -64,13 +64,17 @@ describe('the unified catalog', () =>
 		// 27 legacy entries + 142 glTF entries, less the one that pointed at a
 		// cabinet.json that has never existed in this repository. Plus the
 		// generated ones, which name a builder rather than a file - see below: a
-		// post, three cabinets, a countertop, three sinks, six appliances, three
+		// post, SEVEN cabinets, a countertop, three sinks, NINE appliances, three
 		// windows, eight doors and three light fittings.
+		//
+		// Seven cabinets for three shapes, because a corner is not a width: an
+		// L-shaped and a diagonal unit are the two answers the trade has to the
+		// square where two runs cross, and each comes as a base and a wall unit.
 		//
 		// Eight doors for one builder, because `operation` is what a door IS - a
 		// bypass and a pocket door share every field and nothing about what moves -
 		// and the palette is where somebody chooses one.
-		expect(CATALOG.items.length).toBe(196);
+		expect(CATALOG.items.length).toBe(203);
 	});
 
 	it('has dropped the entry whose model file was never in the repository', () =>

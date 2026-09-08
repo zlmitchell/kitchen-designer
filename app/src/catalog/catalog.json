@@ -1681,6 +1681,88 @@
 			"category": "cabinets"
 		},
 		{
+			"name": "Corner Cabinet - L",
+			"image": "models/thumbnails_new/kitchenCabinetCornerInner.png",
+			"model": "generated:cabinet",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "cabinet",
+				"front": "shaker",
+				"frame": "face",
+				"drawers": [],
+				"variant": "base",
+				"corner": "l",
+				"hand": "lo",
+				"width": 91.44,
+				"returnWidth": 91.44,
+				"doors": 1
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Corner Cabinet - Diagonal",
+			"image": "models/thumbnails_new/kitchenCabinetCornerRound.png",
+			"model": "generated:cabinet",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "cabinet",
+				"front": "shaker",
+				"frame": "face",
+				"drawers": [],
+				"variant": "base",
+				"corner": "diagonal",
+				"hand": "lo",
+				"width": 91.44,
+				"returnWidth": 91.44,
+				"doors": 1
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Corner Wall Cabinet - L",
+			"image": "models/thumbnails_new/kitchenCabinetUpperCorner.png",
+			"model": "generated:cabinet",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "cabinet",
+				"front": "shaker",
+				"frame": "face",
+				"drawers": [],
+				"variant": "wall",
+				"corner": "l",
+				"hand": "lo",
+				"width": 60.96,
+				"returnWidth": 60.96,
+				"depth": 30.48,
+				"doors": 1
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Corner Wall Cabinet - Diagonal",
+			"image": "models/thumbnails_new/kitchenCabinetUpperCorner.png",
+			"model": "generated:cabinet",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "cabinet",
+				"front": "shaker",
+				"frame": "face",
+				"drawers": [],
+				"variant": "wall",
+				"corner": "diagonal",
+				"hand": "lo",
+				"width": 60.96,
+				"returnWidth": 60.96,
+				"depth": 30.48,
+				"doors": 1
+			},
+			"category": "cabinets"
+		},
+		{
 			"name": "Countertop",
 			"image": "models/thumbnails_new/counter.png",
 			"model": "generated:counter",
@@ -1768,6 +1850,23 @@
 			"category": "cabinets"
 		},
 		{
+			"name": "Range - Gas Slide-in",
+			"image": "models/thumbnails_new/appliance-range.png",
+			"model": "generated:appliance",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "range",
+				"style": "slide-in",
+				"fuel": "gas",
+				"burners": 5,
+				"griddle": true,
+				"finish": "stainless"
+			},
+			"category": "cabinets"
+		},
+		{
 			"name": "Refrigerator",
 			"image": "models/thumbnails_new/appliance-fridge.png",
 			"model": "generated:appliance",
@@ -1795,6 +1894,40 @@
 				"doors": "french",
 				"finish": "panel-ready",
 				"front": "shaker"
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Refrigerator - 4-Door French",
+			"image": "models/thumbnails_new/appliance-fridge.png",
+			"model": "generated:appliance",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "fridge",
+				"style": "freestanding",
+				"doors": "four-door",
+				"doorInDoor": true,
+				"handles": "recessed",
+				"width": 90.68,
+				"depth": 87.12,
+				"height": 177.8,
+				"finish": "stainless"
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Beverage Cooler",
+			"image": "models/thumbnails_new/kitchenFridgeSmall.png",
+			"model": "generated:appliance",
+			"type": 9,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "fridge",
+				"style": "undercounter",
+				"finish": "stainless"
 			},
 			"category": "cabinets"
 		},

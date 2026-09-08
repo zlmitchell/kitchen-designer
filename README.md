@@ -75,6 +75,28 @@ separates them cleanly, so some furniture arrives as walls and some walls
 arrive short. That is what the underlay is for: the real drawing shows through
 underneath, and anything wrong can be dragged into place in the 2D editor.
 
+## Dressing the plan
+
+Tracing gives walls, windows and doors. The cabinets, appliances, worktops, sinks
+and lights are stage 6, which is not written -- so `tools/fitout.py` puts them
+where a human says:
+
+```sh
+python tools/fitout.py plans/design.blueprint3d --schedule data/fitout.json
+```
+
+A **schedule** is the kitchen written down: every unit at the plan coordinate it
+was measured at, off the drawing's elevations. The tool does the arithmetic and
+none of the deciding -- it turns "this run, from here to here" into a position, a
+rotation and the trade's heights, and it knows the things a schedule should never
+have to restate, like how much deeper a cabinet is than its spec once its doors
+and its knob are on. Nothing about any one house is in the tool; the schedule
+lives in `data/`, with the plan it belongs to, and `data/README.md` says where
+its numbers came from.
+
+Without `--schedule` it is the stand-in it started as: name a wall and it fills
+it with stock widths, lays a counter over them and drops a sink in.
+
 A pony wall is a flag, because it is a design decision and not something the
 drawing records. Feet from the plan's north-west corner:
 
@@ -191,7 +213,17 @@ carcass, face frame, door style, drawer split -- generated procedurally, along
 with counters, sinks, appliances, windows and doors. Style swaps are free and
 the cabinet schedule *is* the model, so the takeoff will need no separate step.
 Fronts are slab, shaker or raised, and any door can be **glazed**: clear or
-frosted glass in the door's own rails, plain or divided by muntins.
+frosted glass in the door's own rails, plain or divided by muntins. Corners are
+the one shape that is not a box, and both answers to them are here: an
+**L-shaped** unit that keeps the whole square and hangs a leaf on each leg, and a
+**diagonal** one that cuts the outer corner off with a single angled face. A
+cabinet can also **float** — a drawer box hung under a worktop with open floor
+beneath it.
+
+Appliances are the same idea: a range knows how many burners it has and whether
+a griddle covers the middle one, a fridge knows whether its face is French doors,
+French doors over two drawers, or one glass door at worktop height, and its
+handles can be a bar, a recessed pocket, or nothing at all.
 
 **2. A real lighting system.** &#10003; Built. Upstream's entire lighting is
 three lights: one hemisphere, one overhead key, one weak fill, and no concept of
@@ -207,6 +239,11 @@ a light you place in the room. Replaced with placeable, persisted fixtures:
   cabinet, accent -- so a room can be walked with some of them off
 - exposure control, so comparisons are not confounded by tone mapping
 - day/night, and window daylight with the right direction for the time of day
+
+Windows are made of **lights**, not one sash: a wide opening is a fixed pane
+between two casements, and it is one item with real mullions where the drawing
+draws them. Three items butted together is what it looks like instead, and their
+jamb liners and casings lap each other by 16.5cm at every join.
 
 **3. Cabinet run configuration.** Next up, and not built yet. A run of uppers
 becomes one object with a width split, so `[24,21,30,24]` can be compared
@@ -231,11 +268,12 @@ the screen is the viewport.
 | `Shift` (held) | crouch |
 | `Esc` | back out |
 
-The eye is at **5'10"** standing and **3'** crouched -- the height somebody
-squats to look into a base cabinet, and roughly a child's eye line. Those
-numbers are the point rather than a detail: the reason to walk a kitchen instead
-of orbiting it is to answer "can I reach that, and can I see over this", and
-both answers are wrong if the eye is at the wrong height.
+The eye is at **5'5"** standing and **2'7"** crouched. Those are eye heights,
+not people: 5'5" at the eye is somebody about 5'10" tall, and the crouch is
+roughly where you squat to look into a base cabinet, or a child's eye line. The
+numbers are the point rather than a detail -- the reason to walk a kitchen
+instead of orbiting it is to answer "can I reach that, and can I see over this",
+and both answers are wrong if the eye is at the wrong height.
 
 There is **no collision yet** -- you walk through walls -- and nothing in the
 room can be operated from inside it. Doors already carry an open fraction and

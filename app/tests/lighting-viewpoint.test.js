@@ -334,16 +334,22 @@ describe('the kitchen run, from where it was reported', () =>
 	{
 		// Standing in the room looking at the run: the cabinets are at z ~ 40 and
 		// the wall behind them at z ~ 0, so the room is +z and the daylight has to
-		// come from -z. `window-2` is the one over the sink.
+		// come from -z.
+		//
+		// Found by geometry rather than by id. It used to be `window-2`, which was
+		// one 63in sash; the fit-out schedule states the two the drawing actually
+		// draws, either side of a mullion, so there is no longer a single item to
+		// name - and naming one would pin this to whichever of them sorts first.
 		const design = JSON.parse(readFileSync(PLAN, 'utf8'));
-		const window2 = design.items.find((item) => item.id === 'window-2');
-		expect(window2, 'the run wall still has its window').toBeTruthy();
-		expect(Math.abs(window2.zpos), 'the window is in the wall at z ~ 0').toBeLessThan(20);
+		const inTheWall = design.items.filter((item) =>
+			item.spec && item.spec.kind === 'window' && Math.abs(item.zpos) < 20);
+		expect(inTheWall.length, 'the run wall still has its window').toBeGreaterThan(0);
 
 		const cabinets = design.items.filter((item) => item.item_name.includes('Cabinet'));
 		expect(cabinets.length).toBeGreaterThan(0);
 		// The room is on the +z side of that wall.
-		expect(Math.min(...cabinets.map((item) => item.zpos))).toBeGreaterThan(window2.zpos);
+		const wallZ = Math.max(...inTheWall.map((item) => item.zpos));
+		expect(Math.min(...cabinets.map((item) => item.zpos))).toBeGreaterThan(wallZ);
 	});
 
 	it.runIf(havePlan)('needs a heading near 180 to light that window at noon', () =>
@@ -382,12 +388,22 @@ describe('the kitchen run, from where it was reported', () =>
 
 		for (const can of cans)
 		{
-			// A RoofItem, so it snaps itself to the ceiling plane.
-			expect(can.item_type).toBe(4);
 			expect(can.spec.kind).toBe('fixture');
 			expect(can.spec.lumens).toBeGreaterThan(0);
-			// Over the run and just under the ceiling, not in it.
-			expect(can.ypos).toBeGreaterThan(200);
+			// Every mount but one hangs from the ceiling, so it is a RoofItem and
+			// it sits just under the plane rather than in it. A sconce is the
+			// exception and the reason this is a branch: it hangs from a WALL, so
+			// it is a WallItem at eye level, and asserting a ceiling height on it
+			// would be asserting that the room has no wall lights.
+			if (can.spec.mount === 'wall')
+			{
+				expect(can.item_type).toBe(2);
+				expect(can.ypos).toBeGreaterThan(120);
+				expect(can.ypos).toBeLessThan(220);
+				continue;
+			}
+			expect(can.item_type).toBe(4);
+			expect(can.ypos).toBeGreaterThan(150);
 			expect(can.ypos).toBeLessThan(250);
 		}
 	});

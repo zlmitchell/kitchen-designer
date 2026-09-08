@@ -723,3 +723,162 @@ describe('a cabinet carries the strip fixed under it', () =>
 		expect(emittersFor(normaliseFixture(strip)).every((e) => e.aim === -1)).toBe(true);
 	});
 });
+
+/*
+ * Corner cabinets.
+ *
+ * The two answers the trade has to the square where two runs cross, and the one
+ * shape in a kitchen that is not a box. What is worth asserting is the part a
+ * vertex count cannot see: that the thing occupies BOTH legs of the corner, that
+ * its doors face the room rather than the wall, and that handing it mirrors it.
+ */
+/**
+ * How much front is built within 5cm of the nearest corner of its own bounds.
+ *
+ * An L and a diagonal have almost the same bounding box, so the difference is
+ * inside it: an L's two leaves MEET at the inside corner, and a diagonal's one
+ * leaf is a chord that never goes near it.
+ */
+function frontsNearInsideCorner(built)
+{
+	const bounds = partBounds(built, 'paint-sage');
+	const index = built.materials.findIndex((m) => m.userData.materialId === 'paint-sage');
+	const position = built.geometry.getAttribute('position');
+	let near = 0;
+	for (const group of built.geometry.groups)
+	{
+		if (group.materialIndex !== index) {continue;}
+		for (let i = group.start; i < group.start + group.count; i++)
+		{
+			if (position.getX(i) < bounds.min.x + 5 && position.getZ(i) < bounds.min.z + 5)
+			{
+				near++;
+			}
+		}
+	}
+	return near;
+}
+
+describe('a corner cabinet turns onto the wall beside it', () =>
+{
+	const corner = (extra) => buildCabinet(Object.assign({
+		variant: 'base', width: 91.44, returnWidth: 91.44, depth: 61,
+		height: 87.63, doors: 1,
+		material: {carcass: 'wood-birch-ply', frame: 'paint-white',
+			front: 'paint-sage', hardware: 'metal-brass'},
+	}, extra));
+
+	it('is as deep as its return is long, not as deep as one leg', () =>
+	{
+		// The whole point: a plain 36in cabinet is 36 x 24, and a corner one fills
+		// the 36 x 36 square where the two runs cross. Getting this wrong leaves a
+		// 12in void behind it that nothing can ever reach.
+		const plain = size(corner({}));
+		const shaped = size(corner({corner: 'l'}));
+		expect(plain.z).toBeLessThan(70);
+		expect(shaped.z).toBeGreaterThan(90);
+		expect(shaped.x).toBeCloseTo(shaped.z, 0);
+	});
+
+	it('leaves the far corner of the square empty, which is what makes it an L', () =>
+	{
+		// Sampled rather than measured off the bounds, because the bounds of an L
+		// and of the box it is cut from are identical - which is exactly why a
+		// bounding box cannot tell you whether the notch is there.
+		//
+		// The CARCASS, not everything: a door stands proud of the face it is hung
+		// on, so a front is legitimately a few centimetres into the notch on one
+		// axis, and counting it says the box was never cut when it was.
+		const built = corner({corner: 'l'});
+		const carcass = partBounds(built, 'wood-birch-ply');
+		const position = built.geometry.getAttribute('position');
+		const index = built.materials.findIndex((m) => m.userData.materialId === 'wood-birch-ply');
+		const face = -45.72 + 61;
+		let inTheNotch = 0;
+		for (const group of built.geometry.groups)
+		{
+			if (group.materialIndex !== index) {continue;}
+			for (let i = group.start; i < group.start + group.count; i++)
+			{
+				// The notch, for a `lo` hand: past the return leg in x and past the
+				// front leg in z, with a millimetre of slack for the panel itself.
+				if (position.getX(i) > face + 0.1 && position.getZ(i) > face + 0.1)
+				{
+					inTheNotch++;
+				}
+			}
+		}
+		expect(inTheNotch, 'nothing is built in the unreachable corner').toBe(0);
+		expect(carcass.max.x).toBeGreaterThan(40);
+	});
+
+	it('puts a door on each leg of an L, facing the room', () =>
+	{
+		const built = corner({corner: 'l'});
+		const fronts = partBounds(built, 'paint-sage');
+		// Fronts on two planes at ninety degrees, so they reach along both axes.
+		// A single flat face would be a couple of centimetres thick on one of them.
+		expect(fronts.max.x - fronts.min.x).toBeGreaterThan(20);
+		expect(fronts.max.z - fronts.min.z).toBeGreaterThan(20);
+		// And there is a door AT the inside corner, which is the whole difference
+		// between an L and a diagonal: the L keeps that corner and puts two leaves
+		// round it, the diagonal cuts it off. Measured as "is anything built near
+		// the fronts' own nearest corner", because the two shapes have almost the
+		// same bounding box and differ entirely in what is inside it.
+		expect(frontsNearInsideCorner(built)).toBeGreaterThan(0);
+		// And they are at the INSIDE corner - the +x, +z end for a `lo` hand -
+		// rather than back against the two walls.
+		expect(fronts.max.x).toBeGreaterThan(0);
+		expect(fronts.max.z).toBeGreaterThan(0);
+	});
+
+	it('cuts the corner off with one face when it is diagonal', () =>
+	{
+		const built = corner({corner: 'diagonal'});
+		const fronts = partBounds(built, 'paint-sage');
+		// One panel on the hypotenuse, so it projects onto both axes at once.
+		expect(fronts.max.x - fronts.min.x).toBeGreaterThan(20);
+		expect(fronts.max.z - fronts.min.z).toBeGreaterThan(20);
+		// Nothing at the inside corner: that volume is what a diagonal gives up in
+		// exchange for a door somebody can stand square to.
+		expect(frontsNearInsideCorner(built)).toBe(0);
+		// The face reaches the free end of each leg, which an L's does not: an L
+		// stops at the stile of the face frame on the leg it turns onto.
+		const l = partBounds(corner({corner: 'l'}), 'paint-sage');
+		expect(fronts.max.x).toBeGreaterThan(l.max.x);
+	});
+
+	it('mirrors when the return is handed the other way', () =>
+	{
+		const lo = partBounds(corner({corner: 'diagonal', hand: 'lo'}), 'paint-sage');
+		const hi = partBounds(corner({corner: 'diagonal', hand: 'hi'}), 'paint-sage');
+		// Mirrored in x and left alone in z: the wall behind it has not moved, only
+		// the wall it turns onto. Handing that reflects both axes would face the
+		// doors into the corner, which is the failure this is here to catch.
+		expect(hi.min.x).toBeCloseTo(-lo.max.x, 1);
+		expect(hi.max.x).toBeCloseTo(-lo.min.x, 1);
+		expect(hi.min.z).toBeCloseTo(lo.min.z, 1);
+	});
+
+	it('still stands on a toe kick, on both legs', () =>
+	{
+		const built = corner({corner: 'l'});
+		const carcass = partBounds(built, 'wood-birch-ply');
+		// The kick reaches the floor on both walls. Built from the L rather than
+		// from the front face alone, or one leg of the cabinet floats.
+		expect(carcass.min.y).toBeCloseTo(-87.63 / 2, 1);
+	});
+
+	it('is a plain box when nothing asks for a corner', () =>
+	{
+		// The field is opt-in, and every design saved before it existed has to open
+		// exactly as it did.
+		const plain = size(buildCabinet({variant: 'base', width: 91.44, depth: 61}));
+		const named = size(buildCabinet({variant: 'base', width: 91.44, depth: 61,
+			corner: 'none'}));
+		const nonsense = size(buildCabinet({variant: 'base', width: 91.44, depth: 61,
+			corner: 'hexagonal'}));
+		expect(named.z).toBeCloseTo(plain.z, 4);
+		expect(nonsense.z).toBeCloseTo(plain.z, 4);
+	});
+});

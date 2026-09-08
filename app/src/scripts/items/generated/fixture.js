@@ -109,12 +109,83 @@ function ring(material, radius, height, y)
 }
 
 /**
+ * How far a sconce of this trim size stands off the wall it is on.
+ *
+ * Exported because a caller has to place the item before the item exists: a wall
+ * fixture's back has to land ON the wall face, and the only way to work out
+ * where its middle goes is to know how deep it is. `tools/fitout.py` does that
+ * arithmetic, the same way it already does a cabinet's.
+ *
+ * @param {number} diameter
+ * @returns {number}
+ */
+export function sconceProjection(diameter)
+{
+	return Math.max(6, diameter) + 2;
+}
+
+/**
+ * A sconce: a backplate on the wall, and a shade standing off it.
+ *
+ * Built with the WALL at local z = 0 and everything projecting to +z, because
+ * that is the direction `WallItem.changeWallEdge` points local +z in - it sets
+ * `rotation.y` from the half edge's plane normal, which faces into the room.
+ * `Item` recentres what comes back, so the caller places the middle and this
+ * only has to be self-consistent.
+ *
+ * It throws up AND down, which is what `MOUNT_DEFAULTS.wall` already said a
+ * sconce does - so the lit surfaces are the two open ends of the shade rather
+ * than a lens on one face. Until this existed the `wall` mount fell through to
+ * the recessed branch and built a 1cm disc lying flat: a light that worked, in a
+ * fitting nobody could see, on the one mount that is always at eye level.
+ */
+function sconce(group, s, mats)
+{
+	var radius = Math.max(3, s.diameter / 2);
+	var projection = sconceProjection(s.diameter);
+	// The shade is as deep as it is wide, and its far face is the projection.
+	var middle = projection - radius;
+
+	var plate = new Mesh(new CylinderGeometry(radius * 0.5, radius * 0.5, 1.6, 20), mats.trim);
+	plate.rotation.x = Math.PI / 2;
+	plate.position.z = 0.8;
+	group.add(plate);
+
+	var arm = new Mesh(new CylinderGeometry(1.1, 1.1, Math.max(1, middle), 12), mats.trim);
+	arm.rotation.x = Math.PI / 2;
+	arm.position.z = middle / 2;
+	group.add(arm);
+
+	// Open-ended, and wider at the top: the shape of a shade, and the reason
+	// light leaves at both ends of it.
+	var shade = new Mesh(
+		new CylinderGeometry(radius, radius * 0.72, radius * 1.4, 24, 1, true), mats.trim);
+	shade.position.z = middle;
+	group.add(shade);
+
+	group.add(lit(mats.lens, radius * 0.92, radius * 0.7, middle));
+	group.add(lit(mats.lens, radius * 0.66, -(radius * 0.7), middle));
+}
+
+/** A lit disc inside the shade, at a height and standing off the wall. */
+function lit(material, radius, y, z)
+{
+	var mesh = new Mesh(new CylinderGeometry(radius, radius, 0.6, 24), material);
+	mesh.position.set(0, y, z);
+	return mesh;
+}
+
+/**
  * Build a fitting.
  *
  * The origin is the CEILING PLANE, and everything hangs below it. That is what
  * lets `RoofItem` do its job without this knowing anything about ceilings: the
  * item is snapped so its top sits on the plane, and a can whose origin was its
  * own middle would sink half its depth into the plasterboard.
+ *
+ * The `wall` mount is the one exception, because its mounting surface is not the
+ * ceiling: it builds from the WALL at local z = 0 and projects into the room.
+ * See `sconce`.
  *
  * @param {FixtureSpec} spec
  * @returns {{geometry: Object, materials: Array, parts: Array}}
@@ -143,6 +214,9 @@ export function buildFixture(spec)
 		// A shallow drum against the surface.
 		group.add(ring(mats.trim, radius, s.depth * 2, -s.depth));
 		group.add(disc(mats.lens, radius * 0.94, 0.6, -s.depth * 2 + 0.3));
+	}
+	else if (s.mount === 'wall') {
+		sconce(group, s, mats);
 	}
 	else if (s.mount === 'under-cabinet' || s.mount === 'toe-kick') {
 		// A strip. Rectangular in life; a long shallow bar is closer than a disc.

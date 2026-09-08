@@ -458,3 +458,171 @@ describe('through the model layer', () =>
 		expect(saved.items[0].model_url).toBe('generated:appliance');
 	});
 });
+
+/*
+ * The three appliances a real kitchen named, and what each one needed.
+ *
+ * Not "add a Samsung": every one of these is a shape the builder could not make,
+ * and each is asked for by more than one manufacturer. A four-door fridge is
+ * French doors over TWO drawers; a beverage cooler is a fridge the height of a
+ * base cabinet with glass in it; a five-burner top has a zone in the middle
+ * where a four-burner top has the corner of four grates.
+ */
+describe('a four-door fridge is French doors over two drawers', () =>
+{
+	const four = (extra) => buildAppliance(Object.assign({
+		subkind: 'fridge', doors: 'four-door', width: 90.68, height: 177.8,
+		depth: 87.12, material: {face: 'paint-sage', hardware: 'metal-brass',
+			body: 'metal-stainless', trim: 'metal-matte-black'},
+	}, extra));
+
+	/**
+	 * The horizontal edges the face is divided at.
+	 *
+	 * Every front is one box, so its top and bottom are two of these - and the
+	 * count is therefore how many horizontal BANDS the face has, times two. A
+	 * bounding box cannot see a seam and a vertex count cannot say where one is;
+	 * this can, and it is the measurement the layouts actually differ in.
+	 */
+	const faceEdges = (built) =>
+	{
+		const index = built.materials.findIndex((m) => m.userData.materialId === 'paint-sage');
+		const position = built.geometry.getAttribute('position');
+		const edges = [];
+		for (const group of built.geometry.groups)
+		{
+			if (group.materialIndex !== index) {continue;}
+			for (let i = group.start; i < group.start + group.count; i++)
+			{
+				const y = position.getY(i);
+				if (!edges.some((e) => Math.abs(e - y) < 0.5)) {edges.push(y);}
+			}
+		}
+		return edges.length;
+	};
+
+	it('carries two drawers where a French door carries one', () =>
+	{
+		// The whole difference, and the reason it is a fourth door rather than a
+		// bigger freezer: a convertible compartment between the fridge and the
+		// freezer, with its own front. Three horizontal bands against two, so six
+		// horizontal edges against four - the pair of doors shares its band.
+		expect(faceEdges(four({}))).toBe(6);
+		expect(faceEdges(four({doors: 'french'}))).toBe(4);
+	});
+
+	it('is more face than a French door, not the same face relabelled', () =>
+	{
+		expect(verts(four({}))).toBeGreaterThan(verts(four({doors: 'french'})));
+	});
+
+	it('sets a beverage panel into a door when asked, and not otherwise', () =>
+	{
+		const plain = four({});
+		const panelled = four({doorInDoor: true});
+		expect(verts(panelled)).toBeGreaterThan(verts(plain));
+		// It stands PROUD of the door it is set into, which is what makes the seam
+		// round it catch the light - flush, it is one surface and reads as a
+		// sticker. Measured on the face, because that is the surface it moves.
+		expect(partBounds(panelled, 'paint-sage').max.z)
+			.toBeGreaterThan(partBounds(plain, 'paint-sage').max.z);
+	});
+});
+
+describe('a recessed handle is the absence of a bar', () =>
+{
+	const fridge = (handles) => buildAppliance({
+		subkind: 'fridge', doors: 'french', handles: handles,
+		material: {face: 'paint-sage', hardware: 'metal-brass'},
+	});
+
+	it('stands in the door rather than off it', () =>
+	{
+		// The flat-panel look, and the one measurement that IS it. Asked of the
+		// HARDWARE against the FACE rather than of the whole bounding box: a bar
+		// is in front of the door and a pocket is behind its front surface, and
+		// that comparison says so in one line whatever else is on the appliance.
+		const bar = fridge('bar');
+		expect(partBounds(bar, 'metal-brass').max.z)
+			.toBeGreaterThan(partBounds(bar, 'paint-sage').max.z);
+		const flush = fridge('recessed');
+		expect(partBounds(flush, 'metal-brass').max.z)
+			.toBeLessThanOrEqual(partBounds(flush, 'paint-sage').max.z);
+		// And the appliance is shallower for it.
+		expect(bounds(bar).max.z).toBeGreaterThan(bounds(flush).max.z);
+	});
+
+	it('is still something you can see, unlike no handle at all', () =>
+	{
+		expect(hasMaterial(fridge('recessed'), 'metal-brass')).toBe(true);
+		expect(hasMaterial(fridge('none'), 'metal-brass')).toBe(false);
+	});
+});
+
+describe('a beverage cooler is a fridge the size of a base cabinet', () =>
+{
+	const cooler = buildAppliance({subkind: 'fridge', style: 'undercounter',
+		material: {face: 'paint-sage', glass: 'glass-clear'}});
+
+	it('is worktop height, so the counter runs over it', () =>
+	{
+		// 34.5in, which is a base carcass - not a number chosen here but the one
+		// every cabinet beside it already is.
+		expect(size(cooler).y).toBeCloseTo(87.15, 1);
+		expect(size(cooler).x).toBeLessThan(61);
+	});
+
+	it('has glass in its one door, because that is what it is for', () =>
+	{
+		expect(hasMaterial(cooler, 'glass-clear')).toBe(true);
+		// One door, not two: the pane is off centre because the door is the whole
+		// face and its handle is on one side.
+		const glass = partBounds(cooler, 'glass-clear');
+		expect(glass.max.x - glass.min.x).toBeGreaterThan(30);
+	});
+
+	it('is a solid-fronted fridge in every other style', () =>
+	{
+		expect(hasMaterial(buildAppliance({subkind: 'fridge',
+			material: {glass: 'glass-clear'}}), 'glass-clear')).toBe(false);
+	});
+});
+
+describe('a five-burner top has a zone in the middle', () =>
+{
+	const range = (extra) => buildAppliance(Object.assign({
+		subkind: 'range', fuel: 'gas', width: 76.2,
+		material: {trim: 'metal-matte-black', body: 'metal-stainless'},
+	}, extra));
+
+	it('puts something where a four-burner top has the corner of four grates', () =>
+	{
+		const four = verts(range({burners: 4}));
+		const five = verts(range({burners: 5}));
+		expect(five).toBeGreaterThan(four);
+	});
+
+	it('lays a griddle over it rather than a grate, when asked', () =>
+	{
+		// Both cover the middle; only one of them is a plate. The griddle is solid
+		// and a grate is three bars, so the griddle is the one with FEWER parts
+		// over the same area - which is the opposite of what a count usually says
+		// and the reason to assert it.
+		expect(verts(range({burners: 5, griddle: true})))
+			.toBeLessThan(verts(range({burners: 5, griddle: false})));
+	});
+
+	it('leaves a four-burner top alone', () =>
+	{
+		// Griddle is meaningless without the zone under it, and asking for one
+		// must not draw a plate across the middle of four burners.
+		expect(verts(range({burners: 4, griddle: true})))
+			.toBe(verts(range({burners: 4, griddle: false})));
+	});
+
+	it('takes six on a wide range, which is the same rule with three columns', () =>
+	{
+		expect(verts(range({burners: 6, width: 91.44})))
+			.toBeGreaterThan(verts(range({burners: 4, width: 91.44})));
+	});
+});

@@ -103,6 +103,9 @@ const SIZES = {
 	'range': {width: 76.2, depth: 63.5, height: 91.44},
 	'fridge': {width: 90.17, depth: 74.93, height: 177.8},
 	'fridge/built-in': {width: 91.44, depth: 61.0, height: 213.36},
+	// A beverage cooler is a base cabinet's worth of fridge: 24in wide, and as
+	// tall as the carcass it goes beside so the worktop runs over it.
+	'fridge/undercounter': {width: 59.53, depth: 59.21, height: 87.15},
 	'dishwasher': {width: 60.96, depth: 61.0, height: 87.63},
 	'microwave': {width: 55.88, depth: 40.64, height: 30.48},
 	'microwave/over-range': {width: 76.2, depth: 38.1, height: 43.18},
@@ -122,7 +125,7 @@ const SIZES = {
  */
 const STYLES = {
 	range: ['freestanding', 'slide-in'],
-	fridge: ['freestanding', 'built-in'],
+	fridge: ['freestanding', 'built-in', 'undercounter'],
 	dishwasher: ['standard'],
 	microwave: ['standard'],
 	hood: ['under-cabinet', 'wall-chimney', 'island', 'downdraft'],
@@ -153,6 +156,49 @@ const DEFAULTS = {
 	mountHeight: 167.64,
 	/** Downdraft: how far the vane rises out of its slot. */
 	riseHeight: 30.48,
+	/**
+	 * How many burners or elements the cooktop has.
+	 *
+	 * Four is a grid of two by two and is what a 30in range had for fifty years.
+	 * FIVE is what one has now: the same four with a bigger one in the middle,
+	 * which is where the oval burner and the griddle go - and it is a different
+	 * arrangement rather than one more of the same thing, because the middle of a
+	 * four-burner top is where the grates meet.
+	 *
+	 * Six is a 36in range, and falls out of the same rule with three columns.
+	 *
+	 * @type {number}
+	 */
+	burners: 4,
+	/**
+	 * A cast-iron griddle over the middle burner.
+	 *
+	 * Only means anything with five burners, because the plate spans the space
+	 * the middle one occupies. Drawn rather than implied: it is the single most
+	 * visible thing on a modern range top, and a five-burner range without it
+	 * looks like a four-burner range with a mistake in the middle.
+	 */
+	griddle: false,
+	/**
+	 * What you pull the doors by.
+	 *
+	 * `bar` is the tube on two standoffs that makes a stainless box read as an
+	 * appliance. `recessed` is the flush pocket that the panel-flat ranges of
+	 * fridge have instead -- Samsung's Bespoke line is the obvious one -- and it
+	 * is not a smaller bar, it is the ABSENCE of one: the door face is unbroken
+	 * and the grip is a shadow line along its edge.
+	 *
+	 * @type {('bar'|'recessed'|'none')}
+	 */
+	handles: 'bar',
+	/**
+	 * A door within the upper-left door.
+	 *
+	 * Samsung calls it a Beverage Center, LG calls it InstaView, GE calls it a
+	 * door-in-door; all three are one inset panel on the left-hand French door,
+	 * and it is what tells those fridges apart at a glance.
+	 */
+	doorInDoor: false,
 	/**
 	 * The gap between two fronts.
 	 *
@@ -189,6 +235,8 @@ const DEFAULTS = {
  * @property {('slab'|'shaker'|'raised')} [front]
  * @property {number} [width] @property {number} [depth] @property {number} [height]
  * @property {string} [style] @property {string} [mount]
+ * @property {number} [burners] @property {boolean} [griddle]
+ * @property {('bar'|'recessed'|'none')} [handles] @property {boolean} [doorInDoor]
  * @property {('gas'|'electric')} [fuel]
  * @property {('french'|'side-by-side'|'top-freezer'|'bottom-freezer')} [doors]
  * @property {('front'|'top')} [controls]
@@ -203,6 +251,8 @@ const DEFAULTS = {
  * @property {string} handle Which edge the bar runs along: top, bottom, left,
  *           right, or none.
  * @property {boolean} [glass] Whether this panel has a window in it.
+ * @property {?{x0: number, x1: number, y0: number, y1: number}} [inset] A door
+ *           within this door - a beverage panel, an InstaView, a door-in-door.
  */
 
 function box(mat, x0, x1, y0, y1, z0, z1)
@@ -260,11 +310,26 @@ function disc(mat, radius, thickness, cx, cy, cz)
  * @param {number} z The front face of the panel it hangs on.
  * @returns {Array<Mesh>}
  */
-function barHandle(mat, rect, z, projection)
+function barHandle(mat, rect, z, projection, style)
 {
-	if (rect.handle === 'none')
+	if (rect.handle === 'none' || style === 'none')
 	{
 		return [];
+	}
+	if (style === 'recessed')
+	{
+		// A pocket, not a bar. Set INTO the face rather than standing off it, so
+		// the front is unbroken and the grip is the shadow line along its edge -
+		// which is the whole look, and the reason a flat-panel fridge needs a
+		// different shape here rather than a shorter tube.
+		var deep = 1.6;
+		if (rect.handle === 'top' || rect.handle === 'bottom')
+		{
+			var edgeY = (rect.handle === 'top') ? rect.y1 - 3.2 : rect.y0 + 0.6;
+			return [box(mat, rect.x0 + 4, rect.x1 - 4, edgeY, edgeY + 2.6, z - deep, z)];
+		}
+		var edgeX = (rect.handle === 'left') ? rect.x0 + 0.6 : rect.x1 - 3.2;
+		return [box(mat, edgeX, edgeX + 2.6, rect.y0 + 6, rect.y1 - 6, z - deep, z)];
 	}
 	var radius = 1.1;
 	var inset = 4.6;
@@ -331,7 +396,21 @@ function facePanel(group, s, mats, rect, z)
 	{
 		group.add(box(mats.face, rect.x0, rect.x1, rect.y0, rect.y1, z, front));
 	}
-	barHandle(mats.hardware, rect, front, 6.4).forEach(function (mesh) {group.add(mesh);});
+	barHandle(mats.hardware, rect, front, 6.4, s.handles)
+		.forEach(function (mesh) {group.add(mesh);});
+	if (rect.inset)
+	{
+		// The door within the door. Its own face, held a hair proud so the seam
+		// round it catches - flush, it is one surface and reads as a sticker.
+		var pad = 2.2;
+		group.add(box(mats.trim, rect.inset.x0 - pad, rect.inset.x1 + pad,
+			rect.inset.y0 - pad, rect.inset.y1 + pad, front - 0.1, front + 0.5));
+		group.add(box(mats.face, rect.inset.x0, rect.inset.x1,
+			rect.inset.y0, rect.inset.y1, front, front + 1.0));
+		barHandle(mats.hardware, {x0: rect.inset.x0, x1: rect.inset.x1,
+			y0: rect.inset.y0, y1: rect.inset.y1, handle: 'left'},
+		front + 1.0, 4.0, s.handles).forEach(function (mesh) {group.add(mesh);});
+	}
 }
 
 /**
@@ -347,6 +426,16 @@ function fridgeRects(s, x0, x1, y0, y1)
 {
 	var r = s.reveal;
 	var mid = (x0 + x1) / 2;
+	// The RESOLVED style, not the raw one: `shell` guards it and this is asked
+	// before anything downstream would have caught a spec mid-edit.
+	s = Object.assign({}, s, {style: (STYLES.fridge.indexOf(s.style) === -1)
+		? STYLES.fridge[0] : s.style});
+	if (s.style === 'undercounter')
+	{
+		// One door, floor to worktop, and glass: a beverage cooler is a cabinet
+		// that shows what is in it, and a solid one is just a small fridge.
+		return [{x0: x0, x1: x1, y0: y0, y1: y1, handle: 'left', glass: true}];
+	}
 	if (s.doors === 'side-by-side')
 	{
 		// The freezer is the narrower side, which is what tells the two apart.
@@ -372,14 +461,47 @@ function fridgeRects(s, x0, x1, y0, y1)
 			{x0: x0, x1: x1, y0: drawer + r, y1: y1, handle: 'bottom'},
 		];
 	}
+	if (s.doors === 'four-door')
+	{
+		// French doors over TWO drawers: a convertible middle compartment and the
+		// freezer below it. The middle drawer is what makes it a four-door rather
+		// than a French door with a big freezer, and it is shallower than the one
+		// under it - it holds trays, not a turkey.
+		var freezerTop = y0 + (y1 - y0) * 0.245;
+		var flexTop = y0 + (y1 - y0) * 0.425;
+		return [
+			{x0: x0, x1: x1, y0: y0, y1: freezerTop - r, handle: 'top'},
+			{x0: x0, x1: x1, y0: freezerTop + r, y1: flexTop - r, handle: 'top'},
+			{x0: x0, x1: mid - r, y0: flexTop + r, y1: y1, handle: 'right',
+				inset: s.doorInDoor ? insetPanel(x0, mid - r, flexTop + r, y1) : null},
+			{x0: mid + r, x1: x1, y0: flexTop + r, y1: y1, handle: 'left'},
+		];
+	}
 	// French: a pair over a freezer drawer, which is why the fridge compartment
 	// is the wide one and the two doors are each half of it.
 	var drawerTop = y0 + (y1 - y0) * 0.38;
 	return [
 		{x0: x0, x1: x1, y0: y0, y1: drawerTop - r, handle: 'top'},
-		{x0: x0, x1: mid - r, y0: drawerTop + r, y1: y1, handle: 'right'},
+		{x0: x0, x1: mid - r, y0: drawerTop + r, y1: y1, handle: 'right',
+			inset: s.doorInDoor ? insetPanel(x0, mid - r, drawerTop + r, y1) : null},
 		{x0: mid + r, x1: x1, y0: drawerTop + r, y1: y1, handle: 'left'},
 	];
+}
+
+/**
+ * Where the door-in-door panel sits on the door it is set into.
+ *
+ * The upper two thirds, inset from every edge: it has to clear the hinge side,
+ * the handle side and the seal, which is why it is nowhere near the full door.
+ */
+function insetPanel(x0, x1, y0, y1)
+{
+	var w = x1 - x0;
+	var h = y1 - y0;
+	return {
+		x0: x0 + w * 0.16, x1: x1 - w * 0.16,
+		y0: y0 + h * 0.34, y1: y1 - h * 0.09,
+	};
 }
 
 /**
@@ -446,7 +568,18 @@ function cooktop(group, s, mats, f)
 {
 	var top = f.height;
 	var inset = 3.0;
-	var columns = (f.width >= 85) ? 3 : 2;
+	// Four and five share a two-by-two grid; six is three columns of two. The
+	// FIFTH burner is not part of the grid at all - it is the one in the middle,
+	// where on a four-burner top the grates meet.
+	//
+	// The WIDTH still answers when nothing else does, which is what it did before
+	// this field existed: a 36in range has six burners unless somebody says
+	// otherwise. Asked and answered are different questions, and conflating them
+	// would have made `burners: 4` on a 36in range draw six.
+	var asked = (s.burners === undefined) ? ((f.width >= 85) ? 6 : 4) : s.burners;
+	var wanted = Math.max(4, Math.min(6, Math.round(asked)));
+	var columns = (wanted >= 6) ? 3 : 2;
+	var centre = (wanted === 5);
 	// Off the EDGE rather than off the centre: spreading burners across most of
 	// the half width put a 30in range's outer element ring 1cm past the edge of
 	// its own ceramic top, which the top-down render showed and the size did not.
@@ -461,6 +594,13 @@ function cooktop(group, s, mats, f)
 	{
 		group.add(box(mats.glass, -f.width / 2 + inset, f.width / 2 - inset, top, top + 0.6,
 			-f.depth / 2 + inset, f.depth / 2 - inset));
+		if (centre)
+		{
+			// An oval, drawn as a wide disc: the middle element on a five-zone top
+			// is a bridge or a warming zone, and neither is a circle.
+			group.add(disc(mats.hardware, 11.0, 0.2, 0, top + 0.7, 0));
+			group.add(disc(mats.glass, 9.6, 0.3, 0, top + 0.75, 0));
+		}
 		for (var c = 0; c < columns; c++)
 		{
 			var ex = at(c);
@@ -499,6 +639,27 @@ function cooktop(group, s, mats, f)
 		[-reach, reach].forEach(function (z)
 		{
 			group.add(bar(mats.trim, 0.8, 'x', bx - 6.3, bx + 6.3, grateY, z));
+		});
+	}
+
+	if (!centre)
+	{
+		return;
+	}
+	// The middle burner, and what goes over it. A griddle is a solid plate;
+	// without one the zone still needs a grate, or the pan bridges two others.
+	var half = Math.min(12.0, f.width * 0.16);
+	group.add(disc(mats.trim, 5.6, 1.4, 0, top + 0.7, 0));
+	if (s.griddle)
+	{
+		group.add(box(mats.trim, -half, half, grateY - 1.0, grateY + 0.8,
+			-reach, reach));
+	}
+	else
+	{
+		[-4.0, 0, 4.0].forEach(function (dx)
+		{
+			group.add(bar(mats.trim, 0.8, 'z', -reach, reach, dx, grateY));
 		});
 	}
 }
@@ -789,6 +950,7 @@ export const APPLIANCE_SCHEMA = {
 		{key: 'style', label: 'Style', type: 'choice', when: {subkind: 'fridge'}, options: [
 			{value: 'freestanding', label: 'Freestanding'},
 			{value: 'built-in', label: 'Built-in'},
+			{value: 'undercounter', label: 'Undercounter'},
 		]},
 		{key: 'style', label: 'Style', type: 'choice', when: {subkind: 'hood'}, options: [
 			{value: 'under-cabinet', label: 'Under cabinet'},
@@ -796,16 +958,31 @@ export const APPLIANCE_SCHEMA = {
 			{value: 'island', label: 'Island'},
 			{value: 'downdraft', label: 'Downdraft'},
 		]},
+		{key: 'burners', label: 'Burners', type: 'choice', when: {subkind: 'range'}, options: [
+			{value: 4, label: 'Four'},
+			{value: 5, label: 'Five, with a middle zone'},
+			{value: 6, label: 'Six'},
+		]},
+		{key: 'griddle', label: 'Griddle', type: 'choice', when: {subkind: 'range'}, options: [
+			{value: false, label: 'None'},
+			{value: true, label: 'Over the middle burner'},
+		]},
 		{key: 'fuel', label: 'Fuel', type: 'choice', when: {subkind: 'range'}, options: [
 			{value: 'gas', label: 'Gas'},
 			{value: 'electric', label: 'Electric'},
 		]},
 		{key: 'doors', label: 'Doors', type: 'choice', when: {subkind: 'fridge'}, options: [
 			{value: 'french', label: 'French'},
+			{value: 'four-door', label: 'French over two drawers'},
 			{value: 'side-by-side', label: 'Side by side'},
 			{value: 'top-freezer', label: 'Top freezer'},
 			{value: 'bottom-freezer', label: 'Bottom freezer'},
 		]},
+		{key: 'doorInDoor', label: 'Door in door', type: 'choice',
+			when: {doors: ['french', 'four-door']}, options: [
+				{value: false, label: 'None'},
+				{value: true, label: 'Beverage panel'},
+			]},
 		{key: 'controls', label: 'Controls', type: 'choice', when: {subkind: 'dishwasher'}, options: [
 			{value: 'front', label: 'On the front'},
 			{value: 'top', label: 'Hidden'},
@@ -840,6 +1017,11 @@ export const APPLIANCE_SCHEMA = {
 			step: 1, when: {subkind: 'hood'}},
 		{shared: true, key: 'material.face', label: 'Front', type: 'material'},
 		{shared: true, key: 'material.body', label: 'Body', type: 'material'},
+		{shared: true, key: 'handles', label: 'Handles', type: 'choice', options: [
+			{value: 'bar', label: 'Bar'},
+			{value: 'recessed', label: 'Recessed'},
+			{value: 'none', label: 'None'},
+		]},
 		{shared: true, key: 'material.hardware', label: 'Handles', type: 'material', group: 'metal'},
 	],
 };

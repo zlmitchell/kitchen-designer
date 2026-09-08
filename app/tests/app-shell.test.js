@@ -348,7 +348,7 @@ describe('the catalog drawer', () =>
 
 		// One flat list rather than eight accordions, and the four palettes
 		// partition the catalog file - so furniture is what is left once the
-		// cabinets, the openings and the lights have been taken out of the 196.
+		// cabinets, the openings and the lights have been taken out of the 203.
 		const furniture = CATALOG.items.filter((item) => !item.category).length;
 		expect(furniture).toBeGreaterThan(0);
 		expect(panel.querySelectorAll('li').length).toBe(furniture);

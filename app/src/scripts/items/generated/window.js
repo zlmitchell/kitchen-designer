@@ -69,6 +69,16 @@ import {box, buildCasing, buildSash, resolveHanding} from './opening.js';
 const DEFAULTS = {
 	/** Jamb liner stock, and the sill. 3/4in. */
 	jamb: 1.9,
+	/**
+	 * The vertical member between two units of one window. 1 3/4in.
+	 *
+	 * Only means anything with `units`. It is not two jambs: a mullion is ONE
+	 * member shared by the lights either side of it, which is exactly why a
+	 * multi-unit window has to be one item. Two windows butted together have two
+	 * jamb liners AND two casings between them - 16.5cm of frame where the
+	 * drawing has 4.4 - and they lap each other, which is what the clipping was.
+	 */
+	mullion: 4.45,
 	/** Casing face width. 2 1/2in. */
 	casing: 6.35,
 	/** How far the casing stands off the wall face. 5/8in. */
@@ -120,7 +130,10 @@ const DEFAULTS = {
  * @property {('positive'|'negative')} [swing] Which face a casement or awning
  *           opens out of, **across the plan's axis**.
  * @property {number} [openFraction] 0 shut, 1 fully open.
- * @property {number} [jamb]
+ * @property {Array<{width: number, type?: string, hand?: string, swing?: string}>} [units]
+ *           The lights this window is made of, left to right, when it is more
+ *           than one. Their widths are shares of `width`.
+ * @property {number} [jamb] @property {number} [mullion]
  * @property {number} [casing]
  * @property {number} [casingProud]
  * @property {number} [sashFace]
@@ -149,6 +162,67 @@ const SLOTS = {
 
 /** Which types have a sash that actually moves. */
 const OPERABLE = ['single-hung', 'double-hung', 'casement', 'slider', 'awning'];
+
+/**
+ * The lights a window is divided into, in its own centred frame.
+ *
+ * A wide opening in a real house is not one sash. The great room's is a fixed
+ * pane between two casements: three lights, two mullions, one rough opening and
+ * one hole in the wall. Modelled as three ITEMS it is three rough openings, and
+ * each carries a jamb liner and a casing that lap their neighbours' - measured
+ * at 16.5cm of overlap per join, which renders as the frames clipping through
+ * each other. There is no spacing that fixes it, because the geometry that
+ * overlaps is the geometry that says where the wall stops.
+ *
+ * So a window may be told what it is made of. `width` stays the CLEAR OPENING of
+ * the whole assembly; the units' widths are shares of it, normalised here so a
+ * list that does not add up is stretched to fit rather than silently truncated.
+ * Each light then loses half a mullion on every side it shares.
+ *
+ * @param {Object} s A normalised spec.
+ * @returns {?Array<{x: number, width: number, spec: Object}>} Null for the usual
+ *          case of one light, which every path below then handles as it always
+ *          has.
+ */
+function unitLayout(s)
+{
+	var asked = Array.isArray(s.units) ? s.units.filter(function (u)
+	{
+		return u && typeof u.width === 'number' && u.width > 0;
+	}) : [];
+	if (asked.length < 2)
+	{
+		return null;
+	}
+	var total = asked.reduce(function (sum, u) {return sum + u.width;}, 0);
+	var scale = s.width / total;
+	var mullion = Math.max(0.5, s.mullion);
+	var out = [];
+	var cursor = -s.width / 2;
+	asked.forEach(function (unit, index)
+	{
+		var span = unit.width * scale;
+		// Half a mullion off each shared side. The outer sides keep the frame's
+		// own jamb, which is already outside `width`.
+		var lost = (index === 0 ? 0 : mullion / 2) + (index === asked.length - 1 ? 0 : mullion / 2);
+		var glass = Math.max(5, span - lost);
+		out.push({
+			x: cursor + span / 2 + ((index === 0 ? 0 : mullion / 2) - (index === asked.length - 1 ? 0 : mullion / 2)) / 2,
+			width: glass,
+			spec: Object.assign({}, s, {
+				width: glass,
+				units: null,
+				type: unit.type || s.type,
+				hand: unit.hand || s.hand,
+				swing: unit.swing || s.swing,
+				openFraction: (typeof unit.openFraction === 'number')
+					? unit.openFraction : s.openFraction,
+			}),
+		});
+		cursor += span;
+	});
+	return out;
+}
 
 /** The derived sizes every part below is placed against. */
 function frameOf(s)
@@ -609,7 +683,6 @@ export function buildWindow(spec)
 	frame.add(box(mats.frame, -f.ox, f.ox, -f.y1, -f.oy, -f.z1, f.z1));
 	var merged = mergeMeshes(frame);
 
-	var handing = resolveHanding(s, 0);
 	/** @type {Array<Object3D>} */
 	var parts = [];
 	buildCasing(mats.casing, {
@@ -621,7 +694,40 @@ export function buildWindow(spec)
 		// wall. Both would land inside the ceiling and under the floor.
 		bottom: !s.fullHeight, top: !s.fullHeight,
 	}).forEach(function (part) {parts.push(part);});
-	buildSashes(s, handing.hingeSign, handing.dirSign, mats).forEach(function (part) {parts.push(part);});
+
+	var units = unitLayout(s);
+	if (units)
+	{
+		units.forEach(function (unit, index)
+		{
+			// The mullion, before the light to its right. In the FRAME group, not
+			// in `parts`: it fills the wall like a jamb does, and the item's
+			// geometry is what the wall's hole is cut from.
+			if (index > 0)
+			{
+				var edge = unit.x - unit.width / 2;
+				frame.add(box(mats.frame, edge - s.mullion / 2, edge + s.mullion / 2,
+					-f.oy, f.oy, -f.z1, f.z1));
+			}
+			// Each light gets its own handing, because a pair of flankers either
+			// side of a fixed pane open away from each other and a single answer
+			// for the whole window cannot say that.
+			var handing = resolveHanding(unit.spec, 0);
+			var group = new Group();
+			group.position.x = unit.x;
+			buildSashes(unit.spec, handing.hingeSign, handing.dirSign, mats)
+				.forEach(function (part) {group.add(part);});
+			parts.push(group);
+		});
+		// Rebuilt, because the mullions went into it after the first merge.
+		merged = mergeMeshes(frame);
+	}
+	else
+	{
+		var whole = resolveHanding(s, 0);
+		buildSashes(s, whole.hingeSign, whole.dirSign, mats)
+			.forEach(function (part) {parts.push(part);});
+	}
 
 	return {
 		geometry: merged.geometry,

@@ -385,7 +385,12 @@ features:
 - `run.topTreatment`: `to-ceiling | gap | soffit | stacked`
 - `mount`: `wall | to-ceiling | soffit | floating-shelf` — "built in vs free
   hanging"
-- floating drawers: a member with `floatHeight` and no toe kick
+- floating drawers: ✅ `variant: 'floating'`. Not blocked on the run after all —
+  the note further down says a gap "cannot survive in a bounding box, so
+  `FloorItem` puts the bottom of the bounds on the floor", which is true of a
+  FloorItem and of the floor-bound `WallFloorItem`, and not of a `WallItem`. A
+  drawer box hung under a worktop is held up by the wall behind it, so it is a
+  type 2, and the gap is simply where it is not.
 - an **`appliance-slot` member** reserves width without being a cabinet. This is
   how the range, dishwasher and built-in fridge get counter and face alignment
   for free instead of each solving it alone.
@@ -421,6 +426,23 @@ across the corner and which is therefore not a rectangle in plan; and a **corner
 drawer** unit, whose drawers run diagonally. Both are still "one cabinet spanning
 the corner", so they belong to the same member rather than to a new kind.
 
+**The two shapes are built** — `cabinet.corner` is `none | l | diagonal`, with
+`returnWidth` for the other leg and `hand` for which end it turns onto. An L
+keeps the whole square and hangs a leaf on each leg, meeting at the inside
+corner; a diagonal cuts the outer corner off with one angled face. They are in
+the catalogue as a base and a wall unit each, and `faceOn` is the piece that made
+them cheap: a face frame and its fronts on any line across the plan, rather than
+on the front of a box. What is NOT built is the part above — the blind corner,
+whose blank width is the *neighbouring* run's depth. That is the peer-to-peer
+requirement, and it still needs the run.
+
+Two things the first build got wrong, both found by a test rather than by
+looking, and both worth not repeating: the toe kick under the return leg was
+recessed the wrong way and stood 3in **proud** of the door above it, filling the
+corner the L exists to leave empty; and an L's two leaves are hinged at the walls
+and open at the inside corner, so both handles go there — taking `carcassAt`'s
+default put one of them at the far end, against the cabinet next door.
+
 **The exposed end and the exposed back.** The same assumption, one step out. A
 run that ends in open floor shows a raw ply side where a finished end panel
 belongs, and an island or peninsula shows a ply back — or wants doors on it,
@@ -445,6 +467,84 @@ has to follow the back edges round instead of being one box. Butting two
 rectangular counters instead leaves the two splashes stopping short of each
 other, with an open notch at exactly the inside corner where a real kitchen has a
 continuous return.
+
+#### 3b. Say which wall an item is on, and let one be on none ✅ (half of it)
+
+Every wall-bound item picks its wall by distance. `WallItem.closestWallEdge`
+takes the nearest half edge and `changeWallEdge` sets `rotation.y` from that
+edge's normal, so the wall is not a property of the item — it is recomputed from
+where the item happens to be, every time the design loads.
+
+Almost always right, and there are two places it is not:
+
+**In a corner it is a coin toss, and the coin is loaded.** A cabinet is deeper
+than it is wide once its doors are on — a 24in base is 68cm front to back and
+61cm across — so a square corner unit placed with its back on wall A is *nearer
+to wall B*, always. There is no position that both aligns the cabinet with its
+run and leaves it bound to the run's own wall: the two conditions are
+contradictory for any unit narrower than it is deep. Measured on the Jo and Zach
+plan, the corner units came out rotated 90° with their faces 3.5cm out of the
+run, and the fix in `data/fitout.json` is to widen them until they are wider than
+they are deep, which is a workaround wearing a cabinet's clothes.
+
+`bindToNextWallEdge` already exists for a human to cycle the candidates by hand,
+and the choice **is not saved**: the next load recomputes it and throws the
+answer away.
+
+**And an island is on no wall at all.** A peninsula or an island is a run with a
+counter, doors on more than one side, and nothing behind it. Today an item of
+type 2 or 9 will find a wall somewhere in the room and attach itself to it.
+
+**The naming half is built.** An item carries `wallEdge`, `placeInRoom` prefers
+it, `changeWallEdge` records it, and `tools/fitout.py` derives the same ids from
+the corner pairs so a fitted plan binds correctly by construction rather than by
+luck. The corner units in `data/fitout.json` went back to the size the drawing
+gives them, because the workaround they were carrying — widen a corner cabinet
+until it is wider than it is deep — is no longer needed.
+
+**Free placement is not**, and it is what an island wants: an item that binds to
+no wall at all and keeps the position and rotation it was given. Everything
+below still stands.
+
+- an item may name a **half edge** (`HalfEdge.id` is `${wall.id}:front|back`, and
+  wall ids have been derived from the corner pair since RM-004 B2, so the name is
+  stable across a load)
+- or say it is **free**, and keep the position and rotation it was given
+- `placeInRoom` prefers the named edge and falls back to `closestWallEdge`, so
+  every design written before the field opens exactly as it does now
+- `bindToNextWallEdge` records what the human picked, which is the whole point:
+  the control exists and its answer is discarded
+- `getMetaData` writes it; `Model.newRoom` restores it, which it half does
+  already — it notes the face across a floorplan rebuild and then forgets it
+
+Free placement is also what an island needs before anything else about islands is
+worth building, and it is the smaller half of this.
+
+#### 3c. Cabinets snap to each other, not only to a wall
+
+Placing a run today is placing each cabinet at a coordinate. That is what the
+schedule in `data/fitout.json` is — an offline answer to a job the editor cannot
+do — and it is why a run is 40 lines of measured extents rather than a list of
+widths.
+
+What it should be: drop a cabinet against the one beside it and have it **butt to
+its edge**, sharing the wall, the depth, the mount height and the finish. Then a
+run is built by adding boxes, the way it is built in life, and `run.widths` in
+the phase 3 container above is what falls out rather than what has to be typed.
+
+The pieces:
+
+- a **snap on drag**, like the wall snapping `Floorplanner` already does for
+  corners and angles: within a few centimetres of a neighbour's side, land flush
+  against it rather than where the mouse was
+- snapping to the **carcass**, not to the bounding box. A cabinet's bounds
+  include its knob, and two cabinets snapped by their bounds stand 7cm apart with
+  daylight between them
+- and it has to agree with the wall binding, which is why it comes after 3b: two
+  independent things moving one item is how an item ends up satisfying neither
+
+This is also the honest fix for what 3b works around. A corner unit that knows
+which cabinets it butts into does not need to be wider than it is deep.
 
 ### Phase 4 — appliances ✅
 

@@ -84,6 +84,18 @@ const VARIANTS = {
 	base: {height: 87.63, depth: 61.0, toeKick: true},
 	wall: {height: 76.2, depth: 30.48, toeKick: false},
 	tall: {height: 213.36, depth: 61.0, toeKick: true},
+	/**
+	 * A drawer box hung under a worktop with open floor beneath it.
+	 *
+	 * 10in deep front to top, base depth, and no toe kick - the point of one is
+	 * that there is nothing under it. What it needs from the rest of the app is
+	 * to be a **WallItem (type 2) rather than a WallFloorItem (type 9)**:
+	 * `WallItem.boundMove` sets `boundToFloor` on the floor-bound one, so a
+	 * floating cabinet dragged as a type 9 has its gap taken back the moment it
+	 * moves. ROADMAP phase 3 lists this as blocked on the run holding a cabinet
+	 * at a height; it is not, because a wall already does.
+	 */
+	floating: {height: 25.4, depth: 61.0, toeKick: false},
 };
 
 /**
@@ -182,6 +194,36 @@ const DEFAULTS = {
 	 * being a farmhouse.
 	 */
 	apronCut: 0,
+	/**
+	 * Whether this is an inside corner unit, and which shape of one.
+	 *
+	 * A corner is the one place a run cannot be made of boxes. Two runs meet at
+	 * ninety degrees and the square where they cross is reachable from neither
+	 * side, so the trade sells two answers to it and this is both:
+	 *
+	 *   - `l` keeps the square and puts a face on each leg, meeting at an inside
+	 *     corner. Every cubic inch of the corner is in the box; what you give up
+	 *     is that the far half of it is an arm's length past the opening.
+	 *   - `diagonal` cuts the outer corner off with one angled face. Less volume,
+	 *     and all of it in front of a door you can stand square to. It is also
+	 *     the one that leaves room for a corner sink.
+	 *
+	 * `none` is a plain box, which is what a BLIND corner is: the square with no
+	 * face on it at all, reached past the cabinet beside it.
+	 *
+	 * @type {('none'|'l'|'diagonal')}
+	 */
+	corner: 'none',
+	/**
+	 * Which end of this cabinet the return wall is on.
+	 *
+	 * Plan-space, like a door's - `lo` is the -x end in the cabinet's own frame.
+	 * A corner has a chirality that a width and a depth cannot express, and
+	 * getting it wrong puts the doors against the wall.
+	 *
+	 * @type {('lo'|'hi')}
+	 */
+	hand: 'lo',
 	/** How many doors across the door area. 0 leaves it open. */
 	doors: 2,
 	/**
@@ -227,7 +269,7 @@ const DEFAULTS = {
 };
 
 /** @typedef {Object} CabinetSpec
- * @property {('base'|'wall'|'tall')} [variant]
+ * @property {('base'|'wall'|'tall'|'floating')} [variant]
  * @property {number} [width] @property {number} [depth] @property {number} [height]
  * @property {('face'|'frameless')} [frame]
  * @property {('slab'|'shaker'|'raised')} [front]
@@ -238,6 +280,9 @@ const DEFAULTS = {
  * @property {string} [layout] One of `CABINET_LAYOUTS`, or `custom`.
  * @property {number} [apronCut]
  * @property {('knob'|'pull'|'none')} [hardware]
+ * @property {('none'|'l'|'diagonal')} [corner]
+ * @property {('lo'|'hi')} [hand]
+ * @property {number} [returnWidth] @property {number} [returnDepth]
  * @property {?boolean} [toeKick]
  * @property {Object} [material]
  */
@@ -403,6 +448,9 @@ function heights(s, variant)
 	return {envelope: envelope, carcass: asked, fill: envelope - asked};
 }
 
+/** The corner shapes there are. Anything else is a plain box. */
+const CORNERS = ['l', 'diagonal'];
+
 /** The resolved sizes every part is placed against. */
 function shell(s)
 {
@@ -412,15 +460,35 @@ function shell(s)
 	var depth = (s.depth === undefined) ? variant.depth : s.depth;
 	var wantsToe = (s.toeKick === null || s.toeKick === undefined) ? variant.toeKick : s.toeKick;
 	var toe = wantsToe ? s.toeHeight : 0;
+	// A corner unit is two legs at right angles, so the box it occupies is not
+	// its depth: it reaches `returnWidth` back along the wall it turns onto.
+	// Resolved here, before anything else, because every other number below is
+	// measured off that box - and for a plain cabinet `span` IS the depth, so
+	// the two lines that use it give exactly what they always gave.
+	var corner = (CORNERS.indexOf(s.corner) === -1) ? 'none' : s.corner;
+	var ret = (s.returnWidth === undefined) ? s.width : s.returnWidth;
+	// `max`, with no floor added to it. A corner unit whose legs are as long as
+	// they are deep has NO face - the square is entirely within reach of neither
+	// run, which is what a blind corner is - and padding the box to force a sliver
+	// of one made every corner 5cm deeper than the footprint it was given.
+	// `faceOn` already declines a face too narrow to hang a door in, so the
+	// degenerate case takes care of itself and the honest depth survives.
+	var span = (corner === 'none') ? depth : Math.max(depth, ret);
+	var retDepth = (s.returnDepth === undefined) ? depth : s.returnDepth;
 	return {
 		width: s.width, height: height, depth: depth,
 		carcassHeight: tall.carcass, fill: tall.fill,
 		toe: toe,
+		corner: corner,
+		/** How deep the return leg is, capped so it cannot swallow the cabinet. */
+		retDepth: Math.min(retDepth, Math.max(10, s.width - 5)),
+		/** Which side the return wall is on: -1 at the lo end, +1 at the hi end. */
+		hx: (s.hand === 'hi') ? 1 : -1,
 		// Centred, so Item's recentring is a no-op. See docs/generated-items.md.
-		x1: s.width / 2, y1: height / 2, z1: depth / 2,
+		x1: s.width / 2, y1: height / 2, z1: span / 2,
 		floor: -height / 2,
 		/** The front face of the carcass, where the frame and fronts sit. */
-		face: depth / 2,
+		face: -span / 2 + depth,
 	};
 }
 
@@ -601,10 +669,25 @@ export const CABINET_SCHEMA = {
 			{value: 'base', label: 'Base'},
 			{value: 'wall', label: 'Wall'},
 			{value: 'tall', label: 'Tall'},
+			{value: 'floating', label: 'Floating drawer'},
 		]},
 		// The snap list is in the field's step rather than a dropdown: cabinets
 		// come in 3in increments, and typing 63.5 for a 25in filler is legitimate.
+		{key: 'corner', label: 'Corner', type: 'choice', options: [
+			{value: 'none', label: 'Not a corner'},
+			{value: 'l', label: 'L-shaped'},
+			{value: 'diagonal', label: 'Diagonal'},
+		]},
+		{key: 'hand', label: 'Turns towards', type: 'choice',
+			when: {corner: ['l', 'diagonal']}, options: [
+				{value: 'lo', label: 'The left'},
+				{value: 'hi', label: 'The right'},
+			]},
 		{key: 'width', label: 'Width', type: 'length', min: 22.86, max: 121.92, step: 7.62},
+		// The other leg. Only asked where there is one, and stepped in stock
+		// increments like the width, because it is the same kind of number.
+		{key: 'returnWidth', label: 'Return', type: 'length', min: 22.86, max: 121.92,
+			step: 7.62, when: {corner: ['l', 'diagonal']}},
 		{key: 'height', label: 'Height', type: 'length', min: 30, max: 250, step: 1},
 		{key: 'depth', label: 'Depth', type: 'length', min: 20, max: 80, step: 1},
 		{shared: true, key: 'frame', label: 'Construction', type: 'choice', options: [
@@ -656,8 +739,12 @@ export const CABINET_SCHEMA = {
 		]},
 		{key: 'ceilingHeight', label: 'Ceiling height', type: 'length', min: 200, max: 400,
 			step: 1, when: {variant: 'wall'}},
-		{key: 'mountHeight', label: 'Mounted at', type: 'length', min: 90, max: 200,
-			step: 1, when: {variant: 'wall'}},
+		// Asked of a floating drawer too, and it is the only number that matters
+		// on one: what the height buys is the gap UNDER it. The floor is at 90 for
+		// a wall cabinet and lower here, because a drawer under a worktop hangs at
+		// about 25in and a wall cabinet never does.
+		{key: 'mountHeight', label: 'Mounted at', type: 'length', min: 40, max: 200,
+			step: 1, when: {variant: ['wall', 'floating']}},
 		{key: 'toeKick', label: 'Toe kick', type: 'choice', options: [
 			{value: true, label: 'Recessed'},
 			{value: false, label: 'None'},
@@ -690,6 +777,160 @@ export const CABINET_SCHEMA = {
  * @param {CabinetSpec} spec
  * @returns {{geometry: import('three').BufferGeometry, materials: Array, parts: Array}}
  */
+/**
+ * A face frame and its fronts, lying on any line across the plan.
+ *
+ * `carcassAt` can only put a face on the front of a box, because it writes
+ * axis-aligned extents. A corner cabinet's faces are not: an L has two of them
+ * at ninety degrees, and a diagonal has one at forty-five. So the face is built
+ * flat, in its own frame, and the group it lives in is rotated onto the segment
+ * - which costs nothing, because `mergeMeshes` bakes world matrices and a
+ * generated part is one merged geometry either way.
+ *
+ * **Order the endpoints so the room is on the LEFT of p0 -> p1.** Rotating by
+ * theta sends local +x to `(cos, 0, -sin)` and local +z to `(sin, 0, cos)`, so
+ * laying +x along the segment puts +z - the direction the doors face - on its
+ * left. Reversed, the doors face into the carcass, which is invisible in a
+ * vertex count and obvious in one render.
+ *
+ * @param {{x: number, z: number}} p0 @param {{x: number, z: number}} p1
+ */
+function faceOn(group, s, mats, p0, p1, yLo, yHi, doors, handleAtStart)
+{
+	var dx = p1.x - p0.x;
+	var dz = p1.z - p0.z;
+	var span = Math.sqrt(dx * dx + dz * dz);
+	// Narrower than a stile either side plus a door between them is not a face,
+	// it is a filler - and asking `frontPanel` for a negative width draws a door
+	// inside out.
+	if (span < 2 * s.stile + 8)
+	{
+		return;
+	}
+	var panel = new Group();
+	panel.rotation.y = Math.atan2(-dz, dx);
+	panel.position.set((p0.x + p1.x) / 2, 0, (p0.z + p1.z) / 2);
+
+	var x0 = -span / 2;
+	var x1 = span / 2;
+	var openLo = yLo;
+	var openHi = yHi;
+	var frontZ = 0;
+	if (s.frame === 'face')
+	{
+		panel.add(box(mats.frame, x0, x0 + s.stile, yLo, yHi, 0, s.panel));
+		panel.add(box(mats.frame, x1 - s.stile, x1, yLo, yHi, 0, s.panel));
+		panel.add(box(mats.frame, x0 + s.stile, x1 - s.stile, yHi - s.stile, yHi, 0, s.panel));
+		panel.add(box(mats.frame, x0 + s.stile, x1 - s.stile, yLo, yLo + s.stile, 0, s.panel));
+		openLo = yLo + s.stile;
+		openHi = yHi - s.stile;
+		x0 += s.stile;
+		x1 -= s.stile;
+		frontZ = s.panel;
+	}
+
+	var r = s.reveal;
+	var count = Math.max(1, Math.min(2, doors));
+	var each = ((x1 - x0) - r * (count + 1)) / count;
+	for (var i = 0; i < count; i++)
+	{
+		var d0 = x0 + r + i * (each + r);
+		frontPanel(mats, s.front, d0, d0 + each, openLo + r, openHi - r, frontZ,
+			s.frontThickness, s.glazing).forEach(function (mesh) {panel.add(mesh);});
+		// The opening edge, which for a pair is the middle. A single door on a
+		// corner is the exception and says which end it opens from: an L's two
+		// leaves are hinged at the walls and meet at the inside corner, so both
+		// handles are there - and taking the default put one of them 21cm away,
+		// against the cabinet next door.
+		var opensAtStart = (count === 1) ? Boolean(handleAtStart) : (i !== 0);
+		var handX = opensAtStart ? (d0 + 5) : (d0 + each - 5);
+		hardwareFor(mats, s.hardware, handX, (openLo + openHi) / 2 + 10,
+			frontZ + s.frontThickness, false).forEach(function (mesh) {panel.add(mesh);});
+	}
+	group.add(panel);
+}
+
+/**
+ * Where a corner cabinet's faces run, in its own frame.
+ *
+ * One place, because the toe kick, the carcass and the fronts all need the same
+ * two lines and a corner drawn three slightly different ways is three corners.
+ *
+ * @returns {{bIn: number, faces: Array<Array<{x: number, z: number}>>}} `bIn` is
+ *          the inside face of the return leg; `faces` is one segment per face,
+ *          each already ordered so the room is on its left.
+ */
+function cornerLines(s, f)
+{
+	var bIn = f.hx * (f.x1 - f.retDepth);
+	var far = f.hx < 0
+		? {a0: {x: bIn, z: f.face}, a1: {x: f.x1, z: f.face},
+			b0: {x: bIn, z: f.z1}, b1: {x: bIn, z: f.face}}
+		: {a0: {x: -f.x1, z: f.face}, a1: {x: bIn, z: f.face},
+			b0: {x: bIn, z: f.face}, b1: {x: bIn, z: f.z1}};
+	if (f.corner === 'diagonal')
+	{
+		// One face across the two free ends. The corner it cuts off is the part of
+		// the square you could not reach anyway.
+		return {bIn: bIn, faces: [f.hx < 0
+			? [far.b0, far.a1]
+			: [far.a0, far.b1]]};
+	}
+	return {bIn: bIn, faces: [[far.a0, far.a1], [far.b0, far.b1]]};
+}
+
+/**
+ * A corner cabinet: two legs at right angles, and the face across their ends.
+ *
+ * The same job `carcassAt` does, for the shape it cannot express. Kept separate
+ * rather than generalised: `carcassAt` is a box and reads like one, and every
+ * cabinet in a kitchen but two is a box.
+ */
+function cornerAt(group, s, mats, f, yLo, yHi)
+{
+	var lines = cornerLines(s, f);
+	var bIn = lines.bIn;
+	var wallB = f.hx * f.x1;
+	var bx0 = Math.min(bIn, wallB);
+	var bx1 = Math.max(bIn, wallB);
+	var back = -f.z1;
+
+	// The two backs, on the two walls.
+	group.add(box(mats.carcass, -f.x1, f.x1, yLo, yHi, back, back + s.panel));
+	group.add(box(mats.carcass, f.hx < 0 ? bx0 : bx1 - s.panel,
+		f.hx < 0 ? bx0 + s.panel : bx1, yLo, yHi, back, f.z1));
+	// The deck, as the L it is.
+	group.add(box(mats.carcass, -f.x1, f.x1, yLo, yLo + s.panel, back, f.face));
+	group.add(box(mats.carcass, bx0, bx1, yLo, yLo + s.panel, back, f.z1));
+	// The free end of each leg: a side panel, where a plain cabinet has two.
+	group.add(box(mats.carcass, f.hx < 0 ? f.x1 - s.panel : -f.x1,
+		f.hx < 0 ? f.x1 : -f.x1 + s.panel, yLo, yHi, back, f.face));
+	group.add(box(mats.carcass, bx0, bx1, yLo, yHi, f.z1 - s.panel, f.z1));
+	// A wall cabinet is closed on top; a base one gets stretchers, because its
+	// top is the counter's business and never seen.
+	if (s.variant === 'wall')
+	{
+		group.add(box(mats.carcass, -f.x1, f.x1, yHi - s.panel, yHi, back, f.face));
+		group.add(box(mats.carcass, bx0, bx1, yHi - s.panel, yHi, back, f.z1));
+	}
+	else
+	{
+		group.add(box(mats.carcass, -f.x1, f.x1, yHi - s.panel, yHi, back, back + 12));
+		group.add(box(mats.carcass, bx0, bx1, yHi - s.panel, yHi, f.z1 - 12, f.z1));
+	}
+
+	// One door per face for an L, and whatever was asked for on a diagonal's
+	// single face - which is how both are actually hung. `handleAtStart` is which
+	// end of the segment the inside corner is on, and `cornerLines` orders each
+	// face so that the doors face the room, not so that the corner is first.
+	lines.faces.forEach(function (segment, index)
+	{
+		faceOn(group, s, mats, segment[0], segment[1], yLo, yHi,
+			(lines.faces.length === 1) ? s.doors : 1,
+			lines.faces.length === 1 ? false : ((f.hx < 0) === (index === 0)));
+	});
+}
+
 /**
  * A carcass, its face frame, and the fronts filling the opening.
  *
@@ -834,12 +1075,35 @@ export function buildCabinet(spec)
 	// except a soffit or a stack, which reach the ceiling with something else.
 	var cabinetTop = f.floor + f.carcassHeight;
 
-	carcassAt(group, s, mats, f, lift, cabinetTop, s.doors, s.drawers, s.apronCut);
+	if (f.corner === 'none')
+	{
+		carcassAt(group, s, mats, f, lift, cabinetTop, s.doors, s.drawers, s.apronCut);
+	}
+	else
+	{
+		// No drawers and no apron cut. A corner unit's opening is a door or two;
+		// there is no such thing as a corner drawer, and a farmhouse sink does not
+		// go in one.
+		cornerAt(group, s, mats, f, lift, cabinetTop);
+	}
 
 	// ---- toe kick ---------------------------------------------------------
 	if (f.toe > 0)
 	{
 		group.add(box(mats.carcass, -f.x1, f.x1, f.floor, lift, back, f.face - s.toeRecess));
+		if (f.corner !== 'none')
+		{
+			// The other leg's, recessed from ITS face rather than from the front.
+			//
+			// `+ hx`, not `- hx`. The return leg reaches OUT from its wall in the
+			// -hx direction, so its face normal is -hx and setting the kick back
+			// means moving it towards the wall, which is +hx. Backwards, the kick
+			// stood 3in PROUD of the door above it and filled the corner the L
+			// exists to leave empty.
+			var kick = cornerLines(s, f).bIn + f.hx * s.toeRecess;
+			group.add(box(mats.carcass, Math.min(kick, f.hx * f.x1),
+				Math.max(kick, f.hx * f.x1), f.floor, lift, back, f.z1));
+		}
 	}
 
 	// ---- what fills the gap to the ceiling ---------------------------------
@@ -851,13 +1115,26 @@ export function buildCabinet(spec)
 			// that break is the whole visual difference between a stack and a 42in
 			// cabinet - which is why this goes through carcassAt again rather than
 			// stretching the one below.
-			carcassAt(group, s, mats, f, cabinetTop, f.y1, Math.max(1, s.doors), [], 0);
+			if (f.corner === 'none')
+			{
+				carcassAt(group, s, mats, f, cabinetTop, f.y1, Math.max(1, s.doors), [], 0);
+			}
+			else
+			{
+				cornerAt(group, s, mats, f, cabinetTop, f.y1);
+			}
 		}
 		else
 		{
 			// A soffit: a closed box, flush with the cabinet face, in the frame
 			// material because that is what it is painted to match.
 			group.add(box(mats.frame, -f.x1, f.x1, cabinetTop, f.y1, back, f.face + s.panel));
+			if (f.corner !== 'none')
+			{
+				var bIn = cornerLines(s, f).bIn;
+				group.add(box(mats.frame, Math.min(bIn, f.hx * f.x1),
+					Math.max(bIn, f.hx * f.x1), cabinetTop, f.y1, back, f.z1));
+			}
 		}
 	}
 
