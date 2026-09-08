@@ -764,8 +764,14 @@ export class Floorplan extends EventDispatcher
 			floorplans.carbonSheet['y'] = this.carbonSheet.y;
 			floorplans.carbonSheet['anchorX'] = this.carbonSheet.anchorX;
 			floorplans.carbonSheet['anchorY'] = this.carbonSheet.anchorY;
+			// Both, and the centimetres are the pair that mean something. `width` is
+			// in whatever unit is on screen, so a file declaring `units: "cm"` was
+			// carrying its sheet in feet - see carbonsheet.js. The display-unit
+			// pair stays so a build without the cm keys still reads this file.
 			floorplans.carbonSheet['width'] = this.carbonSheet.width;
 			floorplans.carbonSheet['height'] = this.carbonSheet.height;
+			floorplans.carbonSheet['widthCm'] = this.carbonSheet.widthCm;
+			floorplans.carbonSheet['heightCm'] = this.carbonSheet.heightCm;
 		}
 
 		floorplans.newFloorTextures = this.floorTextures;
@@ -844,8 +850,20 @@ export class Floorplan extends EventDispatcher
 			this.carbonSheet.transparency = floorplan.carbonSheet['transparency'];
 			this.carbonSheet.anchorX = floorplan.carbonSheet['anchorX'];
 			this.carbonSheet.anchorY = floorplan.carbonSheet['anchorY'];
-			this.carbonSheet.width = floorplan.carbonSheet['width'];
-			this.carbonSheet.height = floorplan.carbonSheet['height'];
+			// Centimetres if the file has them, the display-unit pair if it is older
+			// than they are. Asked of the record rather than of a version stamp: a
+			// file either carries the unambiguous number or it does not, and that
+			// is cheaper to ask and truer than when it was written.
+			if (typeof floorplan.carbonSheet['widthCm'] === 'number')
+			{
+				this.carbonSheet.widthCm = floorplan.carbonSheet['widthCm'];
+				this.carbonSheet.heightCm = floorplan.carbonSheet['heightCm'];
+			}
+			else
+			{
+				this.carbonSheet.width = floorplan.carbonSheet['width'];
+				this.carbonSheet.height = floorplan.carbonSheet['height'];
+			}
 			this.carbonSheet.url = floorplan.carbonSheet['url'];
 			this.carbonSheet.maintainProportion = true;
 		}

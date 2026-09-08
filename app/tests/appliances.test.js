@@ -626,3 +626,120 @@ describe('a five-burner top has a zone in the middle', () =>
 			.toBeGreaterThan(verts(range({burners: 4, width: 91.44})));
 	});
 });
+
+describe('a cabinet hood is millwork, not an appliance in a run', () =>
+{
+	/** Distinct slots, so the front can be told from the box behind it. */
+	const SLOTS = {body: 'wood-birch-ply', face: 'wood-walnut',
+		trim: 'metal-matte-black', hardware: 'paint-greige'};
+
+	const hood = (spec) => buildAppliance(Object.assign({
+		subkind: 'hood', style: 'cabinet-front', front: 'shaker',
+		ceilingHeight: 243.84, mountHeight: 167.64, material: SLOTS,
+	}, spec));
+
+	/** How many vertices one material draws. A box is 36 once de-indexed. */
+	function partVerts(built, materialId)
+	{
+		const index = built.materials.findIndex((m) => m.userData.materialId === materialId);
+		if (index < 0) {return 0;}
+		return built.geometry.groups
+			.filter((group) => group.materialIndex === index)
+			.reduce((sum, group) => sum + group.count, 0);
+	}
+
+	it('wears the run door front, built by the run own builder', () =>
+	{
+		// The whole claim. Not a colour that matches - a front built by
+		// `cabinet.js`'s `frontPanel`, which is the same call a panel-ready
+		// dishwasher makes and the reason that function is exported. So a shaker
+		// kitchen gets a shaker hood without anybody keeping the two in step.
+		const shaker = partVerts(hood({front: 'shaker'}), 'wood-walnut');
+		const slab = partVerts(hood({front: 'slab'}), 'wood-walnut');
+		expect(slab).toBeGreaterThan(0);
+		// A slab is one box per section and a shaker is five.
+		expect(shaker).toBe(slab * 5);
+	});
+
+	it('is panel-ready whatever the finish says', () =>
+	{
+		// There is no such thing as a stainless hood with a shaker profile on it,
+		// so the style settles the finish rather than letting the two disagree.
+		// It is also what makes the panel-style control appear, since the schema
+		// shows that for a panel-ready appliance.
+		const steel = hood({finish: 'stainless'});
+		expect(hasMaterial(steel, 'metal-stainless')).toBe(false);
+	});
+
+	it('drops back to the uppers depth above the canopy', () =>
+	{
+		// The step is the point. The canopy keeps the hood's own depth, because
+		// that is what captures over a cooktop; the mantel above it comes back to
+		// the wall cabinets' depth so its face lands in their plane and the run
+		// does not step at the hood.
+		const built = hood({depth: 50.8, upperDepth: 30.48});
+		const box = bounds(built);
+		const pos = built.geometry.getAttribute('position');
+
+		// Front-most point in the bottom band, and in the top one.
+		const frontmostAbove = (from, to) =>
+		{
+			let z = -Infinity;
+			for (let i = 0; i < pos.count; i++)
+			{
+				const y = pos.getY(i);
+				if (y >= from && y <= to) {z = Math.max(z, pos.getZ(i));}
+			}
+			return z;
+		};
+		const canopy = frontmostAbove(box.min.y + 5, 20);
+		const mantel = frontmostAbove(box.max.y - 20, box.max.y);
+
+		expect(canopy).toBeGreaterThan(mantel);
+		// And by about the difference between the two depths.
+		expect(canopy - mantel).toBeCloseTo((50.8 - 30.48) / 1, 0);
+	});
+
+	it('puts a cupboard over the mantel when asked, as a third front', () =>
+	{
+		// Same box, one more front, with a reveal between them - which is what
+		// makes a cupboard read as a cupboard rather than as more mantel.
+		const plain = partVerts(hood({style: 'cabinet-front'}), 'wood-walnut');
+		const over = partVerts(hood({style: 'cabinet-over'}), 'wood-walnut');
+		expect(over).toBeGreaterThan(plain);
+		// Two sections against three, at five boxes a shaker front.
+		expect(plain / 36 / 5).toBe(2);
+		expect(over / 36 / 5).toBe(3);
+	});
+
+	it('runs the mantel on rather than fitting a cupboard nobody can use', () =>
+	{
+		// A low ceiling leaves a gap that is a filler, not a cupboard. Coming out
+		// as a plain mantel is the honest answer, and it is the same fallback
+		// `frontPanel` makes for a door too narrow to hold a centre panel.
+		const low = hood({style: 'cabinet-over', ceilingHeight: 213.36});
+		const plain = hood({style: 'cabinet-front', ceilingHeight: 213.36});
+		expect(partVerts(low, 'wood-walnut')).toBe(partVerts(plain, 'wood-walnut'));
+	});
+
+	it('still has a filter under it, because it is a hood', () =>
+	{
+		// A wood hood is a wood BOX round a metal liner, and the liner is the only
+		// part of it that is an appliance at all. Without it this is a cupboard
+		// over a cooker.
+		const built = hood({});
+		const filter = partBounds(built, 'metal-matte-black');
+		expect(filter.min.y).toBeLessThan(0);
+		// Proud of the canopy, not swallowed by it - the fault that made the metal
+		// hood's filter render as a blank cap.
+		expect(filter.max.y).toBeLessThan(5);
+	});
+
+	it('reaches the ceiling it is told about', () =>
+	{
+		const tall = hood({ceilingHeight: 274.32});
+		const short = hood({ceilingHeight: 243.84});
+		expect(size(tall).y).toBeGreaterThan(size(short).y);
+		expect(size(short).y).toBeCloseTo(243.84 - 167.64 + 1.6, 0);
+	});
+});

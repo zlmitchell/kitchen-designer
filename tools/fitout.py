@@ -262,6 +262,47 @@ def local_offset(run, plan_offset):
     return -plan_offset if flip else plan_offset
 
 
+def carry_underlay(design, traced_path):
+    """Put the tracer's own underlay block back, in the unit it was measured in.
+
+    The carbon sheet is the one part of a saved floorplan that is NOT in the
+    unit the file declares. `carbonsheet.js` pushes its width and height through
+    `cmFromMeasureRaw`, so they are in whatever was on screen when somebody
+    saved - and an export made while the ruler said feet carries 52.22 for a
+    sheet that is 1591.7cm. The app opens in metres and reads that as 52.22
+    metres, which is 3.28 times too big and looks like a different drawing laid
+    over the walls.
+
+    `build.py` already avoids this: it writes `floorplan.underlay` in plain
+    centimetres and image pixels, and `useDesignIO.applyUnderlay` converts once,
+    where the display unit is known. What it cannot do is survive a round trip
+    through the editor, because the editor does not write that block.
+
+    So the fit-out puts it back, from the traced design beside the output - and
+    CLEARS the stale carbon sheet, because two sources for one image is how the
+    wrong one wins.
+
+    @returns whether an underlay was installed.
+    """
+    plan = design["floorplan"]
+    if plan.get("underlay", {}).get("url"):
+        return True
+    try:
+        with open(traced_path) as handle:
+            underlay = json.load(handle)["floorplan"].get("underlay")
+    except (OSError, ValueError, KeyError):
+        return False
+    if not underlay or not underlay.get("url"):
+        return False
+    plan["underlay"] = underlay
+    plan["carbonSheet"] = {"url": "", "transparency": 1, "x": 0, "y": 0,
+                           "anchorX": 0, "anchorY": 0, "width": 0.01, "height": 0.01}
+    print(f"  underlay: {underlay['url']} at "
+          f"{underlay['widthCm']:.0f} x {underlay['heightCm']:.0f} cm, from "
+          f"{traced_path}")
+    return True
+
+
 def wall_faces(design):
     """Every wall FACE in the design, named the way the app names it.
 
@@ -662,6 +703,11 @@ def main():
     ap.add_argument("--no-lights", action="store_true",
                     help="skip the ceiling cans over the run")
     ap.add_argument("--list", action="store_true", help="print the walls and stop")
+    ap.add_argument("--underlay", default=None,
+                    help="a traced design to take the carbon sheet from; "
+                         "defaults to design.traced.json beside the output. An "
+                         "exported design carries its sheet in whatever unit was "
+                         "on screen, which is not the unit the file declares")
     ap.add_argument("--schedule", default=None,
                     help="a fit-out schedule: the kitchen written down, in plan "
                          "coordinates. Everything else on this line is ignored "
@@ -700,10 +746,14 @@ def main():
                   f"h {height:6.1f}  thick {wall.get('thickness', 10):5.1f}")
         return 0
 
+    traced = args.underlay or os.path.join(
+        os.path.dirname(args.out) or ".", "design.traced.json")
+
     if args.schedule:
         with open(args.schedule) as handle:
             sched = json.load(handle)
         print(f"  schedule: {sched.get('name', args.schedule)}")
+        carry_underlay(design, traced)
         design["items"] = fit_from_schedule(design, sched)
         return write(design, args.out, walls)
 

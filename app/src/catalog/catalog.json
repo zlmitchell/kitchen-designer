@@ -1973,6 +1973,38 @@
 				"finish": "stainless"
 			},
 			"category": "cabinets"
+		},
+		{
+			"name": "Vent Hood - Cabinet Front",
+			"image": "models/thumbnails_new/appliance-hood.png",
+			"model": "generated:appliance",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "hood",
+				"style": "cabinet-front",
+				"front": "shaker",
+				"ductless": false,
+				"finish": "panel-ready"
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Vent Hood - Cupboard Above",
+			"image": "models/thumbnails_new/appliance-hood.png",
+			"model": "generated:appliance",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "hood",
+				"style": "cabinet-over",
+				"front": "shaker",
+				"ductless": false,
+				"finish": "panel-ready"
+			},
+			"category": "cabinets"
 		}
 	]
 }

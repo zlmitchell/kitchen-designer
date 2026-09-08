@@ -113,6 +113,11 @@ const SIZES = {
 	'hood': {width: 76.2, depth: 50.8, height: 15.24},
 	'hood/island': {width: 91.44, depth: 61.0, height: 15.24},
 	'hood/downdraft': {width: 76.2, depth: 15.24, height: 10.16},
+	// A cabinet hood's canopy is deeper AND taller than a metal one's: it is
+	// millwork rather than a pressed shell, so it is built out of the same stock
+	// as the run and reads as part of it. 10in of canopy under the mantel.
+	'hood/cabinet-front': {width: 76.2, depth: 50.8, height: 25.4},
+	'hood/cabinet-over': {width: 76.2, depth: 50.8, height: 25.4},
 };
 
 /**
@@ -128,7 +133,8 @@ const STYLES = {
 	fridge: ['freestanding', 'built-in', 'undercounter'],
 	dishwasher: ['standard'],
 	microwave: ['standard'],
-	hood: ['under-cabinet', 'wall-chimney', 'island', 'downdraft'],
+	hood: ['under-cabinet', 'wall-chimney', 'island', 'downdraft',
+		'cabinet-front', 'cabinet-over'],
 };
 
 const MOUNTS = ['counter', 'in-cabinet', 'over-range', 'drawer'];
@@ -156,6 +162,31 @@ const DEFAULTS = {
 	mountHeight: 167.64,
 	/** Downdraft: how far the vane rises out of its slot. */
 	riseHeight: 30.48,
+	/**
+	 * Cabinet hood: the depth of the wall cabinets it meets, so it can be flush.
+	 *
+	 * The hood's own `depth` is what captures over a cooktop and is deeper than
+	 * an upper; the MANTEL above the canopy has to be the uppers' depth or the
+	 * run steps at the hood, which is the one thing a cabinet hood exists to
+	 * avoid. Two numbers because they are two different things, and phase 3's run
+	 * is what will eventually set this one rather than the spec.
+	 */
+	upperDepth: 30.48,
+	/**
+	 * Cabinet hood: how much mantel there is above the canopy before a cupboard.
+	 *
+	 * 10in, and the number is forced rather than chosen. A hood hung at 66in
+	 * under a 96in ceiling has 30in above it; the canopy takes 10 and what is
+	 * left is 20, which is two 10in bands and nothing else that works. 12in of
+	 * mantel leaves an 8in cupboard, which is a shelf you cannot reach into, and
+	 * 18in leaves 2in, which is a filler.
+	 *
+	 * So this is the height at which BOTH halves are usable on the commonest
+	 * ceiling in the country, and a taller ceiling spends its extra on the
+	 * cupboard - which is the right way round, because the mantel is decoration
+	 * and the cupboard is storage. Only means anything to `cabinet-over`.
+	 */
+	mantelHeight: 25.4,
 	/**
 	 * How many burners or elements the cooktop has.
 	 *
@@ -230,6 +261,7 @@ const DEFAULTS = {
 
 /**
  * @typedef {Object} ApplianceSpec
+ * @property {number} [upperDepth] @property {number} [mantelHeight]
  * @property {('range'|'fridge'|'dishwasher'|'microwave'|'hood')} [subkind]
  * @property {('stainless'|'black'|'panel-ready')} [finish]
  * @property {('slab'|'shaker'|'raised')} [front]
@@ -705,7 +737,107 @@ function canopy(mat, topFraction, width, depth, y0, y1, lean)
 }
 
 /**
- * A vent hood, in its four shapes.
+ * The filter on the underside of a canopy, with baffles across it.
+ *
+ * From below - the only place a hood is ever seen from close up - this is the
+ * whole object, and it has to hang PROUD of the canopy. Set inside it, which is
+ * where a real filter sits, it was swallowed whole: a canopy is a solid, so the
+ * render from below showed a blank cap while the vertex count showed a filter
+ * that was there.
+ *
+ * Pulled out of `hood` so a cabinet hood gets the same one. That is not a
+ * convenience: a wood hood is a wood BOX round a metal liner, and the liner is
+ * the only part of it that is an appliance at all. Drawing the box without it
+ * would be drawing a cupboard over a cooker.
+ */
+function hoodFilter(group, mats, f)
+{
+	var fw = f.width * 0.38;
+	var fd = f.depth * 0.34;
+	group.add(box(mats.trim, -fw, fw, -1.6, 0.2, -fd, fd));
+	for (var i = 0; i < 4; i++)
+	{
+		var bz = -fd + (2 * fd * (i + 0.5)) / 4;
+		group.add(bar(mats.hardware, 0.5, 'x', -fw + 1, fw - 1, -1.6, bz));
+	}
+}
+
+/** A cupboard shorter than this is a filler panel, not a cupboard. 10in. */
+const MIN_CUPBOARD = 25.4;
+
+/** The gap between two stacked fronts, and between a front and the box. 1/8in. */
+const HOOD_REVEAL = 0.32;
+
+/**
+ * One clad section of a cabinet hood: a box, wearing the run's own door front.
+ *
+ * The front comes from `cabinet.js`'s `frontPanel` - the same call a panel-ready
+ * dishwasher makes, and the reason that function is exported - so a hood in a
+ * shaker kitchen is shaker, in the run's profile, without anybody keeping the
+ * two in step. That IS what "follows the cabinets" means: not a colour that
+ * matches, a front built by the same code.
+ *
+ * The panel is inset by a reveal on every edge, so two sections stacked on each
+ * other read as two fronts with a gap and not as one tall surface. Same claim
+ * `cabinet.js` opens with, and the reason a cupboard over a mantel is visible as
+ * a cupboard at all.
+ */
+function cladSection(group, s, mats, f, y0, y1, z0, z1)
+{
+	if (y1 - y0 < 2)
+	{
+		return;
+	}
+	group.add(box(mats.body, -f.width / 2, f.width / 2, y0, y1, z0, z1));
+	var r = HOOD_REVEAL;
+	frontPanel({front: mats.face}, s.front,
+		-f.width / 2 + r, f.width / 2 - r, y0 + r, y1 - r, z1, s.faceThickness)
+		.forEach(function (mesh) {group.add(mesh);});
+}
+
+/**
+ * A hood built as millwork, flush with the cabinets either side of it.
+ *
+ * The shape is two boxes and the step between them is the whole of it. The
+ * CANOPY keeps the hood's own depth, because that is what captures over a
+ * cooktop and a 12in-deep hood does not. The MANTEL above it drops back to the
+ * wall cabinets' depth, so its face lands in the same plane as theirs and the
+ * run does not step at the hood - which is the one thing this style exists to
+ * avoid, and the reason `upperDepth` is a separate number from `depth`.
+ *
+ * `cabinet-over` stops the mantel short and puts a cupboard on top of it. The
+ * cupboard is what is LEFT once the mantel has taken its 18in, rather than a
+ * height of its own: the ceiling is where it has to end either way, and two
+ * heights that both have to add up to a third is a sum somebody has to keep
+ * solving. Where the remainder is too short to be a cupboard the mantel simply
+ * runs on to the ceiling, which is `cabinet-front` - the honest answer, and the
+ * same fallback `frontPanel` makes for a door too narrow for a centre panel.
+ */
+function cabinetHood(group, s, mats, f)
+{
+	var back = -f.depth / 2;
+	var top = Math.max(f.height + MIN_CUPBOARD, s.ceilingHeight - s.mountHeight);
+	// Clamped into the hood's own depth: an upper deeper than the hood would put
+	// the mantel in front of the canopy and hang it over the cooktop.
+	var mantelFront = back + Math.max(10, Math.min(s.upperDepth, f.depth));
+
+	// The canopy, at the hood's own depth.
+	cladSection(group, s, mats, f, 0, f.height, back, f.depth / 2);
+
+	var mantelTop = top;
+	if (f.style === 'cabinet-over' && (top - f.height - s.mantelHeight) >= MIN_CUPBOARD)
+	{
+		mantelTop = f.height + s.mantelHeight;
+	}
+	cladSection(group, s, mats, f, f.height, mantelTop, back, mantelFront);
+	// The cupboard, when there is room for one worth having.
+	cladSection(group, s, mats, f, mantelTop, top, back, mantelFront);
+
+	hoodFilter(group, mats, f);
+}
+
+/**
+ * A vent hood, in its six shapes.
  *
  * The chimney is the cabinet's `to-ceiling` question again: it runs from the
  * canopy to the ceiling, so it has to be told where the ceiling is and how high
@@ -715,6 +847,11 @@ function canopy(mat, topFraction, width, depth, y0, y1, lean)
  */
 function hood(group, s, mats, f)
 {
+	if (f.style === 'cabinet-front' || f.style === 'cabinet-over')
+	{
+		cabinetHood(group, s, mats, f);
+		return;
+	}
 	if (f.style === 'downdraft')
 	{
 		// Not a canopy at all: a slot behind the cooktop and a vane that rises out
@@ -745,20 +882,7 @@ function hood(group, s, mats, f)
 			leaning ? -(0.5 - flue / 2) : 0));
 	}
 
-	// The filter: a dark rectangle on the underside with baffles across it. From
-	// below - the only place a hood is ever seen from close up - this is the whole
-	// object, and it has to hang PROUD of the canopy. Set inside it, which is
-	// where a real filter sits, it was swallowed whole: a canopy is a solid, so
-	// the render from below showed a blank cap and the vertex count showed a
-	// filter that was there.
-	var fw = f.width * 0.38;
-	var fd = f.depth * 0.34;
-	group.add(box(mats.trim, -fw, fw, -1.6, 0.2, -fd, fd));
-	for (var i = 0; i < 4; i++)
-	{
-		var bz = -fd + (2 * fd * (i + 0.5)) / 4;
-		group.add(bar(mats.hardware, 0.5, 'x', -fw + 1, fw - 1, -1.6, bz));
-	}
+	hoodFilter(group, mats, f);
 
 	if (f.style === 'under-cabinet')
 	{
@@ -953,6 +1077,8 @@ export const APPLIANCE_SCHEMA = {
 			{value: 'undercounter', label: 'Undercounter'},
 		]},
 		{key: 'style', label: 'Style', type: 'choice', when: {subkind: 'hood'}, options: [
+			{value: 'cabinet-front', label: 'Cabinet front'},
+			{value: 'cabinet-over', label: 'Cabinet front, cupboard above'},
 			{value: 'under-cabinet', label: 'Under cabinet'},
 			{value: 'wall-chimney', label: 'Chimney'},
 			{value: 'island', label: 'Island'},
@@ -1007,6 +1133,10 @@ export const APPLIANCE_SCHEMA = {
 				{value: 'shaker', label: 'Shaker'},
 				{value: 'raised', label: 'Raised'},
 			]},
+		{key: 'upperDepth', label: 'Upper depth', type: 'length', min: 20, max: 70, step: 0.5,
+			when: {style: ['cabinet-front', 'cabinet-over']}},
+		{key: 'mantelHeight', label: 'Mantel height', type: 'length', min: 20, max: 120,
+			step: 1, when: {style: 'cabinet-over'}},
 		{key: 'ductless', label: 'Venting', type: 'choice', when: {subkind: 'hood'}, options: [
 			{value: false, label: 'Ducted'},
 			{value: true, label: 'Recirculating'},
@@ -1035,6 +1165,16 @@ export const APPLIANCE_SCHEMA = {
 export function buildAppliance(spec)
 {
 	var s = Object.assign({}, DEFAULTS, spec || {});
+	// A cabinet hood IS panel-ready: its face is a cabinet front, built by the
+	// run's own `frontPanel`, and there is no such thing as a stainless one with
+	// a shaker profile on it. Settled here rather than left to the spec so the
+	// finish and the style cannot disagree - and so the panel-style control,
+	// which the schema shows for a panel-ready appliance, appears for these
+	// without a second copy of the field under a second `when`.
+	if (s.subkind === 'hood' && (s.style === 'cabinet-front' || s.style === 'cabinet-over'))
+	{
+		s.finish = 'panel-ready';
+	}
 	var finish = FINISHES[s.finish] || FINISHES.stainless;
 	var mats = materialsForSlots(s.material, Object.assign({}, SLOTS, finish));
 	var f = shell(s);

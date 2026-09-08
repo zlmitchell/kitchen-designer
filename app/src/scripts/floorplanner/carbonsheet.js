@@ -264,9 +264,25 @@ export class CarbonSheet extends EventDispatcher
 		return this._anchorY;
 	}
 	
-	set width(val)
+	/**
+	 * The sheet's size in CENTIMETRES, which is what it is actually held in.
+	 *
+	 * `width` and `height` are in whatever unit is on SCREEN - they go through
+	 * `cmFromMeasureRaw` - which is right for a control somebody types into and
+	 * wrong for anything written to a file. A design declares `units: "cm"` and
+	 * then saved this block in the display unit, so a plan exported while the
+	 * ruler said feet came back 3.28 times too big when the app opened in metres:
+	 * a 1591.7cm sheet written as 52.22 and read back as 52.22 METRES. It drew
+	 * far enough outside the walls to look like a different drawing.
+	 *
+	 * So the file uses these and the panel uses those, and neither has to know
+	 * about the other. `saveFloorplan` writes both; `loadFloorplan` prefers these
+	 * and falls back, because a file written before they existed means what it
+	 * meant and cannot be reinterpreted after the fact.
+	 */
+	set widthCm(cm)
 	{
-		this._width = this.dimensioning.cmFromMeasureRaw(val);
+		this._width = cm;
 		this._widthPixels = this._width * pixelsPerCm;
 		
 		if(this._maintainProportion)
@@ -279,14 +295,14 @@ export class CarbonSheet extends EventDispatcher
 		this._updated();
 	}
 	
-	get width()
+	get widthCm()
 	{
-		return this.dimensioning.cmToMeasureRaw(this._width);
+		return this._width;
 	}
 	
-	set height(val)
+	set heightCm(cm)
 	{
-		this._height = this.dimensioning.cmFromMeasureRaw(val);
+		this._height = cm;
 		this._heightPixels = this._height * pixelsPerCm;
 		
 		if(this._maintainProportion)
@@ -297,6 +313,26 @@ export class CarbonSheet extends EventDispatcher
 		
 		this._calibrate();
 		this._updated();
+	}
+	
+	get heightCm()
+	{
+		return this._height;
+	}
+	
+	set width(val)
+	{
+		this.widthCm = this.dimensioning.cmFromMeasureRaw(val);
+	}
+	
+	get width()
+	{
+		return this.dimensioning.cmToMeasureRaw(this._width);
+	}
+	
+	set height(val)
+	{
+		this.heightCm = this.dimensioning.cmFromMeasureRaw(val);
 	}
 	
 	get height()
