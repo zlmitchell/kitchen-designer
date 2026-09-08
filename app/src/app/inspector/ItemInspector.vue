@@ -45,6 +45,15 @@ const canRotate = ref(false);
  * and the thing you actually want is the OTHER face, not a different angle.
  */
 const canChangeWall = ref(false);
+/**
+ * Whether this item may be on no wall at all, and whether it currently is.
+ *
+ * An island is a run with nothing behind it, and until free placement an item of
+ * this class would attach itself to some wall across the room and take its
+ * facing from that. `canBeFree` is false for a window or a door, which are holes
+ * in a wall rather than things near one.
+ */
+const wallBinding = reactive({offered: false, free: false});
 /** A generated item is sized by its spec, so scaling it is not on offer here. */
 const generated = ref(false);
 const flags = reactive({proportional: false, fixed: false});
@@ -69,9 +78,14 @@ function readBack()
 	// (`WallItem.changeWallEdge` overwrites rotation.y), so offering the control
 	// would be offering a number the next bind discards.
 	canRotate.value = Boolean(props.item.allowRotate) && !props.item.fixed;
+	// `wallEdgeChoices` rather than `nearbyWallEdges`, because "no wall" is one of
+	// the answers now: a cabinet with a single wall in reach has one edge and two
+	// choices, and the button that cycles them is worth showing.
 	canChangeWall.value = Boolean(props.item.bindToNextWallEdge)
 		&& !props.item.fixed
-		&& props.item.nearbyWallEdges().length > 1;
+		&& props.item.wallEdgeChoices().length > 1;
+	wallBinding.offered = Boolean(props.item.canBeFree) && !props.item.fixed;
+	wallBinding.free = Boolean(props.item.freeStanding);
 	// Width/height/depth below call `Item.resize`, which SCALES the mesh. For a
 	// generated item that is the wrong operation and a trap: it stretches the
 	// stiles with the box, and it leaves a scale that then multiplies against the
@@ -167,6 +181,28 @@ function nextWall()
 	}
 }
 
+/**
+ * Take this item off the walls, or put it back on the nearest one.
+ *
+ * A checkbox rather than another stop on the "next wall" cycle for the UI, even
+ * though the model offers it both ways: cycling is fine for choosing BETWEEN
+ * walls, which are all alike, and bad for a state change that also turns the
+ * rotation control on and off. Read everything back afterwards, because it does
+ * exactly that.
+ */
+function setFreeStanding(next)
+{
+	if (!props.item.setFreeStanding(next))
+	{
+		// It refused - there is no wall to go back to. Leave the checkbox showing
+		// what the item actually is rather than what was asked for.
+		readBack();
+		return;
+	}
+	readBack();
+	emit('changed');
+}
+
 function setProportional(next)
 {
 	flags.proportional = next;
@@ -215,7 +251,11 @@ onBeforeUnmount(() => {materials.value = [];});
 				@update:model-value="resize('depth', $event)" />
 		</template>
 
-		<div v-if="canChangeWall" class="field">
+		<CheckField
+			v-if="wallBinding.offered" label="Free-standing" :model-value="wallBinding.free"
+			@update:model-value="setFreeStanding" />
+
+		<div v-if="canChangeWall && !wallBinding.free" class="field">
 			<span class="field-label">Wall</span>
 			<button
 				type="button" class="btn btn-outline w-full"

@@ -6,6 +6,19 @@ import {Item} from './item.js';
 
 
 /** @typedef {import('../model/half_edge.js').HalfEdge} HalfEdge */
+
+/**
+ * What `metadata.wallEdge` says when an item is on NO wall.
+ *
+ * The same field as a half edge's name, because it answers the same question -
+ * "which wall face is this item on" - and one of its answers is "none". A
+ * `HalfEdge.id` is `wall:<corners>:front|back` and always has colons in it, so
+ * this cannot collide with one, and a reader that does not know about free
+ * placement simply fails to find a matching edge and falls back to geometry,
+ * which is what every reader of this field already does when a wall is gone.
+ */
+export const FREE_STANDING = 'free';
+
 /**
  * A Wall Item is an entity to be placed related to a wall.
  */
@@ -100,7 +113,7 @@ export class WallItem extends Item
 	namedWallEdge()
 	{
 		var named = this.metadata ? this.metadata.wallEdge : null;
-		if (!named)
+		if (!named || named === FREE_STANDING)
 		{
 			return null;
 		}
@@ -114,6 +127,49 @@ export class WallItem extends Item
 			}
 		});
 		return found;
+	}
+
+	/**
+	 * Whether this item is on no wall at all, and keeps what it was given.
+	 *
+	 * An island is the case. A peninsula or an island is a run with a counter,
+	 * doors on more than one side and nothing behind it - and until now an item of
+	 * this class would find a wall SOMEWHERE in the room and attach itself to it,
+	 * however far away, because `closestWallEdge` has no way to answer "none of
+	 * them". A 24in base unit in the middle of the floor came out square to the
+	 * nearest wall three metres away and could not be turned, because a bound item
+	 * takes its facing from that wall.
+	 *
+	 * Free is therefore the absence of every binding this class exists to impose:
+	 * no rotation from a normal, no `boundMove` onto a plane, no membership of a
+	 * wall's item list. What is left is an item that keeps the position and
+	 * rotation it was given, which is what a free-standing thing is.
+	 *
+	 * @returns {boolean}
+	 */
+	get freeStanding()
+	{
+		return Boolean(this.metadata) && this.metadata.wallEdge === FREE_STANDING;
+	}
+
+	/**
+	 * Whether "no wall" is even a thing this item could be.
+	 *
+	 * `addToWall` is the discriminator and it is exactly the right one: it is true
+	 * for `InWallItem` and its subclasses, which are the items that cut a HOLE in
+	 * the wall they are on. A window or a door is not a thing standing near a
+	 * wall, it is an absence in one, and an absence with no wall around it is
+	 * nothing at all - the item would keep its lining and its sashes and the wall
+	 * would close up behind it.
+	 *
+	 * So types 2 and 9 - the cabinet, the appliance, the barn door on the face -
+	 * may go free, and types 3 and 7 may not.
+	 *
+	 * @returns {boolean}
+	 */
+	get canBeFree()
+	{
+		return !this.addToWall;
 	}
 
 	/** Get the closet wall edge.
@@ -155,10 +211,18 @@ export class WallItem extends Item
 		super.removed();
 	}
 
-	/** */
+	/**
+	 * Ask the wall to rebuild its faces around this item.
+	 *
+	 * Guarded on the edge as well as on `addToWall`, because a free-standing item
+	 * has no wall and every caller of this reaches it by a route that does not
+	 * know that: `resized()` runs on any spec edit, and `removed()` on any delete.
+	 * `addToWall` alone is not the guard it looks like - it is a property of the
+	 * item's TYPE, and it stays true across going free.
+	 */
 	redrawWall()
 	{
-		if (this.addToWall)
+		if (this.addToWall && this.currentWallEdge)
 		{
 			this.currentWallEdge.wall.fireRedraw();
 		}
@@ -252,16 +316,22 @@ export class WallItem extends Item
 	 */
 	bindToNextWallEdge()
 	{
-		var candidates = this.nearbyWallEdges();
+		var candidates = this.wallEdgeChoices();
 		if (candidates.length < 2)
 		{
 			return false;
 		}
-		var index = candidates.indexOf(this.currentWallEdge);
+		var current = this.freeStanding ? null : this.currentWallEdge;
+		var index = candidates.indexOf(current);
 		var next = candidates[(index + 1) % candidates.length];
-		if (!next || next === this.currentWallEdge)
+		if (next === current)
 		{
 			return false;
+		}
+		if (next === null)
+		{
+			this.setFreeStanding(true);
+			return true;
 		}
 		this.changeWallEdge(next);
 		// The item is on a different plane now, so its position has to come back
@@ -271,8 +341,113 @@ export class WallItem extends Item
 		return true;
 	}
 
+	/**
+	 * Everywhere this item could be, in the order the control walks them.
+	 *
+	 * The nearby faces, and then - for anything that is not a hole in a wall - a
+	 * `null` meaning no wall at all. One list rather than a separate free control
+	 * because it is one question with n+1 answers, and because it makes the cycle
+	 * complete: press the button enough times and you come back to where you
+	 * started, which is what makes a control with no labels safe to press.
+	 *
+	 * `null` last, so the first press from a bound item still reaches the return
+	 * wall in a corner - which is the case the control was built for and by far
+	 * the common one.
+	 *
+	 * @param {number} [reach] Passed through to {@link WallItem#nearbyWallEdges}.
+	 * @returns {Array<?HalfEdge>}
+	 */
+	wallEdgeChoices(reach)
+	{
+		/** @type {Array<?HalfEdge>} */
+		var choices = this.nearbyWallEdges(reach);
+		if (this.canBeFree)
+		{
+			choices.push(null);
+		}
+		return choices;
+	}
+
+	/**
+	 * Take this item off every wall, or put it back on the nearest one.
+	 *
+	 * Going free is mostly subtraction, and one addition that is easy to miss:
+	 * `visible`. A bound item does not own that flag - `Edge` drives it through
+	 * `updateEdgeVisibility` so the wall you are looking through fades - and it
+	 * does so by walking the WALL's item lists. An item that leaves those lists
+	 * while the near face happens to be hidden therefore keeps `visible === false`
+	 * with nothing left in the scene that would ever set it back, and freeing a
+	 * cabinet makes it disappear. Seen exactly once, from inside the room, and it
+	 * looks like the item was deleted rather than moved.
+	 *
+	 * Rotation is not restored on the way back: `changeWallEdge` overwrites
+	 * `rotation.y` from the face's normal, which is the whole reason a bound item
+	 * turns `allowRotate` off. Whatever angle the island was turned to is gone the
+	 * moment it goes back on a wall, and that is correct - it is against a wall
+	 * now.
+	 *
+	 * @param {boolean} free
+	 * @returns {boolean} Whether the item ended up as asked.
+	 */
+	setFreeStanding(free)
+	{
+		if (!free)
+		{
+			var edge = this.namedWallEdge() || this.closestWallEdge();
+			if (!edge)
+			{
+				return false;
+			}
+			this.changeWallEdge(edge);
+			this.boundMove(this.position);
+			this.redrawWall();
+			return true;
+		}
+		if (!this.canBeFree)
+		{
+			return false;
+		}
+		// Before `releaseWall`, which redraws the wall this item is leaving - and
+		// that rebuild reads the item list this call is about to take it out of.
+		this.releaseWall();
+		this.metadata.wallEdge = FREE_STANDING;
+		// `changeWallEdge` is the only thing that writes `rotation.y` from a wall
+		// normal, and nothing is going to call it again until this item is bound
+		// back. So the angle is the item's own now, and there is a control for it.
+		this.allowRotate = true;
+		this.visible = true;
+		this.frontVisible = true;
+		this.backVisible = true;
+		if (this.boundToFloor)
+		{
+			// `boundMove` did this on every drag and it is gone with the binding, so
+			// the one part of it that is not about a wall is done here instead: an
+			// island still stands on the floor.
+			var box = this.bounds();
+			this.position.y = 0.5 * (box.max.y - box.min.y) * this.scale.y + 0.01;
+		}
+		if (this.bhelper)
+		{
+			this.bhelper.update();
+		}
+		return true;
+	}
+
 	placeInRoom()
 	{
+		// "On no wall" is a thing the file can say, and it is said in the same
+		// field as a wall's name - so it is answered here, before anything looks
+		// for an edge. Ahead of `namedWallEdge()` rather than folded into it: that
+		// method answers "which edge", and the whole point of free is that there
+		// is not one, so a null from it would be indistinguishable from a design
+		// naming a wall that has since been deleted - which falls back to geometry
+		// and would bind the island to whatever wall it happened to be nearest.
+		if (this.freeStanding)
+		{
+			this.releaseWall();
+			this.updateSize();
+			return;
+		}
 		// What the file says, then what the geometry says. One order, everywhere:
 		// a named face that still exists wins, and everything else is unchanged.
 		var closestWallEdge = this.namedWallEdge() || this.closestWallEdge();
@@ -305,6 +480,19 @@ export class WallItem extends Item
 	/** */
 	moveToPosition(vec3, intersection)
 	{
+		// A free item is dragged like furniture: where the mouse says, and it stays
+		// there. Not merely a skipped `boundMove` - the re-bind above it has to go
+		// too, or dragging an island across the floor would silently re-attach it
+		// to whatever wall the drag passed near and take its facing from that.
+		if (this.freeStanding)
+		{
+			super.moveToPosition(vec3);
+			if (this.onPlaced)
+			{
+				this.onPlaced(this);
+			}
+			return;
+		}
 		var intersectionEdge = (intersection) ? (intersection.object) ? intersection.object.edge: intersection : this.closestWallEdge();
 		this.changeWallEdge(intersectionEdge);
 		this.boundMove(vec3);
@@ -390,6 +578,12 @@ export class WallItem extends Item
 		// is in the file rather than recomputed from a distance that a wall edit
 		// three rooms away can change.
 		this.metadata.wallEdge = wallEdge.id;
+		// And undo `setFreeStanding`, which is the other half of one rule: an item
+		// takes its facing from the wall it is on, so it does not also get a
+		// rotation control. Set here rather than only in `setFreeStanding(false)`
+		// because that is not the only way back onto a wall - a free item whose
+		// design is reloaded into a floorplan is re-bound straight through here.
+		this.allowRotate = false;
 		if (this.addToWall)
 		{
 			wallEdge.wall.items.push(this);
@@ -416,6 +610,16 @@ export class WallItem extends Item
 	 * for passing intersection to clickPressed and clickDragged */
 	customIntersectionPlanes()
 	{
+		// Nothing, when free, which sends the controller to the ground plane -
+		// `Controller.itemIntersection` falls back to `this.plane` on an empty
+		// list. That is the right surface for an island: it is dragged about the
+		// FLOOR, not through the air, so `Item.freePosition` - which means "any
+		// point in 3D" and is what a picture on a wall would want - is the wrong
+		// mechanism here even though it shares the word.
+		if (this.freeStanding)
+		{
+			return [];
+		}
 		return this.model.floorplan.wallEdgePlanes();
 	}
 
