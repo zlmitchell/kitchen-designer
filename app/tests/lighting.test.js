@@ -845,21 +845,80 @@ describe('a light fitting is an item that carries its own light', () =>
 		expect(fixtures.groups).toHaveLength(0);
 	});
 
+	/** The fitting's own box, which is the frame its fixtures are positioned in. */
+	function boxOf(item)
+	{
+		item.geometry.computeBoundingBox();
+		return item.geometry.boundingBox;
+	}
+
 	it('puts a pendant lamp in its shade, not level with its flex', () =>
 	{
-		// `Item` recentres geometry on its bounding box, so a builder that puts the
-		// ceiling plane at y = 0 has its origin moved to the middle of what it
-		// built - 30cm up a 60cm cord. The offset is measured off the item's own
-		// half size for exactly that reason.
+		// The intent this test always had, measured against the right thing.
+		//
+		// It used to compare the offset with the item's HALF SIZE, which is a size
+		// and not a position - and `RoofItem` re-centres a second time on
+		// `(max - min)` rather than `(max + min)`, deliberately, so its origin
+		// lands on the TOP of the geometry and the fitting hangs from the ceiling
+		// instead of being buried half in the slab. So "half the height down from
+		// the origin" was the MIDDLE of the fitting, and the lamp sat 30cm up a
+		// 60cm flex with the shade nowhere near it. The old assertion passed,
+		// because it was written in the same wrong frame.
 		const model = planWithCan({mount: 'pendant', drop: 60, diameter: 22});
 		const item = model.scene.getItems()[0];
-		item.geometry.computeBoundingBox();
-		const half = item.geometry.boundingBox.getSize(new Vector3()).y / 2;
+		const box = boxOf(item);
 		const at = fixturesOn(item)[0].position;
+
 		expect(at.y).toBeLessThan(0);
-		// Down near the shade, not out of the bottom of the fitting.
-		expect(Math.abs(at.y)).toBeLessThan(half + 1);
-		expect(Math.abs(at.y)).toBeGreaterThan(half * 0.5);
+		// In the shade, which is the bottom of the fitting and not the middle.
+		expect(at.y).toBeLessThan(box.min.y + 2);
+		expect(at.y).toBeGreaterThan(box.min.y - 2);
+	});
+
+	it('puts a flush fitting lamp at its aperture, clear of its own body', () =>
+	{
+		// The reported bug: an all-round ceiling fitting lit nothing. Its lamp was
+		// 2.2cm down inside a 4.4cm drum, so the fitting emitted into the inside of
+		// itself. A spot aimed down mostly escaped and looked fine, which is why
+		// this survived until somebody asked for `diffuse`.
+		for (const mount of ['recessed', 'surface'])
+		{
+			const item = planWithCan({mount, throw: 'diffuse'}).scene.getItems()[0];
+			const box = boxOf(item);
+			const at = fixturesOn(item)[0].position;
+
+			expect(at.y, `${mount} lamp is inside its own body`).toBeLessThan(box.min.y);
+			// And only just: a lamp hanging a hand's width under a recessed can is
+			// a pendant, not a can.
+			expect(at.y).toBeGreaterThan(box.min.y - 2);
+		}
+	});
+
+	it('does not let a fitting shadow its own lamp', () =>
+	{
+		// Even at the aperture, a fitting that casts would occlude a light sitting
+		// against it. Same argument `InWallItem` makes about a window sealing its
+		// own opening, and the same fix - what is lost is the shadow of a light
+		// fitting, which nobody has ever looked for in a kitchen.
+		const item = planWithCan({mount: 'surface', throw: 'diffuse'}).scene.getItems()[0];
+		expect(item.castShadow).toBe(false);
+	});
+
+	it('still casts for everything that is not a light', () =>
+	{
+		// The opt-out is per kind, not a relaxed default: a cabinet that stopped
+		// shadowing would take the daylight work with it.
+		const model = new Model('/textures/');
+		model.loadSerialized(JSON.stringify({
+			floorplan: PLAN,
+			items: [{
+				id: 'c1', item_name: 'Base Cabinet', item_type: 9, format: 'generated',
+				model_url: 'generated:cabinet', xpos: 200, ypos: 44, zpos: 150, rotation: 0,
+				scale_x: 1, scale_y: 1, scale_z: 1, fixed: false,
+				spec: {kind: 'cabinet', variant: 'base', width: 60.96},
+			}],
+		}));
+		expect(model.scene.getItems()[0].castShadow).toBe(true);
 	});
 
 	it('draws a different fitting for each mount', () =>

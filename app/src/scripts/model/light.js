@@ -536,14 +536,57 @@ export function fixturesOn(item)
  */
 function fittingOffset(spec, item)
 {
-	var half = (item && item.halfSize && typeof item.halfSize.y === 'number')
-		? item.halfSize.y : 1;
 	var mount = spec.mount || 'recessed';
-	// A pendant's lamp is up inside the shade, not hanging below its rim: the
-	// shade is what a pendant is for, and a source below it lights nothing but
-	// the floor while leaving the fitting dark.
-	var factor = (mount === 'pendant' || mount === 'rod') ? 0.75 : 1;
-	return {x: 0, y: -half * factor, z: 0};
+	var box = boundsOf(item);
+	if (!box)
+	{
+		// No geometry to measure, which is a fitting that has not finished loading.
+		// Its own origin is as good an answer as there is, and one frame later the
+		// rebuild asks again.
+		return {x: 0, y: 0, z: 0};
+	}
+
+	// The APERTURE: the lowest point of the fitting, which is where light leaves
+	// every one of these. A hair outside it for a flush mount, so nothing of the
+	// fitting is between the lamp and the room, and a hair inside for a shade, so
+	// the pendant is a lit pendant rather than a bulb hanging under one.
+	var inside = (mount === 'pendant' || mount === 'rod');
+	return {x: 0, y: box.min.y + (inside ? APERTURE_CLEARANCE : -APERTURE_CLEARANCE), z: 0};
+}
+
+/** Half a centimetre. Enough to be clear of a surface, too little to see. */
+const APERTURE_CLEARANCE = 0.5;
+
+/**
+ * An item's own bounding box, in the frame its fixtures are positioned in.
+ *
+ * Measured rather than derived from `halfSize`, and that distinction is the
+ * whole of the bug this replaced. `halfSize` is a SIZE, so `-halfSize.y` is the
+ * bottom of the fitting only if the origin is its centre -- and for a `RoofItem`
+ * it is not. That class re-centres a second time on `(max - min)` rather than
+ * `(max + min)`, deliberately, so the origin lands on the TOP of the geometry
+ * and `moveToPosition(ceilingPoint)` hangs the fitting from the ceiling instead
+ * of burying half of it in the slab.
+ *
+ * So `-halfSize.y` was the MIDDLE of every fitting, and every lamp in the
+ * application was inside its own body. Measured: a surface fitting's lamp sat
+ * 2.2cm down inside a 4.4cm drum, and a pendant's sat 30cm up its own flex with
+ * the shade nowhere near it. A spot aimed down mostly escaped and looked fine,
+ * which is why it survived; an all-round fitting emitted into the inside of
+ * itself and lit nothing at all.
+ */
+function boundsOf(item)
+{
+	var geometry = item && item.geometry;
+	if (!geometry || typeof geometry.computeBoundingBox !== 'function')
+	{
+		return null;
+	}
+	if (!geometry.boundingBox)
+	{
+		geometry.computeBoundingBox();
+	}
+	return geometry.boundingBox || null;
 }
 
 /**

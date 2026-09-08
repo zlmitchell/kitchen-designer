@@ -330,7 +330,20 @@ export class Item extends Mesh
 
 		this.resizable = metadata.resizable;
 
-		this.castShadow = true;
+		/**
+		 * Cast a shadow -- unless this thing is a light.
+		 *
+		 * A fitting is a few centimetres of trim whose entire purpose is to emit,
+		 * and its emitter sits at its own aperture. With `castShadow` on it
+		 * occludes its own lamp: a drum ceiling light put a point source inside a
+		 * closed drum and lit nothing, which reads as "the light does not work".
+		 *
+		 * Same argument `InWallItem` makes one file over -- a window that shadows
+		 * its own opening is, to every light in the scene, bricked-up wall -- and
+		 * the same shape of fix. What is lost is the shadow of a light fitting,
+		 * which is not a thing anybody has ever looked for in a kitchen.
+		 */
+		this.castShadow = !(metadata && metadata.spec && metadata.spec.kind === 'fixture');
 		this.receiveShadow = false;
 
 		this.originalmaterial = material;
@@ -1345,6 +1358,12 @@ export class Item extends Mesh
 		// the item rather than in the document's top-level `lights` because its
 		// position is in THIS item's frame: moving the object moves its light, and
 		// nothing has to keep two positions in step. See `model/light.js`.
+		// Which wall face a wall-bound item is on. Sparse like `spec`: absent from
+		// every item that is not on a wall, so nothing else changes shape.
+		if (this.metadata.wallEdge)
+		{
+			data.wallEdge = this.metadata.wallEdge;
+		}
 		if(this.metadata.fixtures && this.metadata.fixtures.length)
 		{
 			data.fixtures = this.metadata.fixtures;
