@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+	<title>Kitchen Designer</title>
+	<rect x="0" y="0" width="32.00" height="32.00" rx="7" fill="#d9601a"/>
+	<rect x="6" y="4.4" width="20.00" height="7.20" rx="1.2" fill="#ffffff"/>
+	<rect x="4" y="14.6" width="24.00" height="2.80" rx="1" fill="#ffffff"/>
+	<rect x="6" y="18.8" width="9.40" height="8.40" rx="1.2" fill="#ffffff"/>
+	<rect x="16.6" y="18.8" width="9.40" height="8.40" rx="1.2" fill="#ffffff"/>
+</svg>

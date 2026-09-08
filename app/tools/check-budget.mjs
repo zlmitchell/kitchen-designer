@@ -287,6 +287,7 @@ function largestCatalogItem()
 export function textureVram(root = 'public')
 {
 	const PIXEL = new Set(['.png', '.jpg', '.jpeg']);
+	const ICONS = new Set(['favicon-32.png', 'apple-touch-icon.png']);
 	let texels = 0;
 	let compressedTexels = 0;
 
@@ -303,6 +304,12 @@ export function textureVram(root = 'public')
 			// this wrong because the manifest's own `kind` was wrong about 148
 			// files; both are fixed, and this is the half that changes the number.
 			if (/(^|\/)thumbnails(_new)?$/.test(path)) { continue; }
+			// The page's own icons, for the same reason one line up and one step
+			// further: the browser fetches these from `index.html` before the
+			// application exists, draws them in a tab strip, and never hands them
+			// to WebGL at all. A 180px apple-touch-icon is not 130 KB of GPU
+			// memory; it is not GPU memory.
+			if (ICONS.has(entry.name)) { continue; }
 			if (entry.isDirectory()) { visit(path); continue; }
 			const ext = extname(entry.name).toLowerCase();
 			if (!PIXEL.has(ext) && ext !== '.ktx2') { continue; }

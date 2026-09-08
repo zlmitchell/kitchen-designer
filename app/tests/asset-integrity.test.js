@@ -391,10 +391,17 @@ describe('the asset manifest describes the tree it ships with (RM-003 A5)', () =
 
 	it('and has an entry for every file', () =>
 	{
-		// The manifest is not part of the tree it describes.
+		// The manifest is not part of the tree it describes, and neither are the
+		// page's icons: everything the manifest covers is fetched at runtime
+		// through `AssetResolver`, and a favicon is fetched by the BROWSER from a
+		// `<link>` in index.html before that code exists. An entry for one would
+		// be an entry nothing can look up. Same list as `PAGE_ICONS` in
+		// tools/make-asset-manifest.mjs, which is what leaves them out.
+		const NOT_ASSETS = new Set(['asset-manifest.json',
+			'favicon.svg', 'favicon-32.png', 'apple-touch-icon.png']);
 		const onDisk = walk(PUBLIC)
 			.map((path) => path.slice(PUBLIC.length + 1).split(sep).join('/'))
-			.filter((name) => name !== 'asset-manifest.json');
+			.filter((name) => !NOT_ASSETS.has(name));
 
 		const undeclared = onDisk.filter((name) => !MANIFEST_JSON.assets[name]);
 		expect(undeclared, `run \`npm run manifest\` - these files are not declared:\n  ${undeclared.join('\n  ')}`)
@@ -834,5 +841,60 @@ describe('every compressed texture has been rendered and measured (RM-006)', () 
 		// quietly gone away.
 		const origins = new Set(oracle.rows.map((row) => row.from));
 		expect([...origins].sort()).toEqual(['git history', 'the tree']);
+	});
+});
+
+describe('the page itself', () =>
+{
+	const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+	const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+
+	/** Every `src`/`href` the page states, with its attribute. */
+	const urls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((match) => match[1]);
+
+	/**
+	 * The URLs Vite rewrites at build time, and therefore the only ones allowed
+	 * to begin with a slash.
+	 *
+	 * The rest of this application composes its asset URLs at RUNTIME as bare
+	 * relative strings -- `models/x.glb`, `rooms/textures/wallmap.png` -- which is
+	 * what makes the GitHub Pages deploy work: served from /kitchen-designer/,
+	 * they resolve against the page. A leading slash on one of those sends it to
+	 * the domain root instead, and the failure is a 404 in production and nowhere
+	 * else. index.html says so at length; this is that comment, enforced.
+	 */
+	const REWRITTEN = [
+		'/src/app/main.js',
+		'/favicon.svg',
+		'/favicon-32.png',
+		'/apple-touch-icon.png',
+	];
+
+	it('states its icons, so a tab is not a blank page', () =>
+	{
+		// Three files, one picture, all drawn by tools/make-favicon.mjs. The SVG
+		// covers anything current, the 32px PNG the browsers that refuse one, and
+		// the 180px one an iOS home screen.
+		for (const icon of ['/favicon.svg', '/favicon-32.png', '/apple-touch-icon.png'])
+		{
+			expect(urls, `index.html does not reference ${icon}`).toContain(icon);
+			expect(existsSync(join(ROOT, 'public', basename(icon))),
+				`public/${basename(icon)} is missing - run npm run favicon`).toBe(true);
+		}
+	});
+
+	it('keeps every other URL relative, which is what survives a deploy path', () =>
+	{
+		const absolute = urls.filter((url) => url.startsWith('/'));
+		expect(absolute.sort()).toEqual(REWRITTEN.slice().sort());
+	});
+
+	it('is named after this application and not the one it was forked from', () =>
+	{
+		// It read "Architect3D - Floorplan" for the whole migration, so every tab
+		// and every bookmark was labelled with the upstream project.
+		const title = /<title>([^<]*)<\/title>/.exec(html);
+		expect(title).toBeTruthy();
+		expect(title[1]).toContain('Kitchen');
 	});
 });

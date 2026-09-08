@@ -205,6 +205,15 @@ const RETIRED = {
 	'rooms/textures/Ground_4K.jpg': 'rooms/textures/Ground_4K.ktx2',
 };
 
+/**
+ * Files in `public/` that belong to the PAGE rather than to the application.
+ *
+ * See the skip in `build()`. Written as a set rather than folded into
+ * `EXCLUDED` because that one is about assets deliberately not shipped, and
+ * this is about files that were never assets.
+ */
+const PAGE_ICONS = new Set(['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png']);
+
 function build()
 {
 	/** @type {Record<string, {bytes: number, hash: string, kind: string, codec?: string, url?: string}>} */
@@ -214,6 +223,16 @@ function build()
 	{
 		const name = relative(PUBLIC, path).split(sep).join('/');
 		if (EXCLUDED.has(name))
+		{
+			continue;
+		}
+		// The page's icons are not application assets. Everything else in here is
+		// fetched at runtime through `AssetResolver`, which is what the manifest
+		// exists to describe - integrity, codec, and whether a build ships the
+		// file at all. A favicon is fetched by the BROWSER from a `<link>` in
+		// index.html before any of that code runs, so a manifest entry for one
+		// would be an entry nothing can ever look up.
+		if (PAGE_ICONS.has(name))
 		{
 			continue;
 		}

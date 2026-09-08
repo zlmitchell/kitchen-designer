@@ -45,6 +45,7 @@
 		"test:browser:watch": "vitest --config vitest.browser.config.mjs",
 		"fixtures": "node tools/make-fixtures.mjs",
 		"parity": "node tools/capture-parity.mjs",
+		"favicon": "node tools/make-favicon.mjs",
 		"manifest": "node tools/make-asset-manifest.mjs",
 		"manifest:check": "node tools/make-asset-manifest.mjs --check",
 		"encode": "node tools/encode-assets.mjs",
