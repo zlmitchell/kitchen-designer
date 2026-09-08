@@ -202,6 +202,29 @@ An array, one entry per placed object:
 | `fixed` | Locked in place. |
 | `spec` | Parameters for a generated item. Absent for every item loaded from a file. |
 | `material_colors` | Sparse: a `#rrggbb` for each material slot somebody recoloured, `null` for the rest. Absent when nothing was recoloured. |
+| `wallEdge` | Which wall FACE a wall-bound item is on, as `wall:<corners>:front\|back`. Absent for anything not on a wall. |
+
+### `wallEdge`, and why a wall-bound item names its wall
+
+`WallItem` used to decide by distance on every load, and threw the answer away.
+That is right almost everywhere and wrong in a corner, because a half edge runs
+to the **mitre** rather than to its wall's own end — so a wall reaches past the
+corner and can be nearer to a cabinet on the *other* wall than that cabinet's own
+wall is. Measured on the traced plan: 31.5cm against 34.0cm, and the peninsula
+cabinet came out rotated ninety degrees with no way to drag it straight, because
+`boundMove` then held it against a plane it was never on.
+
+`bindToNextWallEdge` has existed for a human to cycle the candidates since the
+control was added; what was missing was anywhere to put the answer. The id is
+derived rather than invented — `core/wall_identity.js` builds it from the corner
+pair the file already carries — so it means the same thing to another build, and
+a file naming a face this floorplan does not have falls back to geometry rather
+than failing.
+
+Written for every wall-bound item once a design has been opened, not only for
+one somebody re-bound: a design that has been loaded stops drifting, because the
+answer is in the file rather than recomputed from a distance that a wall edit
+three rooms away can change.
 
 ### Generated items
 

@@ -439,8 +439,30 @@ export class Model extends EventDispatcher
 				return;
 			}
 			var matColors = (item.material_colors) ? item.material_colors : [];
-			var metadata = {itemName: item.item_name,resizable: item.resizable,format: item.format, itemType: item.item_type, modelUrl: item.model_url, materialColors: matColors, designId: item.id, spec: item.spec, fixtures: item.fixtures};
+			var metadata = {itemName: item.item_name,resizable: item.resizable,format: item.format, itemType: item.item_type, modelUrl: item.model_url, materialColors: matColors, designId: item.id, spec: item.spec, fixtures: item.fixtures, wallEdge: item.wallEdge};
 			this.scene.addItem(item.item_type,item.model_url,metadata,position,item.rotation,scale,item.fixed);
 		});
+
+		// Sit every sink in the worktop it landed in.
+		//
+		// `Scene.refit` has been called after a spec edit and after a drag since
+		// `items/fitting.js` landed - which its own comment calls "the two moments
+		// the relationship can change". It is three: the third is the moment the
+		// relationship is CREATED, and a design arriving from a file was the one
+		// place nothing consulted the rule. So a sink authored offline sat at
+		// whatever height its author guessed and its worktop kept whatever hole
+		// they baked - the same three symptoms fitting.js exists to fix, in the
+		// one case that never reached it. Seen as a hole in the stone with the
+		// carcass visible through it and the bowl hanging below.
+		//
+		// After the whole list rather than per item: a sink is fitted to a counter
+		// AND to the cabinet under it, and a file is free to write either of them
+		// after the sink.
+		//
+		// Every item, not the sinks only, because `applyFitting` is what knows
+		// which items it acts on - it returns false for everything that is not a
+		// sink, which is also what stops this cascading through the counters and
+		// cabinets it rebuilds.
+		this.scene.getItems().forEach((item) => {this.scene.refit(item);});
 	}
 }

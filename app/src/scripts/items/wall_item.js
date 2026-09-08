@@ -74,6 +74,48 @@ export class WallItem extends Item
 		this._freePosition = false;
 	}
 
+	/**
+	 * The wall face this item was PUT on, if anything ever said which.
+	 *
+	 * `closestWallEdge` decides by distance and is right almost always. Where it
+	 * is not, there was until now no way to say so and have it stick: the choice
+	 * was recomputed from position on every load and the answer thrown away, so
+	 * `bindToNextWallEdge` - the control that exists for exactly this - could not
+	 * outlive the session.
+	 *
+	 * Measured on the traced plan: a wall's half edge runs to the MITRE, not to
+	 * the wall's own end, so the kitchen's west wall reaches 8.5cm past the corner
+	 * at y=361.5. The peninsula cabinet on the other side of that corner is 31.5cm
+	 * from that extended face and 34.0cm from the wall it actually stands on, so
+	 * it bound to the wrong one, came out rotated ninety degrees, and could not be
+	 * dragged straight because `boundMove` then held it against a plane it was
+	 * never on. Distance cannot tell those two apart; only the file can.
+	 *
+	 * Null when the record names an edge this floorplan does not have, which is
+	 * an ordinary thing for a design to outlive - the caller falls back to
+	 * geometry, exactly as `Model.newRoom` already does when a bound wall is gone.
+	 *
+	 * @returns {?HalfEdge}
+	 */
+	namedWallEdge()
+	{
+		var named = this.metadata ? this.metadata.wallEdge : null;
+		if (!named)
+		{
+			return null;
+		}
+		/** @type {?HalfEdge} */
+		var found = null;
+		this.model.floorplan.wallEdges().forEach((edge) =>
+		{
+			if (edge.id === named)
+			{
+				found = edge;
+			}
+		});
+		return found;
+	}
+
 	/** Get the closet wall edge.
 	 * @returns {?HalfEdge} The nearest wall edge, or null when the design has no
 	 * walls at all - `wallEdges()` is empty, the loop never runs, and there is
@@ -231,7 +273,9 @@ export class WallItem extends Item
 
 	placeInRoom()
 	{
-		var closestWallEdge = this.closestWallEdge();
+		// What the file says, then what the geometry says. One order, everywhere:
+		// a named face that still exists wins, and everything else is unchanged.
+		var closestWallEdge = this.namedWallEdge() || this.closestWallEdge();
 		// Null on a design with no walls, and `changeWallEdge` dereferences it on
 		// its first line - so adding a wall item before drawing a wall was a
 		// TypeError, the same shape as the RoofItem crash RM-005 C2 fixed one file
@@ -335,6 +379,17 @@ export class WallItem extends Item
 		this.rotation.y = angle;
 		// update currentWall
 		this.currentWallEdge = wallEdge;
+		// And REMEMBER it, which is the whole of the fix: one rule, always true -
+		// `metadata.wallEdge` is the face this item is on. Written here rather than
+		// at each caller because every way an item changes wall comes through this
+		// method: a load, a drag onto another face, `bindToNextWallEdge`, and
+		// `Model.newRoom` putting an item back after a floorplan rebuild.
+		//
+		// Recording the geometric guess too, on an item that never named a face, is
+		// deliberate. A design that has been opened once stops drifting: the answer
+		// is in the file rather than recomputed from a distance that a wall edit
+		// three rooms away can change.
+		this.metadata.wallEdge = wallEdge.id;
 		if (this.addToWall)
 		{
 			wallEdge.wall.items.push(this);
