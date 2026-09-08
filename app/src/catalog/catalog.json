@@ -1960,6 +1960,22 @@
 			"category": "cabinets"
 		},
 		{
+			"name": "Microwave - Built In",
+			"image": "models/thumbnails_new/appliance-microwave-builtin.png",
+			"model": "generated:appliance",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "microwave",
+				"mount": "over-range",
+				"cupboard": true,
+				"front": "shaker",
+				"finish": "stainless"
+			},
+			"category": "cabinets"
+		},
+		{
 			"name": "Vent Hood",
 			"image": "models/thumbnails_new/appliance-hood.png",
 			"model": "generated:appliance",
@@ -2003,6 +2019,49 @@
 				"front": "shaker",
 				"ductless": false,
 				"finish": "panel-ready"
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Vent Hood - Tapered",
+			"image": "models/thumbnails_new/appliance-hood-tapered.png",
+			"model": "generated:appliance",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "hood",
+				"style": "cabinet-front",
+				"profile": "tapered",
+				"band": true,
+				"front": "shaker",
+				"ductless": false,
+				"finish": "panel-ready",
+				"material": {
+					"band": "wood-white-oak"
+				}
+			},
+			"category": "cabinets"
+		},
+		{
+			"name": "Vent Hood - Swept",
+			"image": "models/thumbnails_new/appliance-hood-swept.png",
+			"model": "generated:appliance",
+			"type": 2,
+			"format": "generated",
+			"spec": {
+				"kind": "appliance",
+				"subkind": "hood",
+				"style": "cabinet-front",
+				"profile": "curved",
+				"band": true,
+				"front": "shaker",
+				"ductless": false,
+				"finish": "panel-ready",
+				"material": {
+					"band": "metal-brass",
+					"face": "paint-alabaster"
+				}
 			},
 			"category": "cabinets"
 		}

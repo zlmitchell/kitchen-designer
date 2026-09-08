@@ -750,3 +750,188 @@ describe('a cabinet hood is millwork, not an appliance in a run', () =>
 		expect(size(short).y).toBeCloseTo(243.84 - 167.64 + 1.6, 0);
 	});
 });
+
+describe('a hood canopy has a profile, and it is what makes it a hood', () =>
+{
+	const SLOTS = {body: 'wood-birch-ply', face: 'wood-walnut', band: 'metal-brass',
+		trim: 'metal-matte-black', hardware: 'paint-greige', casework: 'paint-sage'};
+
+	/**
+	 * A hood with a band on it, because the references all have one and because
+	 * the sample heights below are measured off this exact fixture. The band
+	 * lifts the canopy off the floor by its own depth, so a build without one has
+	 * its rings somewhere else entirely.
+	 */
+	const hood = (spec) => buildAppliance(Object.assign({
+		subkind: 'hood', style: 'cabinet-front', front: 'shaker', band: true,
+		ceilingHeight: 243.84, mountHeight: 167.64, material: SLOTS,
+	}, spec));
+
+	/**
+	 * The widest and front-most point within a band of heights.
+	 *
+	 * Measured UP FROM THE BOTTOM of the built geometry, not from zero: every
+	 * builder here recentres on its own bounds before returning, so the frame the
+	 * builder reasons in - canopy bottom at y = 0 - is gone by the time a test
+	 * sees it. Written absolutely, these assertions were all off by half the
+	 * hood's height, which is the same trap `centre` documents in cabinet.js.
+	 */
+	function extentBetween(built, from, to)
+	{
+		const floor = bounds(built).min.y;
+		from += floor;
+		to += floor;
+		const pos = built.geometry.getAttribute('position');
+		// The canopy's own material only. The band wraps the canopy's bottom ring,
+		// so the two share a height exactly - and the band is deliberately proud of
+		// what it wraps, so anything sampled there without this reads 1.2cm wider
+		// and deeper than the canopy actually is.
+		const index = built.materials.findIndex(
+			(m) => m.userData.materialId === 'wood-walnut');
+		let half = 0;
+		let front = -Infinity;
+		for (const group of built.geometry.groups)
+		{
+			if (group.materialIndex !== index) {continue;}
+			for (let i = group.start; i < group.start + group.count; i++)
+			{
+				const y = pos.getY(i);
+				if (y < from || y > to) {continue;}
+				half = Math.max(half, Math.abs(pos.getX(i)));
+				front = Math.max(front, pos.getZ(i));
+			}
+		}
+		return {half, front};
+	}
+
+	it('runs a tapered canopy from the cooktop width to the cabinet run', () =>
+	{
+		// The shape three of the four references have. It is not decoration: the
+		// canopy's job is to get from a width that captures over a cooktop to a
+		// width that belongs in a run of uppers, and the profile is only how it
+		// travels. So it must be wider AND deeper at the bottom than the top.
+		// The bands bracket the canopy's own rings and nothing else: a swept shell
+		// has vertices only where a ring is, so sampling anywhere between them
+		// finds nothing, and a band reaching down to 9.2 catches the strap's top
+		// instead of the canopy's bottom.
+		const built = hood({profile: 'tapered', depth: 50.8, upperDepth: 30.48});
+		const low = extentBetween(built, 9.4, 10.3);
+		const high = extentBetween(built, 27.1, 27.7);
+
+		expect(low.half).toBeGreaterThan(high.half);
+		expect(low.front).toBeGreaterThan(high.front);
+		// And it arrives at the mantel's own footprint rather than at some third
+		// shape, which is what lets the mantel above be one box: it gives up
+		// exactly the depth the uppers are shallower by.
+		expect(low.front - high.front).toBeCloseTo(50.8 - 30.48, 0);
+	});
+
+	it('leaves a straight canopy straight, which is the mantel look', () =>
+	{
+		const built = hood({profile: 'straight'});
+		const low = extentBetween(built, 9.4, 10.3);
+		const high = extentBetween(built, 27.1, 27.7);
+		expect(high.half).toBeCloseTo(low.half, 1);
+	});
+
+	it('sweeps rather than slopes when asked, and ends in the same place', () =>
+	{
+		// An ogee is flat where it leaves the band, steep in the middle and flat
+		// again into the mantel - so at half height it has NOT travelled half the
+		// distance, which is the whole difference from a taper.
+		const curved = hood({profile: 'curved'});
+		const low = extentBetween(curved, 9.4, 10.3);
+		const high = extentBetween(curved, 27.1, 27.7);
+		// A quarter of the way up, where an ogee is still nearly flat.
+		const quarter = extentBetween(curved, 13.9, 14.4);
+		const straightLine = low.front + (high.front - low.front) * 0.25;
+
+		expect(quarter.front).toBeGreaterThan(straightLine);
+
+		// Same start and same finish; only the journey differs. Compared against a
+		// taper, which is the same two rings with nothing in between.
+		const tapered = hood({profile: 'tapered'});
+		expect(high.front).toBeCloseTo(extentBetween(tapered, 27.1, 27.7).front, 1);
+		expect(low.front).toBeCloseTo(extentBetween(tapered, 9.4, 10.3).front, 1);
+	});
+
+	it('wraps a band round the bottom, proud of what it wraps', () =>
+	{
+		// The detail that makes a plain canopy read as a hood rather than a box,
+		// and it is on most of the references. Flush with the canopy it would be a
+		// stripe rather than a strap.
+		const built = hood({profile: 'tapered', band: true, width: 76.2, depth: 50.8});
+		const band = partBounds(built, 'metal-brass');
+
+		// At the bottom of the thing, above only the filter.
+		expect(band.min.y).toBeLessThan(bounds(built).min.y + 3);
+		// Proud of the canopy at its widest, which is where the band wraps it.
+		// Measured against the canopy's own size rather than against a sample:
+		// the two meet on one ring, so anything sampled there is both of them.
+		expect(band.max.x).toBeGreaterThan(76.2 / 2);
+		expect(band.max.z).toBeGreaterThan(50.8 / 2);
+		// And absent unless asked for.
+		expect(hasMaterial(hood({profile: 'tapered', band: false}), 'metal-brass'))
+			.toBe(false);
+	});
+
+	it('starts the canopy above the band rather than through it', () =>
+	{
+		// Two stacked things, not one thing with a stripe painted across it.
+		const built = hood({profile: 'tapered', band: true, bandHeight: 7.62});
+		const band = partBounds(built, 'metal-brass');
+		expect(band.max.y - band.min.y).toBeCloseTo(7.62, 1);
+		// And the canopy picks up where the band stops rather than passing through
+		// it: its bottom ring is at the band's top, not at the floor.
+		expect(extentBetween(built, 9.4, 10.3).half).toBeGreaterThan(0);
+	});
+});
+
+describe('an over-range microwave can be built in', () =>
+{
+	const SLOTS = {body: 'metal-stainless', face: 'metal-stainless',
+		casework: 'paint-sage', trim: 'metal-matte-black', hardware: 'paint-greige'};
+
+	const oven = (spec) => buildAppliance(Object.assign({
+		subkind: 'microwave', mount: 'over-range', front: 'shaker',
+		ceilingHeight: 243.84, mountHeight: 167.64, material: SLOTS,
+	}, spec));
+
+	it('adds nothing unless asked, so every saved design is unchanged', () =>
+	{
+		expect(hasMaterial(oven({}), 'paint-sage')).toBe(false);
+	});
+
+	it('carries the cabinet line over the machine', () =>
+	{
+		// The whole reason to choose a microwave instead of a hood is that the run
+		// stays unbroken. Left alone it is a box hanging under nothing, with a gap
+		// above it the cabinets either side do not have.
+		const built = oven({cupboard: true});
+		const cupboard = partBounds(built, 'paint-sage');
+		const machine = partBounds(built, 'metal-stainless');
+		// It starts where the machine stops and carries on to the ceiling.
+		expect(cupboard.min.y).toBeCloseTo(machine.max.y, 0);
+		expect(cupboard.max.y - cupboard.min.y).toBeGreaterThan(20);
+	});
+
+	it('sets the cupboard back into the uppers plane, not the machine', () =>
+	{
+		// A microwave is 15in deep and a wall cabinet is 12. The cupboard belongs
+		// in the cabinets' plane with the machine standing proud of it, which is
+		// what one actually looks like on a wall.
+		const built = oven({cupboard: true, upperDepth: 30.48});
+		const cupboard = partBounds(built, 'paint-sage');
+		const machine = partBounds(built, 'metal-stainless');
+		expect(cupboard.max.z).toBeLessThan(machine.max.z);
+	});
+
+	it('is millwork rather than more appliance', () =>
+	{
+		// Not `face`, which the finish owns: a stainless machine with a stainless
+		// cupboard over it is not what anybody means by built in.
+		const built = oven({cupboard: true});
+		expect(hasMaterial(built, 'paint-sage')).toBe(true);
+		expect(hasMaterial(built, 'metal-stainless')).toBe(true);
+	});
+});

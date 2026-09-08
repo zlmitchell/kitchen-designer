@@ -64,14 +64,18 @@ describe('the unified catalog', () =>
 		// 27 legacy entries + 142 glTF entries, less the one that pointed at a
 		// cabinet.json that has never existed in this repository. Plus the
 		// generated ones, which name a builder rather than a file - see below: a
-		// post, SEVEN cabinets, a countertop, three sinks, ELEVEN appliances, three
-		// windows, eight doors and three light fittings.
+		// post, SEVEN cabinets, a countertop, three sinks, FOURTEEN appliances,
+		// three windows, eight doors and three light fittings.
 		//
-		// Eleven appliances because a vent hood comes three ways, and two of those
-		// are millwork: a cabinet-front hood is a wood box round a metal liner, and
-		// the same thing again with a cupboard on top of it. They are appliances
-		// rather than cabinets because what they DO is vent a cooktop -- the front
-		// is borrowed from `cabinet.js`, not the other way round.
+		// Fourteen appliances because a vent hood comes five ways and four of those
+		// are millwork: a cabinet-front hood is a wood box round a metal liner, the
+		// same again with a cupboard over it, and the same again with the canopy
+		// tapered or swept rather than square. They are appliances rather than
+		// cabinets because what they DO is vent a cooktop -- the front is borrowed
+		// from `cabinet.js`, not the other way round.
+		//
+		// The fourteenth is the microwave that replaces a hood outright, with the
+		// cabinet run carried over the top of it.
 		//
 		// Seven cabinets for three shapes, because a corner is not a width: an
 		// L-shaped and a diagonal unit are the two answers the trade has to the
@@ -80,7 +84,7 @@ describe('the unified catalog', () =>
 		// Eight doors for one builder, because `operation` is what a door IS - a
 		// bypass and a pocket door share every field and nothing about what moves -
 		// and the palette is where somebody chooses one.
-		expect(CATALOG.items.length).toBe(205);
+		expect(CATALOG.items.length).toBe(208);
 	});
 
 	it('has dropped the entry whose model file was never in the repository', () =>

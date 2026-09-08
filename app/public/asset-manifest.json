@@ -1289,9 +1289,24 @@
 			"hash": "sha256-3h2j6w5AitHM7DQbg1gOB7wCUF3swKBB4eAo4WJh314=",
 			"kind": "thumbnail"
 		},
+		"models/thumbnails_new/appliance-hood-swept.png": {
+			"bytes": 6156,
+			"hash": "sha256-aQ/gCxhVgpMG5zDj9ThQQFgIvb+DZfExaGTyUFODUwM=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-hood-tapered.png": {
+			"bytes": 3258,
+			"hash": "sha256-CwJhsTSh/8bW4hTzfwr0wpbRTogzvo+OfJSkgz3Bvq8=",
+			"kind": "thumbnail"
+		},
 		"models/thumbnails_new/appliance-hood.png": {
 			"bytes": 1925,
 			"hash": "sha256-3VeqDquXyL1VK4TFg+UbLrAGzyTtLI3HamOCr+ni2rk=",
+			"kind": "thumbnail"
+		},
+		"models/thumbnails_new/appliance-microwave-builtin.png": {
+			"bytes": 3881,
+			"hash": "sha256-noreRt6LPa9FHO1a6Od7MdiwTrpcL+8BqiMlpA2Tp0I=",
 			"kind": "thumbnail"
 		},
 		"models/thumbnails_new/appliance-microwave.png": {

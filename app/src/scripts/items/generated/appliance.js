@@ -1,5 +1,7 @@
 // @ts-check
-import {Box3, CylinderGeometry, Group, Mesh, Vector3} from 'three';
+import {
+	Box3, BufferGeometry, CylinderGeometry, Float32BufferAttribute, Group, Mesh, Vector3,
+} from 'three';
 import {boxGeometryFor} from '../../core/geometry_builders.js';
 import {mergeMeshes} from '../../core/geometry_merge.js';
 import {materialsForSlots} from '../../core/materials.js';
@@ -68,6 +70,25 @@ const SLOTS = {
 	glass: 'glass-smoked',
 	hardware: 'metal-stainless',
 	trim: 'metal-matte-black',
+	/**
+	 * The band round the bottom of a hood canopy.
+	 *
+	 * Its own slot because it is the one part of a hood that is routinely NOT the
+	 * hood's own material: a plaster canopy with an oak strap and a copper one
+	 * with a riveted band are the same idea, and both of them are two materials
+	 * meeting at that line. Matching it to the canopy is a setting, not the only
+	 * option.
+	 */
+	band: 'wood-white-oak',
+	/**
+	 * The cupboard over a built-in microwave.
+	 *
+	 * Not `face`, which the finish owns: a stainless microwave with a stainless
+	 * cupboard over it is not what anybody means by built in. The machine is an
+	 * appliance and the box above it is millwork, they are routinely different
+	 * materials, and this is the one item where both are in the same object.
+	 */
+	casework: 'paint-white',
 	// A hood light. Its own slot rather than reusing `glass`, because the render
 	// from below showed two BLACK rectangles where the lamps are: smoked glass is
 	// what you look through, and a lens is what you look at.
@@ -162,6 +183,48 @@ const DEFAULTS = {
 	mountHeight: 167.64,
 	/** Downdraft: how far the vane rises out of its slot. */
 	riseHeight: 30.48,
+	/**
+	 * Over-range microwave: a cupboard above it, reaching the ceiling.
+	 *
+	 * Which is what "built in" means for one of these. On its own an over-range
+	 * microwave is a box hanging under nothing, with a gap over it that the run
+	 * either side does not have -- and the whole reason to choose one instead of
+	 * a hood is that it keeps the cabinet line unbroken. The cupboard is at the
+	 * UPPERS' depth rather than the machine's, so its face lands in their plane
+	 * while the microwave stands proud of it, which is exactly what one looks
+	 * like on a wall.
+	 */
+	cupboard: false,
+	/**
+	 * Cabinet hood: the shape of the canopy, seen from the side.
+	 *
+	 * `straight` is a box, which is the mantel look: a flat panelled face, and
+	 * what a hood built out of door stock looks like. The other two are the shape
+	 * a hood has when it is plaster, metal or beadboard rather than doors --
+	 * `tapered` runs in a straight line from the full canopy at the bottom to the
+	 * mantel's own footprint at the top, and `curved` does the same journey on an
+	 * ogee, which is the sweep a copper or plaster hood is made with.
+	 *
+	 * All three end at the SAME place, which is what lets the mantel above be one
+	 * shape: the canopy's job is to get from the cooktop's width to the cabinet
+	 * run's, and the profile is only how it travels.
+	 *
+	 * A sloped face carries no raised panel, and that is not a limitation - a
+	 * shaker panel on a slope is not a thing anybody builds. `straight` is the
+	 * profile that gets a front, and it is the one that has one.
+	 */
+	profile: 'straight',
+	/**
+	 * Cabinet hood: a band round the bottom edge of the canopy.
+	 *
+	 * The detail that makes a plain canopy read as a hood rather than as a box,
+	 * and it is on most of them: an oak strap under plaster, a riveted collar on
+	 * copper, a painted band on beadboard. Proud of the canopy on every side,
+	 * because a band flush with what it wraps is a stripe.
+	 */
+	band: false,
+	/** How deep that band is. 3in. */
+	bandHeight: 7.62,
 	/**
 	 * Cabinet hood: the depth of the wall cabinets it meets, so it can be flush.
 	 *
@@ -262,6 +325,9 @@ const DEFAULTS = {
 /**
  * @typedef {Object} ApplianceSpec
  * @property {number} [upperDepth] @property {number} [mantelHeight]
+ * @property {('straight'|'tapered'|'curved')} [profile]
+ * @property {boolean} [band] @property {number} [bandHeight]
+ * @property {boolean} [cupboard]
  * @property {('range'|'fridge'|'dishwasher'|'microwave'|'hood')} [subkind]
  * @property {('stainless'|'black'|'panel-ready')} [finish]
  * @property {('slab'|'shaker'|'raised')} [front]
@@ -762,6 +828,90 @@ function hoodFilter(group, mats, f)
 	}
 }
 
+/**
+ * A shell swept through a stack of rectangular rings.
+ *
+ * One primitive for all three canopy profiles, because they differ only in how
+ * many rings there are and where they sit: a box is two, a taper is two of
+ * different sizes, and an ogee is a dozen following a curve. Writing three
+ * shapes would have been writing the same quad three times.
+ *
+ * The BACK is flat and stays put. A hood is against a wall, and a canopy that
+ * tapered symmetrically would stand off the splashback at the top by as much as
+ * it came in at the front -- the same fault `canopy`'s `lean` exists to fix on
+ * the metal one, avoided here by not building it in the first place.
+ *
+ * Normals are computed rather than given, which is the one thing to be careful
+ * of: the winding below is what decides which way each face points, and a quad
+ * wound the other way is a face lit from inside.
+ *
+ * @param {Object} mat
+ * @param {number} back The wall side, shared by every ring.
+ * @param {Array<{y: number, half: number, front: number}>} rings Bottom to top.
+ * @returns {Mesh}
+ */
+function sweptShell(mat, back, rings)
+{
+	var v = [];
+	var quad = function (a, b, c, d)
+	{
+		v.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+		v.push(a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+	};
+	for (var i = 0; i + 1 < rings.length; i++)
+	{
+		var lo = rings[i];
+		var hi = rings[i + 1];
+		quad([-lo.half, lo.y, lo.front], [lo.half, lo.y, lo.front],
+			[hi.half, hi.y, hi.front], [-hi.half, hi.y, hi.front]);
+		quad([lo.half, lo.y, back], [-lo.half, lo.y, back],
+			[-hi.half, hi.y, back], [hi.half, hi.y, back]);
+		quad([lo.half, lo.y, lo.front], [lo.half, lo.y, back],
+			[hi.half, hi.y, back], [hi.half, hi.y, hi.front]);
+		quad([-lo.half, lo.y, back], [-lo.half, lo.y, lo.front],
+			[-hi.half, hi.y, hi.front], [-hi.half, hi.y, back]);
+	}
+	// Cap the top, or the inside of the shell is in view from anywhere above it.
+	var t = rings[rings.length - 1];
+	quad([-t.half, t.y, back], [t.half, t.y, back],
+		[t.half, t.y, t.front], [-t.half, t.y, t.front]);
+
+	var geometry = new BufferGeometry();
+	geometry.setAttribute('position', new Float32BufferAttribute(v, 3));
+	geometry.computeVertexNormals();
+	return new Mesh(geometry, mat);
+}
+
+/**
+ * The rings a canopy profile is swept through, bottom to top.
+ *
+ * `curved` uses a smoothstep rather than an arc, and that is the shape rather
+ * than an approximation of one: an ogee is flat where it leaves the band, steep
+ * in the middle and flat again where it meets the mantel, which is exactly what
+ * `t * t * (3 - 2t)` does. Twelve rings is where the silhouette stops changing.
+ */
+function canopyRings(profile, y0, y1, from, to)
+{
+	if (profile === 'straight')
+	{
+		return [{y: y0, half: from.half, front: from.front},
+			{y: y1, half: from.half, front: from.front}];
+	}
+	var steps = (profile === 'curved') ? 12 : 1;
+	var rings = [];
+	for (var i = 0; i <= steps; i++)
+	{
+		var t = i / steps;
+		var e = (profile === 'curved') ? t * t * (3 - 2 * t) : t;
+		rings.push({
+			y: y0 + (y1 - y0) * t,
+			half: from.half + (to.half - from.half) * e,
+			front: from.front + (to.front - from.front) * e,
+		});
+	}
+	return rings;
+}
+
 /** A cupboard shorter than this is a filler panel, not a cupboard. 10in. */
 const MIN_CUPBOARD = 25.4;
 
@@ -827,18 +977,46 @@ function cabinetHood(group, s, mats, f)
 	// Clamped into the hood's own depth: an upper deeper than the hood would put
 	// the mantel in front of the canopy and hang it over the cooktop.
 	var mantelFront = back + Math.max(10, Math.min(s.upperDepth, f.depth));
+	var tapered = (s.profile === 'tapered' || s.profile === 'curved');
+	// A tapered canopy narrows in width by the same ratio it loses in depth, so
+	// it arrives at the mantel square rather than at some third shape. That makes
+	// the mantel narrower than the cooktop, which is what a tapered hood is.
+	var shrink = (mantelFront - back) / Math.max(1, f.depth);
+	var mantelHalf = tapered ? (f.width / 2) * shrink : f.width / 2;
+	// A band sits UNDER the canopy and the canopy starts above it, so the two
+	// stack instead of the band cutting across the shape.
+	var bandTop = s.band ? Math.min(s.bandHeight, f.height * 0.6) : 0;
 
-	// The canopy, at the hood's own depth.
-	cladSection(group, s, mats, f, 0, f.height, back, f.depth / 2);
+	if (tapered)
+	{
+		// No front panel: a shaker panel on a slope is not a thing anybody builds,
+		// which is why `straight` is the profile that has one.
+		group.add(sweptShell(mats.face, back, canopyRings(s.profile, bandTop, f.height,
+			{half: f.width / 2, front: f.depth / 2},
+			{half: mantelHalf, front: mantelFront})));
+	}
+	else
+	{
+		cladSection(group, s, mats, f, bandTop, f.height, back, f.depth / 2);
+	}
+
+	if (bandTop > 0)
+	{
+		// Proud on every side, because a band flush with what it wraps is a stripe.
+		var out = 1.2;
+		group.add(box(mats.band, -f.width / 2 - out, f.width / 2 + out, 0, bandTop,
+			back, f.depth / 2 + out));
+	}
 
 	var mantelTop = top;
 	if (f.style === 'cabinet-over' && (top - f.height - s.mantelHeight) >= MIN_CUPBOARD)
 	{
 		mantelTop = f.height + s.mantelHeight;
 	}
-	cladSection(group, s, mats, f, f.height, mantelTop, back, mantelFront);
+	var mantel = Object.assign({}, f, {width: mantelHalf * 2});
+	cladSection(group, s, mats, mantel, f.height, mantelTop, back, mantelFront);
 	// The cupboard, when there is room for one worth having.
-	cladSection(group, s, mats, f, mantelTop, top, back, mantelFront);
+	cladSection(group, s, mats, mantel, mantelTop, top, back, mantelFront);
 
 	hoodFilter(group, mats, f);
 }
@@ -981,6 +1159,24 @@ function extras(group, s, mats, f)
 		}
 		group.add(box(mats.lens, -vw - 9, -vw - 2, -0.5, 0.2, -3, 3));
 		group.add(box(mats.lens, vw + 2, vw + 9, -0.5, 0.2, -3, 3));
+
+		if (s.cupboard)
+		{
+			// What "built in" means for one of these: the cabinet line runs
+			// unbroken over it. Left alone, an over-range microwave is a box
+			// hanging under nothing with a gap above it that the run either side
+			// does not have -- and keeping that line is the whole reason to choose
+			// one instead of a hood.
+			//
+			// At the UPPERS' depth, not the machine's. A microwave is 15in deep and
+			// a wall cabinet is 12: the cupboard sits back in their plane and the
+			// machine stands proud of it, which is what one looks like on a wall.
+			var top = Math.max(f.height + MIN_CUPBOARD, s.ceilingHeight - s.mountHeight);
+			var back = -f.depth / 2;
+			var boxFront = back + Math.max(10, Math.min(s.upperDepth, f.depth));
+			var casework = Object.assign({}, mats, {face: mats.casework});
+			cladSection(group, s, casework, f, f.height, top, back, boxFront);
+		}
 	}
 	else if (f.mount === 'counter')
 	{
@@ -1140,10 +1336,32 @@ export const APPLIANCE_SCHEMA = {
 				{value: 'shaker', label: 'Shaker'},
 				{value: 'raised', label: 'Raised'},
 			]},
+		{shared: true, key: 'profile', label: 'Canopy', type: 'choice',
+			when: {style: ['cabinet-front', 'cabinet-over']}, options: [
+				{value: 'straight', label: 'Straight'},
+				{value: 'tapered', label: 'Tapered'},
+				{value: 'curved', label: 'Swept'},
+			]},
+		{shared: true, key: 'band', label: 'Band', type: 'choice',
+			when: {style: ['cabinet-front', 'cabinet-over']}, options: [
+				{value: false, label: 'None'},
+				{value: true, label: 'Strap'},
+			]},
+		{key: 'bandHeight', label: 'Band depth', type: 'length', min: 3, max: 20, step: 0.5,
+			when: {band: true}},
+		{shared: true, key: 'material.band', label: 'Band', type: 'material',
+			when: {band: true}},
 		{key: 'upperDepth', label: 'Upper depth', type: 'length', min: 20, max: 70, step: 0.5,
 			when: {style: ['cabinet-front', 'cabinet-over']}},
 		{key: 'mantelHeight', label: 'Mantel height', type: 'length', min: 20, max: 120,
 			step: 1, when: {style: 'cabinet-over'}},
+		{shared: true, key: 'cupboard', label: 'Cabinet above', type: 'choice',
+			when: {mount: 'over-range'}, options: [
+				{value: false, label: 'None'},
+				{value: true, label: 'To the ceiling'},
+			]},
+		{shared: true, key: 'material.casework', label: 'Cabinet above', type: 'material',
+			when: {cupboard: true}},
 		{key: 'ductless', label: 'Venting', type: 'choice', when: {subkind: 'hood'}, options: [
 			{value: false, label: 'Ducted'},
 			{value: true, label: 'Recirculating'},
