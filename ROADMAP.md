@@ -468,7 +468,7 @@ rectangular counters instead leaves the two splashes stopping short of each
 other, with an open notch at exactly the inside corner where a real kitchen has a
 continuous return.
 
-#### 3b. Say which wall an item is on, and let one be on none ✅ (half of it)
+#### 3b. Say which wall an item is on, and let one be on none ✅
 
 Every wall-bound item picks its wall by distance. `WallItem.closestWallEdge`
 takes the nearest half edge and `changeWallEdge` sets `rotation.y` from that
@@ -502,23 +502,44 @@ luck. The corner units in `data/fitout.json` went back to the size the drawing
 gives them, because the workaround they were carrying — widen a corner cabinet
 until it is wider than it is deep — is no longer needed.
 
-**Free placement is not**, and it is what an island wants: an item that binds to
-no wall at all and keeps the position and rotation it was given. Everything
-below still stands.
+**And free placement is built too.** `metadata.wallEdge` takes the value `free`
+— the same field, because it answers the same question and one of its answers is
+"none". A `HalfEdge.id` always contains colons, so the two forms cannot collide,
+and a reader that does not know about `free` finds no matching edge and falls
+back to geometry, which is exactly what every reader of this field already does
+when a named wall has been deleted.
 
 - an item may name a **half edge** (`HalfEdge.id` is `${wall.id}:front|back`, and
   wall ids have been derived from the corner pair since RM-004 B2, so the name is
   stable across a load)
 - or say it is **free**, and keep the position and rotation it was given
-- `placeInRoom` prefers the named edge and falls back to `closestWallEdge`, so
-  every design written before the field opens exactly as it does now
-- `bindToNextWallEdge` records what the human picked, which is the whole point:
-  the control exists and its answer is discarded
-- `getMetaData` writes it; `Model.newRoom` restores it, which it half does
-  already — it notes the face across a floorplan rebuild and then forgets it
+- `placeInRoom` answers `free` BEFORE it looks for an edge, not by folding it
+  into `namedWallEdge`: a null from that method already means "the design names a
+  wall this floorplan does not have", which falls back to `closestWallEdge` — and
+  falling back is precisely what must not happen here
+- `setFreeStanding` is the switch, `canBeFree` says who may take it — anything
+  that is not `addToWall`, so types 2 and 9 and not a window or a door, which are
+  absences in a wall rather than things standing near one
+- `wallEdgeChoices` puts `null` last in the cycle `bindToNextWallEdge` walks, so
+  the first press from a bound item still reaches the return wall in a corner
 
-Free placement is also what an island needs before anything else about islands is
-worth building, and it is the smaller half of this.
+Free is the absence of four things, and leaving any one of them in place gives a
+plausible wrong answer: the rotation from the face's normal, the `boundMove` onto
+the wall plane, the re-bind on drag — an island dragged past a wall would silently
+attach to it — and membership of the wall's item list.
+
+**The one that is not on that list, and was found by looking rather than by a
+number: `visible`.** A bound item does not own that flag. `Edge` drives it
+through `updateEdgeVisibility` so the wall you are looking through fades, and it
+does so by walking the WALL's item lists. An item that leaves those lists while
+the near face happens to be hidden therefore keeps `visible === false` with
+nothing left in the scene that would ever set it back — so freeing a cabinet made
+it vanish, which reads as a delete rather than a move.
+
+What is still not built is the rest of an island: a **finished back**, and doors
+on more than one side. A freed base unit shows the same raw ply back it always
+had, which is the "exposed end and exposed back" case above and belongs with the
+run rather than with the binding.
 
 #### 3c. Cabinets snap to each other, not only to a wall
 

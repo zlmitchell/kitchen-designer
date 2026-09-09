@@ -20,7 +20,7 @@
  * reading rule is applied unchanged - right unit in, right plan out - so
  * nobody's file changed meaning when the format moved.
  */
-import {describe, it, expect, beforeEach, afterAll} from 'vitest';
+import {describe, it, expect, beforeEach, afterAll, vi} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname, join} from 'node:path';
@@ -157,13 +157,23 @@ describe('a v1 file saved in metres', () =>
 	it('collapses under centimetres, and no loader can prevent it', () =>
 	{
 		// 5x4 is inside cornerTolerance (20 cm), so newCorner merges all four into
-		// the first and the plan becomes a single point with four degenerate
-		// walls. The information needed to avoid this is not in the file, which is
-		// the entire reason 2.0.0 stamps the unit.
+		// the first and the plan becomes a single point. The information needed to
+		// avoid this is not in the file, which is the entire reason 2.0.0 stamps
+		// the unit.
+		//
+		// The four walls between the merged corners used to be KEPT, as degenerate
+		// stubs. They are dropped now: two corners on one point is not a wall, and
+		// `loadFloorplan` says so on the way past. The collapse is no more
+		// recoverable than it was - one corner, no rooms - it simply no longer
+		// leaves four zero-length walls in the plan to be drawn, measured and
+		// saved again.
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const floorplan = loadV1('metres-room', dimCentiMeter);
 		expect(floorplan.getCorners()).toHaveLength(1);
-		expect(floorplan.getWalls()).toHaveLength(4);
+		expect(floorplan.getWalls()).toHaveLength(0);
 		expect(floorplan.getRooms()).toHaveLength(0);
+		expect(warn).toHaveBeenCalledTimes(4);
+		warn.mockRestore();
 	});
 });
 

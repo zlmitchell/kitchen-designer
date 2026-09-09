@@ -393,13 +393,22 @@ const model = new Model('/textures/');
 model.loadSerialized(readFileSync('/plan/design.json', 'utf8'));
 await new Promise((r) => setTimeout(r, 100));
 
-const scene = new ThreeScene();
+// `model.scene` is the app's Scene, an EventDispatcher; `getScene()` is the
+// three graph inside it. Use THAT rather than a fresh `new Scene()`: a second
+// import of three through a second module graph gets you a second copy of the
+// library - it says so on stderr - and the walls are then built by a different
+// three than the items.
+const scene = model.scene.getScene();
 // Edge.init subscribes to the controls AND reads controls.object.position -
-// the app fades a wall facing away from the camera, so the stub needs the eye.
+// the app fades a wall facing away from the camera, so the stub needs the eye,
+// and it CLONES it, so a plain `{x, y, z}` is not enough.
 const controls = {object: {position: eye}, addEventListener() {}, removeEventListener() {}};
 const fp = new Floorplan3D(scene, model.floorplan, controls, null);
 fp.redraw();   // it builds on EVENT_CHANGESET, already fired by the load
 ```
+
+The class is exported as `Floorplan3D` from `three/floorPlan.js`. There is no
+`three/scene.js`.
 
 Then walk the scene graph, project the triangles, and z-buffer them into a
 `pngjs` image. About 60 lines. This is what proved the doorways were solid.
@@ -429,6 +438,28 @@ axis and look. And aim it where the object is *used from*: an over-range
 microwave and a vent hood are both looked at from underneath, and each was
 hiding a fault there that no other angle showed.
 
+**A room is a closed box, and an orthographic camera outside one sees the
+outside of it.** A three-quarter view of a whole floorplan comes out as a
+featureless grey cube - a correct picture, showing nothing. Either stand inside,
+or render the items on their own and leave the walls out.
+
+**A plan view needs a cut, and its basis has to be written out.** Two separate
+traps that both produce a large flat rectangle:
+
+- `three/floor.js` builds a **roof** as well as a floor, so looking straight
+  down at an uncut scene is a picture of the ceiling. Skip a triangle whose
+  lowest world y is above about 150cm, which is what an architectural plan is.
+- deriving the camera basis from a world up of `+Y` divides by zero when the eye
+  IS `+Y`. `cross([0,1,0], [0,1,0])` is the zero vector, every point projects
+  onto one, and the result reads like a wall seen from a strange angle rather
+  than like a broken basis. Write the plan basis out: right `[1,0,0]`, up
+  `[0,0,-1]` so +z runs down the page, back `[0,1,0]`.
+
+**`console.log` is block-buffered through a pipe and through a redirect**, so a
+script that hangs prints nothing at all and the hang looks like it happened on
+line one. If you need to find where it really stopped, `appendFileSync` to a
+file instead.
+
 ### 3b. Which container to run in, and why it matters
 
 Two services, and picking the wrong one wastes a lot of time:
@@ -455,6 +486,15 @@ docker compose run --rm --no-deps dev npx vitest run tests/zz-scratch.test.js
 
 Name scratch files `zz-*` so they sort last and are obvious, and delete them
 before committing.
+
+`tools/make-thumbnails.mjs` says the answer for a TOOL is Vite's own Node API -
+`createServer({middlewareMode: true})` plus `ssrLoadModule` - and that stands for
+a tool somebody has to run. It is not the cheap path for a scratch render: tried
+for the free-placement pictures, `createServer` hung before a line of the script
+ran, twice, with the dev server up on the same bind mount. Not chased, because
+the same render as a `zz-*` test took eight seconds. Reach for `ssrLoadModule`
+when you are writing something that has to live in `tools/`, not when you are
+answering a question once.
 
 ### 3c. Mounting a panel
 

@@ -164,13 +164,26 @@ describe('Corner.attachRoom (RM-006)', () =>
 
 describe('Corner.snapToAxis (RM-006)', () =>
 {
-	/** Two corners joined by a wall, so they are adjacent. */
+	/**
+	 * Two corners joined by a wall, so they are adjacent.
+	 *
+	 * The second corner is created FAR away and then moved into place, which
+	 * matters whenever the two are closer than `cornerTolerance`: asking
+	 * `newCorner` for a point 4cm from an existing corner hands back that very
+	 * corner, so `newWall(a, b)` was `newWall(a, a)` and the pair was one corner
+	 * wearing two names. That went unnoticed while a self-loop wall could be
+	 * built - `snapToAxis` then snapped the corner to itself and reported true
+	 * for both axes, which is the answer the test wanted for the wrong reason.
+	 * `Floorplan.newWall` refuses a zero-length wall now, so the fixture had to
+	 * become what it always claimed to be.
+	 */
 	function pair(x1, y1, x2, y2)
 	{
 		const floorplan = new Floorplan();
 		const a = floorplan.newCorner(x1, y1);
-		const b = floorplan.newCorner(x2, y2);
+		const b = floorplan.newCorner(x2 + 1000, y2 + 1000);
 		floorplan.newWall(a, b);
+		b.move(x2, y2);
 		return {floorplan, a, b};
 	}
 

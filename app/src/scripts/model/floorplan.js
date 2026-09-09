@@ -9,6 +9,22 @@ import {Dimensioning} from '../core/dimensioning.js';
 import {WallTypes} from '../core/constants.js';
 import {Version} from '../core/version.js';
 import {cornerTolerance} from '../core/configuration.js';
+
+/**
+ * The shortest thing that can be a wall, in centimetres.
+ *
+ * A wall whose two corners are at the same point has no length, so it has no
+ * direction, so it has no faces - and yet it is a wall in the file, carrying a
+ * thickness and a height like any other. `tools/fitout.py` has dropped these on
+ * sight since it was written and uses this same 1cm; nothing in the app did,
+ * which is how one reached a plan and stayed there.
+ *
+ * One centimetre rather than an epsilon. Float noise is not the thing being
+ * guarded against - two corners at the same CLICK are - and no wall in a house
+ * is 1cm long, so the looser bound costs nothing and catches the near misses
+ * that an exact comparison would let through.
+ */
+const MIN_WALL_LENGTH = 1.0;
 import {resolveRuntime} from '../core/design_runtime.js';
 
 
@@ -394,10 +410,40 @@ export class Floorplan extends EventDispatcher
 	 * @param {Vector2} [a] Curve control point, for a curved wall.
 	 * @param {Vector2} [b] The second control point.
 	 * @param {string} [id] Assigned identity, when one is being restored.
-	 * @returns {Wall} The new wall.
+	 * @returns {?Wall} The new wall, or null when the two corners are the same
+	 *          point and there is no wall to make.
 	 */
 	newWall(start, end, a, b, id)
 	{
+		// Two corners at one point is not a wall.
+		//
+		// The editor could still make one, and did. `redrawWall`'s sibling guard
+		// in the floorplanner - `existing === this.lastNode` - catches clicking
+		// the corner you are drawing FROM, which is an identity test and so only
+		// catches ONE corner used twice. It does not catch two DIFFERENT corners
+		// standing on the same point, and at a pony wall that is the ordinary
+		// case: `newCorner` welds by position AND elevation, deliberately, because
+		// a corner cannot be both 42in and 96in - so clicking where a corner
+		// already exists at another height mints a second one on top of it and
+		// this method used to join the two across nothing at all.
+		//
+		// Found on the kitchen plan, three corners deep on one point - 250, 243.84
+		// and the pony wall's 106.68 - with a zero-length wall between the first
+		// two. The visible damage was not the stub itself, which draws nothing: it
+		// was that the stub had been born at the CONFIGURED DEFAULT height of 250,
+		// and the 82cm wall running into that corner then took its height from it,
+		// because a wall stands as tall as its taller corner. Its top ramped from
+		// 243.84 to 250 through a ceiling at 243.84 - z-fighting where it grazed,
+		// daylight where it climbed clear.
+		//
+		// Null rather than a throw, and null rather than a wall nobody wants: the
+		// two callers that ignore the return want exactly this - no wall - and
+		// `loadFloorplan` skips the record, so a design that already carries one
+		// heals itself on open instead of failing to open.
+		if (start && end && start.distanceFromCorner(end) < MIN_WALL_LENGTH)
+		{
+			return null;
+		}
 		var scope = this;
 		var wall = new Wall(start, end, a, b, id);
 		
@@ -914,6 +960,16 @@ export class Floorplan extends EventDispatcher
 		var wallIds = deriveWallIds(floorplan.walls);
 		floorplan.walls.forEach((wall, wallIndex) => {
 			var newWall = scope.newWall(corners[wall.corner1], corners[wall.corner2], undefined, undefined, wallIds[wallIndex]);
+			// Refused: the record's two corners are one point. Dropped rather than
+			// carried, which is what `tools/fitout.py` does with the same records
+			// and for the same reason. Said out loud, because a design quietly
+			// losing a wall on open is worse than the wall.
+			if (!newWall)
+			{
+				console.warn('architect3d: dropped a zero-length wall between '
+					+ `${wall.corner1} and ${wall.corner2} - both corners are the same point`);
+				return;
+			}
 			
 			// Asked of the record, not of a version stamp -- same reasoning as
 			// the control points below. A file written before this field

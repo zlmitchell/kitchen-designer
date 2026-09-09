@@ -359,8 +359,42 @@ export class WallItem extends Item
 	 */
 	wallEdgeChoices(reach)
 	{
+		var edges = this.nearbyWallEdges(reach);
+		// The far face of the wall this item is ALREADY on goes to the back of the
+		// queue, however near it is.
+		//
+		// Nearest-first puts it first, always: the other side of a wall is one
+		// thickness away and nothing else can be closer. That is not merely a poor
+		// default, it is a cycle that does not cycle. `bindToNextWallEdge` reads
+		// the candidates from where the item is NOW, and `boundMove` then carries
+		// it through to the other side - so the next press is computed from the new
+		// position, finds the face it just left sitting nearest again, and goes
+		// back. Two faces of one wall, for ever, with the return wall in the corner
+		// never reached however many times the button is pressed. Measured on the
+		// kitchen plan: a corner wall unit's candidates came out
+		// `5afc33ca:back @19cm, 5afc33ca:front @30cm, 0dfd8726:back @30cm`, and the
+		// front face of its own wall is the one place the cabinet must not go -
+		// it is the great room on the other side.
+		//
+		// Last rather than removed, because it is occasionally the answer: a pony
+		// wall has cabinets on both sides. Every candidate stays reachable, and the
+		// press that reaches this one is the press after all the real alternatives.
+		var wall = this.currentWallEdge ? this.currentWallEdge.wall : null;
+		if (wall)
+		{
+			var scope = this;
+			var sibling = edges.filter(function (edge)
+			{
+				return edge.wall === wall && edge !== scope.currentWallEdge;
+			});
+			if (sibling.length)
+			{
+				edges = edges.filter(function (edge) {return sibling.indexOf(edge) === -1;})
+					.concat(sibling);
+			}
+		}
 		/** @type {Array<?HalfEdge>} */
-		var choices = this.nearbyWallEdges(reach);
+		var choices = edges.slice();
 		if (this.canBeFree)
 		{
 			choices.push(null);

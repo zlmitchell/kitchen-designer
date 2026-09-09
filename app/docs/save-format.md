@@ -202,7 +202,7 @@ An array, one entry per placed object:
 | `fixed` | Locked in place. |
 | `spec` | Parameters for a generated item. Absent for every item loaded from a file. |
 | `material_colors` | Sparse: a `#rrggbb` for each material slot somebody recoloured, `null` for the rest. Absent when nothing was recoloured. |
-| `wallEdge` | Which wall FACE a wall-bound item is on, as `wall:<corners>:front\|back`. Absent for anything not on a wall. |
+| `wallEdge` | Which wall FACE a wall-bound item is on, as `wall:<corners>:front\|back`, or `free` for one on no wall at all. Absent for anything that is not the kind of item that goes on a wall. |
 
 ### `wallEdge`, and why a wall-bound item names its wall
 
@@ -225,6 +225,29 @@ Written for every wall-bound item once a design has been opened, not only for
 one somebody re-bound: a design that has been loaded stops drifting, because the
 answer is in the file rather than recomputed from a distance that a wall edit
 three rooms away can change.
+
+#### `free`, an item on no wall
+
+The same field, because it answers the same question and one of its answers is
+"none". An island is a run with a counter, doors on more than one side and
+nothing behind it, and without this a type 2 or 9 item finds a wall SOMEWHERE in
+the room and attaches itself to it — a base unit in the middle of a four-metre
+room comes out square to a wall two metres away, with no way to turn it, because
+a bound item takes its facing from that wall's normal.
+
+`free` is safe in this field for a reason rather than by luck: a `HalfEdge.id`
+is `wall:<corners>:front|back` and therefore always contains colons, so the two
+forms cannot collide. A reader that does not know about free placement finds no
+matching edge and falls back to geometry, which is exactly what every reader of
+this field already does when a named wall has been deleted.
+
+A free item keeps the position and the rotation the file gives it: no
+`boundMove` onto a wall plane, no rotation from a normal, no membership of a
+wall's item list, and a drag that lands where the mouse says instead of
+re-binding to whatever wall it passed. `free` is only accepted for items that do
+not cut a hole in the wall they are on — types 2 and 9. A window or a door
+(types 3 and 7) is an absence in a wall rather than a thing standing near one,
+and an absence with no wall around it is nothing at all.
 
 ### Generated items
 

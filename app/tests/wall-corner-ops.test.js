@@ -10,7 +10,7 @@
  */
 import {beforeEach, describe, expect, it} from 'vitest';
 import {Floorplan} from '../src/scripts/model/floorplan.js';
-import {Corner} from '../src/scripts/model/corner.js';
+import {Wall} from '../src/scripts/model/wall.js';
 import {WallTypes} from '../src/scripts/core/constants.js';
 import {EVENT_MOVED, EVENT_CORNER_ATTRIBUTES_CHANGED} from '../src/scripts/core/events.js';
 import {cornerTolerance} from '../src/scripts/core/configuration.js';
@@ -39,6 +39,51 @@ function singleWall(x1, y1, x2, y2)
 	const end = floorplan.newCorner(x2, y2);
 	const wall = floorplan.newWall(start, end);
 	return {floorplan, start, end, wall};
+}
+
+/**
+ * A wall registered in the floorplan whose two ends are ONE corner.
+ *
+ * Built by shortening a real wall onto its own start, because
+ * `Floorplan.newWall` refuses to make one now - two corners on the same point
+ * is not a wall, and a stub born that way is what put a 250cm-tall corner on a
+ * 243.84cm plan and ramped the wall running into it through the ceiling.
+ *
+ * The state is still reachable, which is why these tests still have a subject:
+ * `Wall.setEnd` re-points an existing wall and asks nothing about length. So
+ * does dragging one end onto the other - `Corner.move` leaves a zero-length
+ * wall between two corners that both survive. Neither is guarded, on purpose:
+ * refusing mid-drag would delete a wall somebody is still moving, and the right
+ * answer there is to weld the two corners rather than to drop the wall. Worth
+ * knowing they are open.
+ */
+function selfLoop()
+{
+	const floorplan = new Floorplan();
+	const only = floorplan.newCorner(0, 0);
+	const other = floorplan.newCorner(400, 0);
+	const wall = floorplan.newWall(only, other);
+	wall.setEnd(only);
+	return {floorplan, only, wall};
+}
+
+/**
+ * A degenerate wall built as one, rather than shortened into one.
+ *
+ * `selfLoop()` above re-points a 400cm wall onto its own start, and the bezier
+ * control points are computed ONCE in the constructor - so that wall carries
+ * the controls of the 400cm wall it used to be, at (141.42, 141.42), and is not
+ * the subject of a test about controls collapsing onto a point.
+ *
+ * Constructed directly, past `Floorplan.newWall`, which refuses this now. The
+ * class is unchanged and still has to survive it: `Wall` is public, and a wall
+ * can arrive degenerate from a drag as easily as from a factory.
+ */
+function bareSelfLoop()
+{
+	const floorplan = new Floorplan();
+	const only = floorplan.newCorner(0, 0);
+	return {floorplan, only, wall: new Wall(only, only)};
 }
 
 beforeEach(() => {
@@ -398,9 +443,7 @@ describe('Wall.oppositeCorner', () => {
 	});
 
 	it('returns the end corner for a self-loop wall, because start is tested first', () => {
-		const floorplan = new Floorplan();
-		const only = floorplan.newCorner(0, 0);
-		const wall = floorplan.newWall(only, only);
+		const {only, wall} = selfLoop();
 		expect(wall.oppositeCorner(only)).toBe(wall.getEnd());
 		expect(wall.oppositeCorner(only)).toBe(only);
 	});
@@ -515,9 +558,7 @@ describe('Corner.removeDuplicateWalls', () => {
 	});
 
 	it('removes a zero-length self-loop wall and then the now-orphaned corner', () => {
-		const floorplan = new Floorplan();
-		const only = floorplan.newCorner(0, 0);
-		floorplan.newWall(only, only);
+		const {floorplan, only} = selfLoop();
 		expect(only.wallStarts.length).toBe(1);
 		expect(only.wallEnds.length).toBe(1);
 
@@ -662,26 +703,35 @@ describe('Corner.mergeWithIntersected', () => {
 
 describe('zero-length walls', () => {
 
-	it('collapses to a self-loop because newCorner snaps the second endpoint', () => {
+	it('is refused outright now, where it used to collapse to a self-loop', () => {
+		// `newCorner` still snaps the second endpoint onto the first, which is
+		// what made this a self-loop rather than a pair. That half is unchanged
+		// and is the weld working as designed.
 		const floorplan = new Floorplan();
 		const a = floorplan.newCorner(0, 0);
 		const b = floorplan.newCorner(0, 0);
 		expect(b).toBe(a);
 
-		const wall = floorplan.newWall(a, b);
+		// What changed: the factory will not build the wall.
+		expect(floorplan.newWall(a, b)).toBeNull();
+		expect(floorplan.getWalls()).toHaveLength(0);
+		expect(a.wallStarts.length).toBe(0);
+		expect(a.wallEnds.length).toBe(0);
+	});
+
+	it('still self-loops when an existing wall is re-pointed onto its own start', () => {
+		const {only, wall} = selfLoop();
 		expect(wall.getStart()).toBe(wall.getEnd());
 		expect(wall.wallLength()).toBe(0);
 		expect([wall.wallCenter().x, wall.wallCenter().y]).toEqual([0, 0]);
-		expect(a.wallStarts.length).toBe(1);
-		expect(a.wallEnds.length).toBe(1);
+		expect(only.wallStarts.length).toBe(1);
+		expect(only.wallEnds.length).toBe(1);
 		// adjacentCorners lists the same corner twice.
-		expect(a.adjacentCorners()).toEqual([a, a]);
+		expect(only.adjacentCorners()).toEqual([only, only]);
 	});
 
 	it('degenerates the bezier control points onto the shared point', () => {
-		const floorplan = new Floorplan();
-		const a = floorplan.newCorner(0, 0);
-		const wall = floorplan.newWall(a, a);
+		const {wall} = bareSelfLoop();
 		expect([wall.a.x, wall.a.y]).toEqual([0, 0]);
 		expect([wall.b.x, wall.b.y]).toEqual([0, 0]);
 		wall.wallType = WallTypes.CURVED;
@@ -701,23 +751,26 @@ describe('zero-length walls', () => {
 		// wall.js now returns early on a zero-length wall, which keeps the
 		// outcome this test always asserted. The test is unchanged; only the
 		// reason it passes is.
-		const floorplan = new Floorplan();
-		const a = floorplan.newCorner(0, 0);
-		const wall = floorplan.newWall(a, a);
+		const {only, wall} = selfLoop();
 
 		wall.wallSize = 100;
 
-		expect(Number.isNaN(a.x)).toBe(false);
-		expect([a.x, a.y]).toEqual([0, 0]);
+		expect(Number.isNaN(only.x)).toBe(false);
+		expect([only.x, only.y]).toEqual([0, 0]);
 		expect(wall.wallLength()).toBe(0);
 	});
 
-	it('keeps two coincident corners apart when they bypass newCorner', () => {
+	it('keeps two coincident corners apart when an end is DRAGGED onto the other', () => {
+		// The route the factory guard does not close, and the one that made the
+		// kitchen plan's stub: two corners that both survive, standing on one
+		// point, with a wall of no length between them. `newWall` refuses to
+		// build this; `Corner.move` still arrives at it.
 		const floorplan = new Floorplan();
 		const a = floorplan.newCorner(0, 0);
-		const b = new Corner(floorplan, 0, 0);
-		floorplan.getCorners().push(b);
+		const b = floorplan.newCorner(400, 0);
 		const wall = floorplan.newWall(a, b);
+
+		b.move(0, 0);
 
 		expect(wall.getStart()).not.toBe(wall.getEnd());
 		expect(wall.wallLength()).toBe(0);

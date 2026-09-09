@@ -48,8 +48,22 @@ is written, nothing reads a cabinet run off the drawing on its own.
 
 Zero-length walls are dropped. They are the remnant of a wall whose two corners
 fused: below `cornerTolerance` a wall used to weld itself shut and vanish, and a
-design saved while that was possible carries the stub. The editor cannot do it
-any more, but the files already written still have them.
+design saved while that was possible carries the stub.
+
+This used to say "the editor cannot do it any more", and that was wrong. It
+could, by a second route nobody had looked for: `newCorner` welds by position
+AND elevation, so clicking where a corner already exists at another height mints
+a SECOND corner on the same point rather than returning the one that is there,
+and `newWall` would join the two across nothing at all. The floorplanner's guard
+is `existing === this.lastNode`, an identity test, which catches one corner used
+twice and not two corners in one place. Found on the kitchen plan: three corners
+on the pony wall's junction and a stub between two of them.
+
+`Floorplan.newWall` now refuses one and `loadFloorplan` drops one, on the same
+1cm bound used here, so the app agrees with this tool instead of relying on it.
+This pass stays: a file is opened by more than the app, and dropping a record
+this tool would otherwise fit cabinets against is cheaper than trusting that
+whatever wrote it had the guard.
 
 Legacy `whitewindow.glb` windows are dropped when a schedule supplies its own.
 A design exported before windows were generated carries the model and three
@@ -432,7 +446,31 @@ def cabinet_part(sched, run, part):
     if hung:
         spec["mountHeight"] = round(mount, 2)
     along = (part["from"] + part["to"]) / 2.0
-    x, z, rotation = run_place(run, along, (depth + STANDOFF["cabinet"]) / 2.0)
+    # Out from the face by half the box the BUILDER builds, which for a corner
+    # unit is not half its depth.
+    #
+    # `cabinet.js` says it in one line -- `span = corner === 'none' ? depth :
+    # max(depth, returnWidth)` -- because an L reaches `returnWidth` back along
+    # the wall it turns onto, and that leg is what the bounding box has to hold.
+    # Passing `depth` here instead put a 12in-deep corner WALL cabinet with a
+    # 24in return 18.74cm off the face when its own half-box is 30.5cm: measured
+    # on the kitchen plan, 11.7cm of it inside an 11.67cm wall, so it went
+    # through the wall and out into the great room.
+    #
+    # Only the uppers were wrong, which is why it survived a look at the plan. A
+    # corner BASE unit is 24in deep with a 24in return, so `max` changes nothing
+    # and it has always landed correctly; an upper is 12in deep with the same
+    # 24in return, and that difference is the whole bug.
+    #
+    # `max` against the standoff rather than instead of it. The standoff is the
+    # door and its knob standing proud of the carcass, and the box is the larger
+    # of the two reaches -- 61.0 for the corner upper, whose return is longer
+    # than its door is proud, and 68.0 for the corner base, whose door is. Both
+    # agree with `WallItem.boundMove` to the centimetre.
+    reach = depth + STANDOFF["cabinet"]
+    if part.get("corner", "none") != "none":
+        reach = max(reach, part.get("returnWidth", width))
+    x, z, rotation = run_place(run, along, reach / 2.0)
     y = mount + height / 2.0 if hung else height / 2.0
     default_name = {"wall": "Wall Cabinet", "floating": "Floating Drawer"}.get(
         variant, "Base Cabinet")
