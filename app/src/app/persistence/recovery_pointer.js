@@ -97,7 +97,7 @@ export function writePointer(pointer, storage)
 		// Unreachable with the three fields above, and checked anyway: the whole
 		// justification for keeping a synchronous write is that it is small, and a
 		// guarantee nobody checks is a comment.
-		console.warn(`architect3d: refusing to write a ${size}-byte recovery pointer; the limit is ${POINTER_LIMIT_BYTES}.`);
+		console.warn(`Kitchen Designer: refusing to write a ${size}-byte recovery pointer; the limit is ${POINTER_LIMIT_BYTES}.`);
 		return 0;
 	}
 

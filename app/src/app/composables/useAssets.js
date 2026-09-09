@@ -105,7 +105,7 @@ export async function loadManifest(options)
 		{
 			// Reported, not thrown, and the resolver is left as identity. See the
 			// note at the top: a broken manifest must not be worse than no manifest.
-			console.warn(`architect3d: ignoring ${url} - ${result.errors.join('; ')}`);
+			console.warn(`Kitchen Designer: ignoring ${url} - ${result.errors.join('; ')}`);
 			return {ok: false, count: 0, errors: result.errors};
 		}
 		resolver.setManifest(result.manifest);

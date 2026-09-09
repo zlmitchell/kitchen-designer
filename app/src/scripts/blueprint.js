@@ -114,7 +114,7 @@ export {Skybox} from './three/skybox.js';
 // from `three/` to `core/`: it is renderer-free, and `core/materials.js` needs
 // it from a layer that cannot import out of its own.
 // Exported so an embedder can release it, and so the leak stays assertable.
-export {acquireTexture, releaseTexture, clearTextureCache, textureCacheStats} from './core/texture_cache.js';
+export {acquireTexture, releaseTexture, clearTextureCache, textureCacheStats, textureLoadingManager} from './core/texture_cache.js';
 
 // Re-exported so embedders that reached for BP3DJS.OBJExporter keep working.
 // S4 replaced the vendored copy - a fork old enough to branch on the removed

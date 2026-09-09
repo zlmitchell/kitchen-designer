@@ -455,7 +455,7 @@ async function openDatabase(factory)
 		}
 		var actual = await probeVersion(factory);
 		var refusal = new Error(
-			`architect3d: the draft store is at version ${actual} and this build understands ${STORE_VERSION}. ` +
+			`Kitchen Designer: the draft store is at version ${actual} and this build understands ${STORE_VERSION}. ` +
 			'Leaving it untouched.');
 		refusal.name = 'VersionError';
 		throw refusal;

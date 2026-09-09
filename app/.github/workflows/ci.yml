@@ -1,4 +1,4 @@
-# Continuous integration for architect3d.
+# Continuous integration for Kitchen Designer.
 #
 # BRANCH POLICY (deliberate, to conserve Actions minutes and storage):
 #   - Runs ONLY on pushes to `dev` and `master`.

@@ -201,7 +201,7 @@ export function useDesignIO(store)
 		catch (error)
 		{
 			console.info(
-				`architect3d: no traced plan at ${PLAN_URL}, using the default design.`,
+				`Kitchen Designer: no traced plan at ${PLAN_URL}, using the default design.`,
 				messageOf(error));
 		}
 		// `newDesign` clears `lastError`, and both outcomes reach it - so without

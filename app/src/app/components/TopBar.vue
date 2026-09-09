@@ -133,7 +133,7 @@ function onUnitChange(event)
 			<span class="grid h-6 w-6 place-items-center rounded-md bg-accent text-accent-ink">
 				<Ruler :size="14" :stroke-width="2.2" />
 			</span>
-			<span class="hidden text-[13px] font-semibold tracking-tight sm:inline">Architect<span class="text-accent">3D</span></span>
+			<span class="hidden text-[13px] font-semibold tracking-tight sm:inline">Kitchen <span class="text-accent">Designer</span></span>
 		</div>
 
 		<!-- document -->

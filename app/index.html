@@ -22,10 +22,10 @@
   S9 moved them to public/, which Vite serves at the site root in dev and copies
   to the root of dist-demo/ on build - so those same strings now resolve without
   help. That they are relative rather than root-absolute is what makes the
-  GitHub Pages deploy work: under --base=/architect3d/ the page is served from
-  /architect3d/, and 'models/x.glb' resolves against it to /architect3d/models/
-  x.glb. A leading slash would have sent it to the domain root instead, and a
-  <base> would have had to know the deploy path.
+  GitHub Pages deploy work: the workflow builds with --base=/<repository>/, so
+  the page is served from /kitchen-designer/ and 'models/x.glb' resolves against
+  it to /kitchen-designer/models/x.glb. A leading slash would have sent it to the
+  domain root instead, and a <base> would have had to know the deploy path.
 
   The module entry and the icons below are root-absolute because Vite rewrites
   them at build time - they are the URLs here that are not resolved by the
@@ -49,10 +49,207 @@
 <!-- The same accent the icon is drawn in, for a mobile browser's chrome. -->
 <meta name="theme-color" content="#d9601a">
 
+<!--
+  The boot splash.
+  =================
+
+  Hand-written here, in the page, rather than as a Vue component - because a
+  component cannot be on screen at the moment it is needed. The application is
+  ~1.4 MB of JavaScript before three.js fetches a single model, and until that
+  module has downloaded, parsed and mounted there is no Vue to render anything:
+  every frame of that wait is a white page with nothing on it, and on a cold
+  cache that is the longest part of the load.
+
+  So the splash is markup the browser already has by the time it starts asking
+  for the module, and its CSS is inline for the same reason - `app.css` is
+  imported by `main.js` and therefore arrives with the bundle, far too late to
+  style what is meant to cover the bundle arriving.
+
+  `src/app/boot-screen.js` is the other half: it writes the status line, moves
+  the bar, and takes this element out of the page when the design is on screen.
+  The two share the ids below and the fade duration - see the constants there.
+
+  The palette is a copy of the four tokens from app.css this needs, not a
+  reference to them, for the reason above. If those tokens move, these follow.
+-->
+<!--
+  The stored theme, a whole bundle early.
+
+  `applyTheme()` in main.js is what normally stamps this attribute, and it
+  cannot run until the module has arrived - which is precisely the wait the
+  splash below exists to cover. Without these four lines a user who chose dark
+  against a light system gets the light splash first and the switch when the
+  bundle lands. The key and the two values are useTheme.js's; nothing else here
+  reads them.
+-->
+<script>
+	try
+	{
+		var storedTheme = window.localStorage.getItem('architect3d.theme');
+		if (storedTheme === 'dark' || storedTheme === 'light')
+		{
+			document.documentElement.setAttribute('data-theme', storedTheme);
+		}
+	}
+	catch {} // Storage refused, as in private mode. The media query still applies.
+</script>
+
+<style>
+	#boot
+	{
+		--boot-ground: #eef0f4;
+		--boot-ink: #141821;
+		--boot-ink-soft: #5c6577;
+		--boot-line: #d8dde6;
+		--boot-accent: #d9601a;
+
+		position: fixed;
+		inset: 0;
+		z-index: 100;
+		display: grid;
+		place-items: center;
+		background: var(--boot-ground);
+		color: var(--boot-ink);
+		font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+		/* Both properties are transitioned: opacity is the fade, and visibility
+		   is what stops a fully transparent overlay from swallowing the first
+		   click on the app underneath it in the frames before it is removed. */
+		transition: opacity 320ms ease, visibility 0s linear 320ms;
+	}
+
+	@media (prefers-color-scheme: dark)
+	{
+		:root:not([data-theme='light']) #boot
+		{
+			--boot-ground: #0b0d11;
+			--boot-ink: #e7eaf0;
+			--boot-ink-soft: #8d97a9;
+			--boot-line: #262d3a;
+			--boot-accent: #ff8a3d;
+		}
+	}
+
+	:root[data-theme='dark'] #boot
+	{
+		--boot-ground: #0b0d11;
+		--boot-ink: #e7eaf0;
+		--boot-ink-soft: #8d97a9;
+		--boot-line: #262d3a;
+		--boot-accent: #ff8a3d;
+	}
+
+	/* What `boot-screen.js` sets to dismiss it. The element is removed a beat
+	   later; this is only the fade. */
+	#boot.is-done
+	{
+		opacity: 0;
+		visibility: hidden;
+	}
+
+	.boot-card
+	{
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 14px;
+		width: 220px;
+		text-align: center;
+	}
+
+	.boot-mark
+	{
+		width: 44px;
+		height: 44px;
+	}
+
+	.boot-title
+	{
+		margin: 0;
+		font-size: 15px;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+	}
+
+	/* The bar is 3px and full width of the card: a progress readout, not a
+	   decoration. */
+	.boot-track
+	{
+		position: relative;
+		overflow: hidden;
+		width: 100%;
+		height: 3px;
+		border-radius: 999px;
+		background: var(--boot-line);
+	}
+
+	.boot-fill
+	{
+		width: 0;
+		height: 100%;
+		border-radius: inherit;
+		background: var(--boot-accent);
+		transition: width 200ms ease;
+	}
+
+	/* Before the item count is known there is nothing honest to show as a
+	   percentage, so the bar sweeps instead. `boot-screen.js` drops this class
+	   the moment it has a denominator. */
+	.boot-track.is-waiting .boot-fill
+	{
+		width: 35%;
+		animation: boot-sweep 1.15s ease-in-out infinite;
+	}
+
+	@keyframes boot-sweep
+	{
+		0%   {transform: translateX(-100%);}
+		100% {transform: translateX(285%);}
+	}
+
+	.boot-status
+	{
+		margin: 0;
+		min-height: 1.2em;
+		font-size: 12px;
+		color: var(--boot-ink-soft);
+		font-variant-numeric: tabular-nums;
+	}
+
+	@media (prefers-reduced-motion: reduce)
+	{
+		#boot {transition-duration: 1ms;}
+		.boot-fill {transition-duration: 1ms;}
+		.boot-track.is-waiting .boot-fill {animation: none; width: 100%; opacity: 0.5;}
+	}
+</style>
+
 <script type="module" src="/src/app/main.js"></script>
 </head>
 
 <body>
 	<div id="app"></div>
+
+	<!--
+	  Removed from the page by `boot-screen.js` once the design is rendered, so
+	  nothing here survives into a running session. It is outside #app because
+	  Vue owns that subtree and would discard this on mount - a full frame before
+	  the viewport has anything in it.
+	-->
+	<div id="boot" role="status" aria-live="polite">
+		<div class="boot-card">
+			<svg class="boot-mark" viewBox="0 0 32 32" aria-hidden="true">
+				<rect x="0" y="0" width="32" height="32" rx="7" fill="currentColor" opacity="0.08"/>
+				<rect x="6" y="4.4" width="20" height="7.2" rx="1.2" fill="currentColor" opacity="0.55"/>
+				<rect x="4" y="14.6" width="24" height="2.8" rx="1" fill="currentColor"/>
+				<rect x="6" y="18.8" width="9.4" height="8.4" rx="1.2" fill="currentColor" opacity="0.55"/>
+				<rect x="16.6" y="18.8" width="9.4" height="8.4" rx="1.2" fill="currentColor" opacity="0.55"/>
+			</svg>
+			<p class="boot-title">Kitchen Designer</p>
+			<div class="boot-track is-waiting" id="boot-track">
+				<div class="boot-fill" id="boot-fill"></div>
+			</div>
+			<p class="boot-status" id="boot-status">Loading the application…</p>
+		</div>
+	</div>
 </body>
 </html>

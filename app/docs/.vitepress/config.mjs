@@ -21,7 +21,7 @@
 import {defineConfig} from 'vitepress';
 
 export default defineConfig({
-	title: 'architect3d',
+	title: 'Kitchen Designer',
 	description: 'WebGL 3D interior design tool with a 2D floorplanner',
 	base: process.env.DOCS_BASE || '/architect3d/docs/',
 	lang: 'en-GB',

@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: architect3d
+  name: Kitchen Designer
   text: Interior design in the browser
   tagline: Draw a floorplan in 2D, furnish and walk through it in 3D. Vue 3, three.js and about six thousand lines of model code.
   actions:

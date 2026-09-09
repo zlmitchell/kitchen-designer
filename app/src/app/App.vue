@@ -33,6 +33,7 @@ import {useZoom2D} from './composables/useZoom2D.js';
 import {usePlanStats} from './composables/usePlanStats.js';
 import {useItemActions} from './composables/useItemActions.js';
 import {useAutosave, readDraft, clearDraft, RECOVERY_LOST_TAIL} from './composables/useAutosave.js';
+import {useBootScreen} from './composables/useBootScreen.js';
 import {useAssets, applyAssetBaseFromQuery} from './composables/useAssets.js';
 import {useToasts} from './composables/useToasts.js';
 import {useShortcuts} from './composables/useShortcuts.js';
@@ -82,6 +83,7 @@ const zoom = useZoom2D(store);
 const stats = usePlanStats(store);
 const items = useItemActions(store, selection, history);
 const autosave = useAutosave(store);
+const boot = useBootScreen(store);
 const assets = useAssets();
 const toasts = useToasts();
 
@@ -166,12 +168,18 @@ onMounted(() =>
 	// Async because the traced plan is fetched; everything that reacts to a
 	// loaded design has to wait for it, including the draft offer, which exists
 	// to replace whatever boot just put on screen.
+	// The splash in index.html has been up since before this bundle arrived; from
+	// here it can say what is actually happening. See useBootScreen.
+	boot.stage('Preparing the workspace');
+
 	io.bootDesign().then(() =>
 	{
 		// Whichever design booted counts as the starting point, not as an edit -
 		// so the stack is seeded from it rather than recording it.
 		history.reset();
 		frameDesign();
+		// The design is on screen; the splash leaves once its models have landed.
+		boot.ready();
 		offerDraft();
 	});
 	loadAssetManifest();
@@ -197,7 +205,7 @@ function loadAssetManifest()
 	{
 		if (base)
 		{
-			console.info(`architect3d: serving assets from ${base}`);
+			console.info(`Kitchen Designer: serving assets from ${base}`);
 		}
 	});
 }

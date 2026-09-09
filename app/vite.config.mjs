@@ -31,7 +31,7 @@ const ROOT = import.meta.dirname;
  *
  *   npm run build:demo the application, into dist-demo/. This is what the
  *                      GitHub Pages workflow deploys, with
- *                      --base=/architect3d/ so the hashed asset URLs carry the
+ *                      --base=/<repository>/ so the hashed asset URLs carry the
  *                      repository sub-path (see index.html for why the runtime
  *                      asset URLs need no such help).
  *

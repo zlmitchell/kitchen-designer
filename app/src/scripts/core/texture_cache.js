@@ -44,6 +44,25 @@ import {TextureLoader, Texture} from 'three';
 const loader = new TextureLoader();
 
 /**
+ * The manager every texture in this library is fetched through.
+ *
+ * It is three's `DefaultLoadingManager` - what a `TextureLoader` built with no
+ * manager of its own gets - so it is also the manager `Skybox`'s loader uses,
+ * and it is deliberately NOT the per-`Scene` manager the model loaders take.
+ * Two managers, and the split is real: models are per document, textures are
+ * per page and refcounted across every viewer on it.
+ *
+ * Exported so a caller can watch the fetches rather than guess at them: the
+ * application's boot screen counts files against it, and the textures behind a
+ * generated cabinet arrive through here rather than through any `.glb`. Nothing
+ * in the library reads this; it is an observation seam, and assigning a handler
+ * to it is the caller's business.
+ *
+ * @type {import('three').LoadingManager}
+ */
+export const textureLoadingManager = loader.manager;
+
+/**
  * Whether an image can be decoded here at all.
  *
  * three's `ImageLoader` builds an `<img>` through `document.createElementNS`, so

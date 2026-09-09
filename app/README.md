@@ -1,14 +1,17 @@
-# architect3d
+# Kitchen Designer
 
-WebGL 3D interior design tool with a 2D floorplanner.
+WebGL 3D interior design tool with a 2D floorplanner. This tree is the
+forked engine behind Kitchen Designer; the product README is one directory up.
+The npm package, the `BP3DJS` global and the `architect3d` import specifier keep
+the upstream names - what was renamed is the tool, not the library it publishes.
 
 Draw walls by clicking, close a loop to make a room, furnish it from a catalog
 of 168 models, change wall and floor textures, and walk through the result in
 first person. Plan and 3D view side by side, undo on everything, and a dark or
 light theme that reaches the drawing canvas as well as the chrome.
 
-**[Documentation](https://amitukind.github.io/architect3d/docs/)** ·
-**[Live app](https://amitukind.github.io/architect3d/)**
+Upstream: **[documentation](https://amitukind.github.io/architect3d/docs/)** ·
+**[live app](https://amitukind.github.io/architect3d/)**
 
 ![](./images/architect3d.jpg)
 
